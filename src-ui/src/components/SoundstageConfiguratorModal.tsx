@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   X,
   RotateCcw,
@@ -54,6 +54,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
 }) => {
   const [selectedChannel, setSelectedChannel] = useState<number>(0);
   const [draggingChannel, setDraggingChannel] = useState<number | null>(null);
+  const dragTravelRef = useRef<number>(0);
 
   // Close on Escape key press
   useEffect(() => {
@@ -95,6 +96,8 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
 
   const handleSoundstagePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (draggingChannel === null || !onAzimuthChange) return;
+
+    dragTravelRef.current += Math.hypot(e.movementX, e.movementY);
 
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -154,7 +157,24 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
           {/* Left Column: Top-Down Polar Soundstage SVG */}
           <div className="col-span-6 flex flex-col items-center justify-center p-3 bg-surface-base/80 border border-border-subtle rounded-xl relative">
             <span className="text-[11px] font-mono text-text-muted mb-1 flex items-center gap-1.5">
-              <span>LISTENER PERSPECTIVE (TOP-DOWN)</span>
+              {draggingChannel !== null ? (
+                <span className="text-accent-cyan font-semibold flex items-center gap-1">
+                  <Compass className="w-3 h-3 animate-spin" />
+                  <span>
+                    ORBIT {CHANNELS[draggingChannel].name.toUpperCase()}:{" "}
+                    {(() => {
+                      const az =
+                        speakerAzimuthsDeg && speakerAzimuthsDeg[draggingChannel] !== undefined
+                          ? speakerAzimuthsDeg[draggingChannel]
+                          : CHANNELS[draggingChannel].defaultAzimuth;
+                      return az > 0 ? `+${az}°` : `${az}°`;
+                    })()}{" "}
+                    AZIMUTH
+                  </span>
+                </span>
+              ) : (
+                <span>LISTENER PERSPECTIVE (TOP-DOWN)</span>
+              )}
             </span>
 
             <svg
@@ -232,22 +252,64 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                 const isSelected = selectedChannel === ch.index;
                 const gain = speakerGainsDb[ch.index] || 0.0;
 
+                const isDraggingThis = draggingChannel === ch.index;
+                const azimuth =
+                  speakerAzimuthsDeg && speakerAzimuthsDeg[ch.index] !== undefined
+                    ? speakerAzimuthsDeg[ch.index]
+                    : ch.defaultAzimuth;
+
                 return (
                   <g
                     key={ch.key}
                     transform={`translate(${x}, ${y})`}
                     className="cursor-pointer transition-all"
                     onClick={() => {
+                      if (dragTravelRef.current > 4) return;
                       setSelectedChannel(ch.index);
                       onToggleMute(ch.index);
                     }}
-                    onPointerDown={() => {
+                    onPointerDown={(e) => {
+                      dragTravelRef.current = 0;
                       setSelectedChannel(ch.index);
                       if (onAzimuthChange && !ch.isLfe) {
                         setDraggingChannel(ch.index);
+                        try {
+                          (e.currentTarget as Element).setPointerCapture(e.pointerId);
+                        } catch {}
+                      }
+                    }}
+                    onPointerUp={(e) => {
+                      if (draggingChannel !== null) {
+                        try {
+                          (e.currentTarget as Element).releasePointerCapture(e.pointerId);
+                        } catch {}
+                        setDraggingChannel(null);
                       }
                     }}
                   >
+                    {/* Live Azimuth Angle Tag when Dragging or Selected */}
+                    {(isDraggingThis || (isSelected && !ch.isLfe)) && (
+                      <g transform="translate(0, -22)">
+                        <rect
+                          x="-18"
+                          y="-7"
+                          width="36"
+                          height="14"
+                          rx="3"
+                          fill="#0b0d13"
+                          stroke="#38bdf8"
+                          strokeWidth="1"
+                        />
+                        <text
+                          y="3"
+                          textAnchor="middle"
+                          className="text-[8px] font-mono fill-accent-cyan font-bold"
+                        >
+                          {azimuth > 0 ? `+${azimuth}°` : `${azimuth}°`}
+                        </text>
+                      </g>
+                    )}
+
                     {/* Speaker Outer Disc */}
                     <circle
                       r="16"
@@ -357,8 +419,8 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                           : "bg-surface-card/40 border-border-subtle hover:border-border-default"
                       }`}
                     >
-                      {/* Channel Badge & Name */}
-                      <div className="flex items-center gap-2 w-28">
+                      {/* Channel Badge, Name & Azimuth */}
+                      <div className="flex items-center gap-2 w-32">
                         <span
                           className={`w-7 h-5 flex items-center justify-center text-[10px] font-mono font-bold rounded ${
                             isMuted
@@ -368,13 +430,26 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                         >
                           {ch.key}
                         </span>
-                        <span
-                          className={`text-[12px] truncate font-medium ${
-                            isMuted ? "text-text-muted line-through" : "text-text-primary"
-                          }`}
-                        >
-                          {ch.name}
-                        </span>
+                        <div className="flex flex-col truncate">
+                          <span
+                            className={`text-[12px] truncate font-medium ${
+                              isMuted ? "text-text-muted line-through" : "text-text-primary"
+                            }`}
+                          >
+                            {ch.name}
+                          </span>
+                          {!ch.isLfe && (
+                            <span className="text-[9.5px] font-mono text-text-muted">
+                              {(() => {
+                                const az =
+                                  speakerAzimuthsDeg && speakerAzimuthsDeg[ch.index] !== undefined
+                                    ? speakerAzimuthsDeg[ch.index]
+                                    : ch.defaultAzimuth;
+                                return az > 0 ? `+${az}°` : `${az}°`;
+                              })()}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Trim Fader Slider */}
@@ -452,7 +527,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-surface-card border border-border-subtle hover:border-border-default rounded-md text-text-secondary hover:text-text-primary transition-all cursor-pointer"
                   >
                     <Compass className="w-3.5 h-3.5 text-accent-cyan" />
-                    <span>Reset ITU-R Angles</span>
+                    <span>Reset Speaker Positions</span>
                   </button>
                 )}
               </div>

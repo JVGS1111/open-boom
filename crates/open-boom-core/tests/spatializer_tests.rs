@@ -2,7 +2,8 @@ use open_boom_core::dsp::pipeline::AudioProcessor;
 use open_boom_core::dsp::spatializer_3d::Spatializer3D;
 use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{
-    AudioCommand, CH_CENTER, CH_FRONT_LEFT, CH_LFE, CH_REAR_LEFT, SURROUND_7_1_CHANNELS,
+    AudioCommand, CH_CENTER, CH_FRONT_LEFT, CH_LFE, CH_REAR_LEFT, CH_SURROUND_LEFT,
+    CH_SURROUND_RIGHT, ITU_R_7_1_DEFAULT_AZIMUTHS, SURROUND_7_1_CHANNELS,
 };
 
 #[test]
@@ -319,3 +320,140 @@ fn test_spatializer_pipeline_integration_and_commands() {
         -30.0
     );
 }
+
+#[test]
+fn test_spatializer_angular_repositioning_and_dynamic_hrtf_interpolation() {
+    use open_boom_core::dsp::spatializer_3d::{
+        compute_interpolated_hrtf, KEMAR_HRTF_LEFT_REV, KEMAR_HRTF_RIGHT_REV,
+    };
+
+    let mut spat = Spatializer3D::new();
+
+    // Verify initial anchor at -30 deg matches exact KEMAR table
+    for tap in 0..64 {
+        assert_eq!(
+            spat.hrtf_left[CH_FRONT_LEFT][tap],
+            KEMAR_HRTF_LEFT_REV[CH_FRONT_LEFT][tap]
+        );
+        assert_eq!(
+            spat.hrtf_right[CH_FRONT_LEFT][tap],
+            KEMAR_HRTF_RIGHT_REV[CH_FRONT_LEFT][tap]
+        );
+    }
+
+    // Move Front Left to 0.0 deg (Center anchor)
+    spat.set_speaker_azimuth(CH_FRONT_LEFT, 0.0);
+    assert_eq!(spat.speaker_azimuth[CH_FRONT_LEFT], 0.0);
+    for tap in 0..64 {
+        assert_eq!(
+            spat.hrtf_left[CH_FRONT_LEFT][tap],
+            KEMAR_HRTF_LEFT_REV[CH_CENTER][tap]
+        );
+    }
+
+    // Move Front Left to -15.0 deg (exactly halfway between -30° and 0°)
+    spat.set_speaker_azimuth(CH_FRONT_LEFT, -15.0);
+    let expected_50_50 = 0.5 * KEMAR_HRTF_LEFT_REV[CH_FRONT_LEFT][63 - 3]
+        + 0.5 * KEMAR_HRTF_LEFT_REV[CH_CENTER][63 - 3];
+    assert!(
+        (spat.hrtf_left[CH_FRONT_LEFT][63 - 3] - expected_50_50).abs() < 1e-5,
+        "Interpolated tap was {}, expected {}",
+        spat.hrtf_left[CH_FRONT_LEFT][63 - 3],
+        expected_50_50
+    );
+
+    // LFE channel is unaffected by azimuth changes (subwoofer mono)
+    let (lfe_l, lfe_r) = compute_interpolated_hrtf(CH_LFE, 90.0);
+    assert_eq!(lfe_l, KEMAR_HRTF_LEFT_REV[CH_LFE]);
+    assert_eq!(lfe_r, KEMAR_HRTF_RIGHT_REV[CH_LFE]);
+
+    // Clamping pathological azimuth angles
+    spat.set_speaker_azimuth(CH_SURROUND_LEFT, 999.0);
+    assert_eq!(spat.speaker_azimuth[CH_SURROUND_LEFT], 180.0);
+
+    spat.set_speaker_azimuth(CH_SURROUND_LEFT, f32::NAN);
+    assert_eq!(spat.speaker_azimuth[CH_SURROUND_LEFT], -90.0);
+}
+
+#[test]
+fn test_spatializer_reset_speaker_positions_to_itu_r_defaults() {
+    use open_boom_core::dsp::spatializer_3d::KEMAR_HRTF_LEFT_REV;
+
+    let mut spat = Spatializer3D::new();
+
+    // Modify multiple speaker azimuths
+    spat.set_speaker_azimuth(CH_FRONT_LEFT, -60.0);
+    spat.set_speaker_azimuth(CH_CENTER, 15.0);
+    spat.set_speaker_azimuth(CH_REAR_LEFT, -120.0);
+    spat.set_speaker_azimuth(CH_SURROUND_RIGHT, 75.0);
+
+    assert_eq!(spat.speaker_azimuth[CH_FRONT_LEFT], -60.0);
+    assert_eq!(spat.speaker_azimuth[CH_CENTER], 15.0);
+    assert_eq!(spat.speaker_azimuth[CH_REAR_LEFT], -120.0);
+    assert_eq!(spat.speaker_azimuth[CH_SURROUND_RIGHT], 75.0);
+
+    // Reset to ITU-R BS.775 reference positions
+    spat.reset_speaker_positions();
+
+    assert_eq!(spat.speaker_azimuth, ITU_R_7_1_DEFAULT_AZIMUTHS);
+    for tap in 0..64 {
+        assert_eq!(
+            spat.hrtf_left[CH_FRONT_LEFT][tap],
+            KEMAR_HRTF_LEFT_REV[CH_FRONT_LEFT][tap]
+        );
+        assert_eq!(
+            spat.hrtf_left[CH_CENTER][tap],
+            KEMAR_HRTF_LEFT_REV[CH_CENTER][tap]
+        );
+        assert_eq!(
+            spat.hrtf_left[CH_REAR_LEFT][tap],
+            KEMAR_HRTF_LEFT_REV[CH_REAR_LEFT][tap]
+        );
+        assert_eq!(
+            spat.hrtf_left[CH_SURROUND_RIGHT][tap],
+            KEMAR_HRTF_LEFT_REV[CH_SURROUND_RIGHT][tap]
+        );
+    }
+}
+
+#[test]
+fn test_spatializer_azimuth_rapid_drag_zero_dropout() {
+    let mut spat = Spatializer3D::new();
+    spat.enabled = true;
+    spat.set_intensity(1.0);
+    spat.current_intensity = 1.0;
+
+    let mut channels = [0.0f32; SURROUND_7_1_CHANNELS];
+    channels[CH_FRONT_LEFT] = 0.5;
+    channels[CH_REAR_LEFT] = 0.3;
+
+    // Simulate 360 frames of continuous user dragging (1 degree per frame)
+    for deg in -180..=180 {
+        spat.set_speaker_azimuth(CH_FRONT_LEFT, deg as f32);
+        let (out_l, out_r) = spat.process_frame(&channels);
+
+        assert!(
+            out_l.is_finite(),
+            "Non-finite output on left at angle {}",
+            deg
+        );
+        assert!(
+            out_r.is_finite(),
+            "Non-finite output on right at angle {}",
+            deg
+        );
+        assert!(
+            out_l.abs() < 2.5,
+            "Excessive output magnitude on left at angle {}: {}",
+            deg,
+            out_l
+        );
+        assert!(
+            out_r.abs() < 2.5,
+            "Excessive output magnitude on right at angle {}: {}",
+            deg,
+            out_r
+        );
+    }
+}
+

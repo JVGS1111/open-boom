@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 10/10/2026 - 20:10
-* **Sprint Ativa:** Sprint 1: Fundação do Projeto & UI Shell (Marco 1) - Concluída!
-* **Tarefa Atual:** Story 1.8 (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`) CONCLUÍDA com status `done` (todos os 84 testes do workspace passando, zero warnings, frontend compilando). Todas as 8 histórias do Epic 1 finalizadas com sucesso!
+* **Data/Hora:** 10/10/2026 - 20:45
+* **Sprint Ativa:** Epic 2: 3D Surround Soundstage & Spatial Calibration - 100% Concluído!
+* **Tarefa Atual:** Epic 2 CONCLUÍDO com status `done` em todas as 4 histórias (Story 2.1, 2.2, 2.3, 2.4). Todos os 95 testes do workspace passando, zero warnings, TypeScript/Vite compilando com sucesso!
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -97,18 +97,26 @@
     - Suíte de 84 testes passando no workspace com zero warnings e build Vite do frontend concluído em 1.71s.
     - Registro de ADR-016 no `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml` (Epic 1 agora 100% `done`), `03-TASK-BACKLOG.md` e spec de Story 1.8 (`status: done`).
+16. **Implementação e Conclusão Completa do Epic 2: 3D Surround Soundstage & Spatial Calibration (Stories 2.1, 2.2, 2.3, 2.4):**
+    - **Story 2.1 (`2-1-binaural-7-1-hrtf-convolution-engine-down-folding-matrix`):** Motor `Spatializer3D` em `crates/open-boom-core` com tabelas KEMAR HRTF 64 taps, atraso ITD (0.2–0.7ms), pinna rear notch a 6 kHz, buffers circulares duplos de 128 amostras, convolução SIMD SSE2 (`dot_product_64_sse`), upmix estéreo Mid/Side e downfold binaural com < 25% de orçamento de CPU.
+    - **Story 2.2 (`2-2-interactive-circular-3d-surround-dial-control`):** `SoundstageDial.tsx` com diâmetro 192px/144px, varredura de 300°, física polar $\text{atan2}$, pips ciano em 25/50/75%, snap duplo-clique 50%, controle de teclado ARIA slider, 8 satélites e botão de calibração de soundstage.
+    - **Story 2.3 (`2-3-8-channel-virtual-speaker-configurator-soundstage-modal`):** `SoundstageConfiguratorModal.tsx` com perspectiva top-down do ouvinte, anéis orbitais concêntricos, 8 nós virtuais com alternância de mudo e traço diagonal vermelho, faders de ganho relativo $\pm 6.0\text{ dB}$ (resolução 0.1 dB), atalho global `Ctrl + Shift + S`, persistência em `AppConfig` (`speaker_muted`, `speaker_gains_db`, `speaker_azimuths_deg`).
+    - **Story 2.4 (`2-4-spatial-virtual-speaker-angular-repositioning`):** Arraste polar dos nós ao longo dos anéis orbitais com captura de ponteiro (`setPointerCapture`), supressão de clique acidental de mudo para arrastos $> 4\text{ px}$, badge flutuante de coordenadas azimutais $\theta$, interpolação dinâmica e contínua dos coeficientes KEMAR entre 9 âncoras horizontais sem dropouts ou estalos, e botão "Reset Speaker Positions" para ângulos nominais ITU-R BS.775.
+    - 95 testes unitários e de integração verdes no workspace Cargo com zero warnings e build Vite concluído em 1.68s.
+    - Registro de ADR-017 no `.bmad/04-DECISION-LOG.md`.
+    - Atualização de `sprint-status.yaml` (`epic-2: done`), `03-TASK-BACKLOG.md` e specs de Story 2.1 a 2.4 (`status: done`).
 
 ## O que está em andamento agora
-* Todas as 8 histórias do **Epic 1: Fundação do Projeto & UI Shell** concluídas com 100% dos testes verdes.
+* **Epic 1 e Epic 2 CONCLUÍDOS a 100%** com todas as 12 histórias implementadas, validadas e testadas (95 testes passando).
 
 ## Próximo Passo Imediato
-* Realizar Retrospectiva do Epic 1 (`epic-1-retrospective`) ou iniciar o planejamento e desenvolvimento do **Epic 2: 3D Spatializer & HRTF Convolution Engine**.
-
+* Iniciar o desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).
 
 ## Diretrizes Permanentes de Ferramentas
 * **Decompilator & REA MCP:** O agente tem acesso e DEVE consultar o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e utilizar o MCP global `rea` sempre que precisar extrair detalhes internos, algoritmos de DSP, estruturas de drivers ou bibliotecas do Boom 3D original.
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.
+
 
 

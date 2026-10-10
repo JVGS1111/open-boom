@@ -22,8 +22,8 @@ pub const HRTF_TAPS: usize = 64;
 /// - Rear Left (-135°): Ipsilateral peak tap 3 with 6 kHz rear pinna notch (tap 7 reflection),
 ///   contralateral peak tap 29 (ITD = 26 samples = 0.54ms).
 /// - LFE: Omnidirectional bass distribution.
-static KEMAR_HRTF_LEFT_REV: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS] = init_kemar_left_rev();
-static KEMAR_HRTF_RIGHT_REV: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS] = init_kemar_right_rev();
+pub static KEMAR_HRTF_LEFT_REV: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS] = init_kemar_left_rev();
+pub static KEMAR_HRTF_RIGHT_REV: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS] = init_kemar_right_rev();
 
 const fn init_kemar_left_rev() -> [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS] {
     let mut table = [[0.0f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS];
@@ -124,6 +124,86 @@ const fn init_kemar_right_rev() -> [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS] {
     table
 }
 
+/// Reference impulse response for direct Rear Center (180 deg / -180 deg).
+/// Symmetric arrival at tap 4 with rear pinna notch at tap 7 (-0.28) and tap 11 (+0.10).
+pub const REAR_CENTER_HRTF_REV: [f32; HRTF_TAPS] = {
+    let mut table = [0.0f32; HRTF_TAPS];
+    table[63 - 4] = 0.50;
+    table[63 - 5] = 0.20;
+    table[63 - 7] = -0.28;
+    table[63 - 11] = 0.10;
+    table
+};
+
+/// Computes 64-tap KEMAR HRTF impulse response tables for a speaker channel at any azimuth angle
+/// (-180.0 to +180.0 degrees) by linearly interpolating between neighboring acoustic anchors.
+///
+/// Guaranteed zero heap allocations, zero locks, and stack-only computation.
+pub fn compute_interpolated_hrtf(
+    channel: usize,
+    azimuth_deg: f32,
+) -> ([f32; HRTF_TAPS], [f32; HRTF_TAPS]) {
+    if channel == CH_LFE {
+        return (KEMAR_HRTF_LEFT_REV[CH_LFE], KEMAR_HRTF_RIGHT_REV[CH_LFE]);
+    }
+
+    let angle = if azimuth_deg.is_nan() || azimuth_deg.is_infinite() {
+        ITU_R_7_1_DEFAULT_AZIMUTHS[channel]
+    } else {
+        azimuth_deg.clamp(-180.0, 180.0)
+    };
+
+    // 9 sorted acoustic anchor points spanning the full 360-degree horizontal plane
+    let anchors: [(f32, &[f32; HRTF_TAPS], &[f32; HRTF_TAPS]); 9] = [
+        (-180.0, &REAR_CENTER_HRTF_REV, &REAR_CENTER_HRTF_REV),
+        (-135.0, &KEMAR_HRTF_LEFT_REV[CH_REAR_LEFT], &KEMAR_HRTF_RIGHT_REV[CH_REAR_LEFT]),
+        (-90.0, &KEMAR_HRTF_LEFT_REV[CH_SURROUND_LEFT], &KEMAR_HRTF_RIGHT_REV[CH_SURROUND_LEFT]),
+        (-30.0, &KEMAR_HRTF_LEFT_REV[CH_FRONT_LEFT], &KEMAR_HRTF_RIGHT_REV[CH_FRONT_LEFT]),
+        (0.0, &KEMAR_HRTF_LEFT_REV[CH_CENTER], &KEMAR_HRTF_RIGHT_REV[CH_CENTER]),
+        (30.0, &KEMAR_HRTF_LEFT_REV[CH_FRONT_RIGHT], &KEMAR_HRTF_RIGHT_REV[CH_FRONT_RIGHT]),
+        (90.0, &KEMAR_HRTF_LEFT_REV[CH_SURROUND_RIGHT], &KEMAR_HRTF_RIGHT_REV[CH_SURROUND_RIGHT]),
+        (135.0, &KEMAR_HRTF_LEFT_REV[CH_REAR_RIGHT], &KEMAR_HRTF_RIGHT_REV[CH_REAR_RIGHT]),
+        (180.0, &REAR_CENTER_HRTF_REV, &REAR_CENTER_HRTF_REV),
+    ];
+
+    // Find the bounding anchor interval [idx, idx+1]
+    let mut idx = 0;
+    while idx < anchors.len() - 1 && angle > anchors[idx + 1].0 {
+        idx += 1;
+    }
+    if idx >= anchors.len() - 1 {
+        idx = anchors.len() - 2;
+    }
+
+    let (a0, l0, r0) = anchors[idx];
+    let (a1, l1, r1) = anchors[idx + 1];
+
+    if (angle - a0).abs() < 1e-4 {
+        return (*l0, *r0);
+    }
+    if (angle - a1).abs() < 1e-4 {
+        return (*l1, *r1);
+    }
+
+    let span = a1 - a0;
+    let t = if span.abs() > 1e-5 {
+        ((angle - a0) / span).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let one_minus_t = 1.0 - t;
+
+    let mut out_left = [0.0f32; HRTF_TAPS];
+    let mut out_right = [0.0f32; HRTF_TAPS];
+
+    for tap in 0..HRTF_TAPS {
+        out_left[tap] = l0[tap] * one_minus_t + l1[tap] * t;
+        out_right[tap] = r0[tap] * one_minus_t + r1[tap] * t;
+    }
+
+    (out_left, out_right)
+}
+
 /// Computes a vector dot product of 64 floats using SSE2 intrinsics on x86_64,
 /// with scalar fallback for other architectures.
 #[inline(always)]
@@ -200,6 +280,8 @@ pub struct Spatializer3D {
     pub speaker_gains_db: [f32; SURROUND_7_1_CHANNELS],
     pub speaker_muted: [bool; SURROUND_7_1_CHANNELS],
     pub speaker_azimuth: [f32; SURROUND_7_1_CHANNELS],
+    pub hrtf_left: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS],
+    pub hrtf_right: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS],
     history: [[f32; 128]; SURROUND_7_1_CHANNELS],
     write_pos: usize,
 }
@@ -212,6 +294,14 @@ impl Default for Spatializer3D {
 
 impl Spatializer3D {
     pub fn new() -> Self {
+        let mut hrtf_left = [[0.0; HRTF_TAPS]; SURROUND_7_1_CHANNELS];
+        let mut hrtf_right = [[0.0; HRTF_TAPS]; SURROUND_7_1_CHANNELS];
+        for ch in 0..SURROUND_7_1_CHANNELS {
+            let (hl, hr) = compute_interpolated_hrtf(ch, ITU_R_7_1_DEFAULT_AZIMUTHS[ch]);
+            hrtf_left[ch] = hl;
+            hrtf_right[ch] = hr;
+        }
+
         Self {
             enabled: false,
             target_intensity: 0.5,
@@ -220,6 +310,8 @@ impl Spatializer3D {
             speaker_gains_db: [0.0; SURROUND_7_1_CHANNELS],
             speaker_muted: [false; SURROUND_7_1_CHANNELS],
             speaker_azimuth: ITU_R_7_1_DEFAULT_AZIMUTHS,
+            hrtf_left,
+            hrtf_right,
             history: [[0.0; 128]; SURROUND_7_1_CHANNELS],
             write_pos: 0,
         }
@@ -259,6 +351,7 @@ impl Spatializer3D {
     }
 
     /// Set azimuth angle for an individual virtual speaker in degrees (-180.0 to +180.0).
+    /// Recalculates 64-tap KEMAR HRTF filter coefficients dynamically without audio dropouts.
     #[inline]
     pub fn set_speaker_azimuth(&mut self, channel: usize, azimuth_deg: f32) {
         if channel < SURROUND_7_1_CHANNELS {
@@ -268,6 +361,9 @@ impl Spatializer3D {
                 azimuth_deg.clamp(-180.0, 180.0)
             };
             self.speaker_azimuth[channel] = safe_deg;
+            let (hl, hr) = compute_interpolated_hrtf(channel, safe_deg);
+            self.hrtf_left[channel] = hl;
+            self.hrtf_right[channel] = hr;
         }
     }
 
@@ -275,6 +371,11 @@ impl Spatializer3D {
     #[inline]
     pub fn reset_speaker_positions(&mut self) {
         self.speaker_azimuth = ITU_R_7_1_DEFAULT_AZIMUTHS;
+        for ch in 0..SURROUND_7_1_CHANNELS {
+            let (hl, hr) = compute_interpolated_hrtf(ch, ITU_R_7_1_DEFAULT_AZIMUTHS[ch]);
+            self.hrtf_left[ch] = hl;
+            self.hrtf_right[ch] = hr;
+        }
     }
 
     /// Flushes all internal delay lines to zero without transient DC clicks.
@@ -325,8 +426,8 @@ impl Spatializer3D {
             let history_window = &self.history[ch][pos + 1..pos + 65];
 
             // Evaluate 64-tap SIMD FIR convolution for Left and Right ears
-            let conv_l = dot_product_64(history_window, &KEMAR_HRTF_LEFT_REV[ch]);
-            let conv_r = dot_product_64(history_window, &KEMAR_HRTF_RIGHT_REV[ch]);
+            let conv_l = dot_product_64(history_window, &self.hrtf_left[ch]);
+            let conv_r = dot_product_64(history_window, &self.hrtf_right[ch]);
 
             wet_l += conv_l;
             wet_r += conv_r;

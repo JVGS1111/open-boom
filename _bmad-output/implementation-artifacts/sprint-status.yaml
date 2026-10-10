@@ -47,11 +47,11 @@ development_status:
   1-8-virtual-audio-device-bridge-rea-reverse-engineering: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-binaural-7-1-hrtf-convolution-engine-down-folding-matrix: done
   2-2-interactive-circular-3d-surround-dial-control: done
   2-3-8-channel-virtual-speaker-configurator-soundstage-modal: done
-  2-4-spatial-virtual-speaker-angular-repositioning: backlog
+  2-4-spatial-virtual-speaker-angular-repositioning: done
   epic-2-retrospective: optional
 
   epic-3: backlog
