@@ -54,12 +54,24 @@
     - Suíte de 60 testes passando no workspace com zero warnings e build Vite do frontend concluído em 2.06s.
     - Registro de ADR-012 no `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.4 (`status: done`).
+15. **Implementação e Verificação Completa da Story 1.5 (`1-5-master-lookahead-peak-limiter-telemetry-metering`):**
+    - `crates/open-boom-core/src/types.rs`: Extensão de `TelemetrySnapshot` com `limiter_headroom_db: f32`, `sample_rate: u32` e `bit_depth: u32` com valores padrão de alta fidelidade.
+    - `crates/open-boom-core/src/dsp/limiter.rs`: `MasterLimiter` com atraso lookahead de 2ms (96 frames a 48 kHz), pré-detecção de picos na janela circular, envelope transparente (ataque 0.2ms, release 50ms) e teto brickwall inviolável cravado em -0.2 dBFS ($10^{-0.2/20} \approx 0.9772372$) com sanitização de NaN/Inf, garantindo matematicamente 0% de clipping digital e saída $\le -0.1\text{ dBFS}$ sob qualquer nível de volume boost (150%) ou transientes patológicos (+20 dBFS).
+    - `crates/open-boom-core/src/dsp/pipeline.rs`: Cálculo dinâmico de headroom $(-0.2 - \text{peak\_dbfs})\text{.clamp}(0.0, 20.0)$ em `AudioProcessor::telemetry_snapshot`, proteção de amostras ímpares contra bypass do limitador, e propagação contínua de metadados.
+    - `crates/open-boom-wasapi/src/coordinator.rs`: Propagação contínua de sample rate (48 kHz) e bit depth (32-Bit Float) através de `AudioEngineCoordinator::telemetry_snapshot`.
+    - `crates/open-boom-core/tests/pipeline_tests.rs`: Testes unitários para atraso lookahead de 96 frames (2ms), teto brickwall sob 150% boost (+3.52 dB), transiente patológico (+20 dBFS / amplitude 10.0), e cálculo exato de headroom (5.8 dB em -6 dBFS, 20 dB no silêncio/passthrough).
+    - `crates/open-boom-wasapi/tests/coordinator_tests.rs`: Teste de integração de telemetria cobrindo sample rate, bit depth e headroom.
+    - `src-ui/src/components/StatusBar.tsx`: Renderização contínua de sample rate (`48 kHz`), bit depth (`32-Bit Float`), latência medida (`<15 ms`), medidor dinâmico de headroom (`Headroom: +11.8 dB` / `>20 dB` / `0.0 dB`), e badge de limitador pulsante âmbar/vermelho com sombra neon exibindo redução exata em decibéis (`LIMITER: -0.2 dBFS (-X.X dB)`).
+    - `src-ui/src/App.tsx`: Polling otimizado para 60ms (~16.6 Hz) para visualização em tempo real sem travamentos e ligação de headroom e metadados ao dock de status.
+    - Suíte de 66 testes passando no workspace com zero warnings e build Vite do frontend concluído em 2.19s.
+    - Registro de ADR-013 no `.bmad/04-DECISION-LOG.md`.
+    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.5 (`status: done`).
 
 ## O que está em andamento agora
-* Story 1.4 concluída e aprovada com status `done`.
+* Story 1.5 concluída e verificada com status `done`.
 
 ## Próximo Passo Imediato
-* Implementar a **Story 1.5** (`1-5-master-lookahead-peak-limiter-telemetry-metering`: Limitador de Pico Lookahead de 2ms (-0.2 dBFS), Medidor de Headroom e Telemetria em Tempo Real).
+* Implementar a **Story 1.6** (`1-6-phase-continuous-instant-a-b-bypass`: Comutação A/B Instantânea com Alinhamento de Fase e Crossfade de 5ms).
 
 ## Diretrizes Permanentes de Ferramentas
 * **Decompilator & REA MCP:** O agente tem acesso e DEVE consultar o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e utilizar o MCP global `rea` sempre que precisar extrair detalhes internos, algoritmos de DSP, estruturas de drivers ou bibliotecas do Boom 3D original.

@@ -89,3 +89,22 @@ fn test_coordinator_sub_15ms_latency_guarantee() {
         latency
     );
 }
+
+#[test]
+fn test_coordinator_telemetry_headroom_sample_rate_and_bit_depth() {
+    let coordinator = AudioEngineCoordinator::default();
+    let telemetry = coordinator.telemetry_snapshot();
+
+    // Verify sample rate and bit depth metadata propagation
+    assert_eq!(telemetry.sample_rate, 48_000, "Sample rate must report 48 kHz");
+    assert_eq!(telemetry.bit_depth, 32, "Bit depth must report 32-bit float");
+    assert!(
+        telemetry.limiter_headroom_db >= 0.0,
+        "Headroom must be non-negative"
+    );
+    assert_eq!(
+        telemetry.limiter_headroom_db, 20.0,
+        "Silent initial state must report capped 20.0 dB headroom"
+    );
+}
+

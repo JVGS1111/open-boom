@@ -121,5 +121,20 @@
   5. **Componentes de UI Acessíveis:** Desenvolvidos `DeviceSelector.tsx` (popover com teclado completo e seleção de endpoints) e `NotificationBanner.tsx` (alerta flutuante de desconexão e recuperação de hardware).
 * **Consequência:** Experiência de áudio fluida, sem travamentos na troca de fones de ouvido, feedback visual em decibéis e acessibilidade completa via teclado e leitores de tela.
 
+---
+
+### ADR-013: Limitador de Pico Lookahead 2ms (-0.2 dBFS), Teto Brickwall Inviolável e Telemetria em Tempo Real
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** A Story 1.5 demandava: (1) estágio terminal de limitador brickwall lookahead inviolável com atraso de 2ms (96 amostras/frames a 48 kHz), teto em -0.2 dBFS ($10^{-0.2/20} \approx 0.9772372$) e garantia matemática de 0% de clipping digital e saída $\le -0.1\text{ dBFS}$ sob qualquer nível de volume boost (150%) ou transientes extremos (+20 dBFS); (2) telemetria de ganho de redução e headroom em decibéis sincronizada com o backend e Tauri IPC; (3) status bar responsiva com feedback visual pulsante âmbar/vermelho para atenuação do limitador e leitura contínua de sample rate (48 kHz), bit depth (32-Bit Float), latência (<15ms) e headroom dinâmico.
+* **Decisões:**
+  1. **Algoritmo Lookahead e Detecção de Picos:** Implementado buffer circular de 96 frames com detecção de picos em toda a extensão da janela de 2ms. Isso assegura que transientes quentes são identificados com 2ms de antecedência, permitindo que o envelope de ganho reduza suavemente ($\tau_{\text{att}} = 0.2\text{ ms}$) antes que o transiente atinja a saída.
+  2. **Teto Brickwall e Clamping Estrito:** Amostras de saída calculadas via $y[n] = (x[n - D] \cdot g[n])\text{.clamp}(-C, C)$ com sanitização rigorosa contra NaN e Infinito, impossibilitando qualquer overshoot além de -0.2 dBFS.
+  3. **Envelope Transparente de Release:** Release ajustado para 50ms ($\tau_{\text{rel}} = 0.050\text{ s}$), garantindo recuperação natural sem distorção harmônica ou pumping de graves após o término do pico.
+  4. **Cálculo de Headroom e Contrato de Telemetria:** `TelemetrySnapshot` estendido com `limiter_headroom_db`, `sample_rate` e `bit_depth`. Headroom calculado dinamicamente como $(-0.2 - \text{peak\_dbfs})\text{.clamp}(0.0, 20.0)$ (0.0 dB quando atenuando, capped em 20.0 dB no silêncio).
+  5. **Métricas de UI e Taxa de Polling:** Polling no `src-ui/src/App.tsx` otimizado para 60ms (~16.6 Hz), permitindo animação instantânea do badge pulsante âmbar/vermelho (`LIMITER: -0.2 dBFS (-X.X dB)`) e atualização visual do medidor de headroom e metadados de áudio sem sobrecarga de IPC.
+* **Consequência:** Proteção acústica absoluta contra estouros digitais, transparência sonora impecável com zero clipping mesmo sob 150% de ganho, e instrumentação visual de estúdio profissional no HUD.
+
+
 
 

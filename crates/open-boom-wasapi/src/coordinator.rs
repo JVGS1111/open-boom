@@ -161,7 +161,8 @@ impl AudioEngineCoordinator {
     pub fn round_trip_latency_ms(&self) -> f32 {
         let capture_latency = 5.0; // 5ms capture buffer
         let render_latency = self.render.latency_ms().max(5.0);
-        capture_latency + render_latency
+        let dsp_lookahead_latency = 2.0; // 2.0ms terminal limiter lookahead
+        capture_latency + render_latency + dsp_lookahead_latency
     }
 
     /// Generates a telemetry snapshot reflecting live DSP state and levels.
@@ -170,6 +171,8 @@ impl AudioEngineCoordinator {
         snapshot.round_trip_latency_ms = self.round_trip_latency_ms();
         // dsp_active requires both the engine to be running AND master power / DSP to be engaged
         snapshot.dsp_active = self.is_running && self.processor.is_dsp_active();
+        snapshot.sample_rate = self.render.config.sample_rate;
+        snapshot.bit_depth = 32;
         snapshot
     }
 

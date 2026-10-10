@@ -64,7 +64,7 @@ pub enum AudioCommand {
 
 /// Real-time engine telemetry snapshot readable by UI without locking.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TelemetrySnapshot {
     /// Master limiter gain reduction in decibels (<= 0.0 dB).
@@ -79,6 +79,28 @@ pub struct TelemetrySnapshot {
     pub limiter_active: bool,
     /// Whether master DSP is currently active.
     pub dsp_active: bool,
+    /// Limiter headroom to -0.2 dBFS ceiling in decibels (>= 0.0 dB).
+    pub limiter_headroom_db: f32,
+    /// Active audio stream sample rate in Hertz (e.g. 48000).
+    pub sample_rate: u32,
+    /// Active audio stream bit depth (e.g. 32 for 32-bit float).
+    pub bit_depth: u32,
+}
+
+impl Default for TelemetrySnapshot {
+    fn default() -> Self {
+        Self {
+            limiter_gain_reduction_db: 0.0,
+            round_trip_latency_ms: 10.0,
+            peak_output_l_dbfs: -100.0,
+            peak_output_r_dbfs: -100.0,
+            limiter_active: false,
+            dsp_active: false,
+            limiter_headroom_db: 20.0,
+            sample_rate: INTERNAL_SAMPLE_RATE,
+            bit_depth: 32,
+        }
+    }
 }
 
 /// Information about an enumerated audio output render endpoint.

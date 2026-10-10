@@ -28,7 +28,7 @@
 - [ ] **T3.1**: Motor do Equalizador Multibanda (10 e 31 bandas).
 - [ ] **T3.2**: Algoritmo de espacialização 3D com HRTF.
 - [ ] **T3.3**: Módulo de efeitos: Reverb, Exciter de harmônicos, Compressor DRC e Stereo Widener.
-- [ ] **T3.4**: Master Limiter anti-clipping.
+- [X] **T3.4**: Master Limiter anti-clipping (Lookahead 2ms -0.2 dBFS, brickwall ceiling clamp, 0% digital clipping, medidor de headroom dinâmico e telemetria pulsante - Story 1.5).
 
 ### Sprint 4: AutoEq & Presets (Marco 4)
 - [ ] **T4.1**: Parser dos arquivos TSV/JSON do AutoEq.

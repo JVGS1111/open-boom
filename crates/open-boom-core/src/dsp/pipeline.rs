@@ -154,8 +154,18 @@ impl AudioProcessor {
         // Bit-perfect zero-overhead passthrough when master power is switched OFF
         if !self.master_power {
             out_slice.copy_from_slice(in_slice);
-            self.peak_l = 0.0;
-            self.peak_r = 0.0;
+            let mut max_l: f32 = 0.0;
+            let mut max_r: f32 = 0.0;
+            let frames = len / 2;
+            for i in 0..frames {
+                max_l = max_l.max(out_slice[i * 2].abs());
+                max_r = max_r.max(out_slice[i * 2 + 1].abs());
+            }
+            if len % 2 != 0 {
+                max_l = max_l.max(out_slice[len - 1].abs());
+            }
+            self.peak_l = max_l;
+            self.peak_r = max_r;
             return;
         }
 
@@ -170,8 +180,18 @@ impl AudioProcessor {
         // Pure bypass mode: direct passthrough without limiter/DSP
         if self.is_bypassed {
             out_slice.copy_from_slice(in_slice);
-            self.peak_l = 0.0;
-            self.peak_r = 0.0;
+            let mut max_l: f32 = 0.0;
+            let mut max_r: f32 = 0.0;
+            let frames = len / 2;
+            for i in 0..frames {
+                max_l = max_l.max(out_slice[i * 2].abs());
+                max_r = max_r.max(out_slice[i * 2 + 1].abs());
+            }
+            if len % 2 != 0 {
+                max_l = max_l.max(out_slice[len - 1].abs());
+            }
+            self.peak_l = max_l;
+            self.peak_r = max_r;
             return;
         }
 
@@ -193,10 +213,13 @@ impl AudioProcessor {
             max_r = max_r.max(out_r.abs());
         }
 
-        // Handle odd trailing sample if present
+        // Handle odd trailing sample directly without advancing stereo limiter circular buffer
         if len % 2 != 0 {
             let last_idx = len - 1;
-            out_slice[last_idx] = in_slice[last_idx] * gain;
+            let val = in_slice[last_idx] * gain;
+            let clamped = val.clamp(-self.limiter.ceiling_linear(), self.limiter.ceiling_linear());
+            out_slice[last_idx] = clamped;
+            max_l = max_l.max(clamped.abs());
         }
 
         self.peak_l = max_l;
@@ -223,6 +246,14 @@ impl AudioProcessor {
             0.0
         };
 
+        let peak_out = self.peak_l.max(self.peak_r);
+        let headroom_db = if peak_out < 1e-4 {
+            20.0
+        } else {
+            let peak_dbfs = 20.0 * peak_out.log10();
+            (-0.2 - peak_dbfs).clamp(0.0, 20.0)
+        };
+
         TelemetrySnapshot {
             limiter_gain_reduction_db: limiter_gr,
             round_trip_latency_ms: 10.0,
@@ -230,6 +261,9 @@ impl AudioProcessor {
             peak_output_r_dbfs: peak_r_dbfs,
             limiter_active: limiter_gr < -0.01,
             dsp_active: self.is_dsp_active(),
+            limiter_headroom_db: headroom_db,
+            sample_rate: crate::types::INTERNAL_SAMPLE_RATE,
+            bit_depth: 32,
         }
     }
 }

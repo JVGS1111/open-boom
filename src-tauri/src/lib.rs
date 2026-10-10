@@ -210,6 +210,9 @@ mod tests {
         assert_eq!(t.limiter_gain_reduction_db, 0.0);
         assert!(t.round_trip_latency_ms < 15.0);
         assert!(t.dsp_active);
+        assert_eq!(t.sample_rate, 48_000);
+        assert_eq!(t.bit_depth, 32);
+        assert_eq!(t.limiter_headroom_db, 20.0);
 
         // Dispatch SetMasterPower(false)
         state

@@ -74,6 +74,10 @@ export const App: React.FC = () => {
   const [bypassActive, setBypassActive] = useState(false);
   const [latencyMs, setLatencyMs] = useState(11.4);
   const [limiterGainReductionDb, setLimiterGainReductionDb] = useState(0.0);
+  const [limiterHeadroomDb, setLimiterHeadroomDb] = useState(20.0);
+  const [limiterActive, setLimiterActive] = useState(false);
+  const [sampleRate, setSampleRate] = useState(48000);
+  const [bitDepth, setBitDepth] = useState(32);
 
   // Helper to dispatch IPC command safely to Tauri
   const dispatchCommand = async (commandObj: unknown) => {
@@ -213,15 +217,31 @@ export const App: React.FC = () => {
           limiter_gain_reduction_db: number;
           round_trip_latency_ms: number;
           dsp_active: boolean;
+          limiter_headroom_db: number;
+          sample_rate: number;
+          bit_depth: number;
+          limiter_active: boolean;
         }>("get_telemetry");
         if (snapshot) {
           setLatencyMs(snapshot.round_trip_latency_ms);
           setLimiterGainReductionDb(snapshot.limiter_gain_reduction_db);
+          if (typeof snapshot.limiter_headroom_db === "number") {
+            setLimiterHeadroomDb(snapshot.limiter_headroom_db);
+          }
+          if (snapshot.sample_rate) {
+            setSampleRate(snapshot.sample_rate);
+          }
+          if (snapshot.bit_depth) {
+            setBitDepth(snapshot.bit_depth);
+          }
+          if (typeof snapshot.limiter_active === "boolean") {
+            setLimiterActive(snapshot.limiter_active);
+          }
         }
       } catch {
         // Fallback for browser mode
       }
-    }, 500);
+    }, 60);
 
     return () => clearInterval(interval);
   }, []);
@@ -284,7 +304,12 @@ export const App: React.FC = () => {
         onToggleBypass={handleToggleBypass}
         latencyMs={latencyMs}
         limiterGainReductionDb={limiterGainReductionDb}
-        dspActive={masterPower}
+        limiterHeadroomDb={limiterHeadroomDb}
+        limiterActive={limiterActive}
+        sampleRate={sampleRate}
+        bitDepth={bitDepth}
+        dspActive={masterPower && !bypassActive}
+        masterPower={masterPower}
       />
     </div>
   );
