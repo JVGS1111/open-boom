@@ -11,6 +11,7 @@ pub mod ring_buffer;
 pub mod types;
 
 // Re-export common types
+pub use dsp::pipeline::AudioProcessor;
 pub use ring_buffer::SpscQueue;
 pub use types::{
     AudioCommand, EngineError, EngineResult, TelemetrySnapshot, GRAPHIC_EQ_BANDS,

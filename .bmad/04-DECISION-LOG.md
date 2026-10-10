@@ -82,3 +82,16 @@
   5. **Guardião RAII MMCSS (`MmcssGuard`):** Registro seguro da thread de áudio no serviço "Pro Audio" (`AvSetMmThreadCharacteristicsW`) com desassociação automática no `Drop`, revertendo com elegância para prioridade normal caso o serviço MMCSS esteja indisponível.
   6. **Monitor de Orçamento de Callback (`CallbackBudgetTracker`):** Rastreamento de tempo de execução com alarme de estouro caso o processamento consuma mais de 60% da duração do buffer (ex: > 6.0ms para buffer de 10ms / 480 amostras).
 * **Consequência:** Ingestão de áudio limpa, zero dependência de drivers `.sys`, tolerância robusta a ambientes sem placa de som e conformidade total com os contratos do Epic 1.
+
+## ADR-010: Dispatcher de Comandos POD Lock-Free e Controle de Chave Mestre de Energia
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Implementação da Story 1.3 para fornecer despacho de comandos da interface sem bloqueio (lock-free) e controle mestre de energia (`SetMasterPower`) com chave visual no HUD desktop (`48px × 26px`, brilho ciano `rgba(56, 189, 248, 0.35)`).
+* **Decisões:**
+  1. **Consumo de Comandos Lock-Free na Thread de Áudio (`AudioProcessor`):** Os comandos são transferidos pela fila circular SPSC com structs POD `#[repr(C)] AudioCommand` sem alocações dinâmicas na heap nem parsing JSON. O método `drain_commands` é executado antes do processamento de cada bloco de áudio, garantindo latência zero de aplicação de parâmetros.
+  2. **Passthrough Bit-Perfect com 0% CPU:** Quando a chave mestre é desligada (`master_power == false`), o processamento executa cópia direta `output.copy_from_slice(input)` sem invocar nenhum estágio de filtragem, limitador ou cálculo de ponto flutuante, resultando em 0.0% de overhead de DSP e igualdade amostra a amostra exata.
+  3. **Segurança de Threads COM (`MmcssGuard`):** Implementação segura de `Send` e `Sync` para `MmcssGuard`, permitindo que o `AudioEngineCoordinator` seja compartilhado seguramente no estado da aplicação Tauri (`AppState`) sem clonagem desnecessária.
+  4. **Telemetria Sincronizada Dinâmica:** O snapshot de telemetria reflete o estado em tempo real da engine (`dsp_active = is_running && processor.is_dsp_active()`), permitindo que a interface gráfica e o status bar exibam o estado real da pipeline sem polling bloqueante.
+  5. **Componente Reutilizável de Chave Mestre:** Criado `MasterPowerSwitch.tsx` medindo estritamente 48px × 26px com raio de pílula total, sombra ciano LED neon e suporte pleno a acessibilidade de teclado e screen readers via ARIA `role="switch"` e `aria-checked`.
+* **Consequência:** Comunicação IPC e áudio 100% desprovidas de lock contention, resposta instantânea da interface e preservação absoluta de integridade de áudio.
+

@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 10/10/2026 - 14:46
+* **Data/Hora:** 10/10/2026 - 16:20
 * **Sprint Ativa:** Sprint 1: Fundação do Projeto & UI Shell (Marco 1)
-* **Tarefa Atual:** Story 1.2 (`1-2-driverless-wasapi-audio-ingest-output-engine`) CONCLUÍDA com status `done` (todos os 31 testes do workspace passando, zero warnings, frontend compilando).
+* **Tarefa Atual:** Story 1.3 (`1-3-lock-free-pod-command-dispatcher-master-power-control`) CONCLUÍDA com status `done` (todos os 42 testes do workspace passando, zero warnings, frontend compilando).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -19,26 +19,34 @@
     - Scaffold do workspace Cargo unificado com `crates/open-boom-core`, `crates/open-boom-wasapi`, `crates/open-boom-storage`, `src-tauri` e `src-ui`.
     - Registro de ADR-008 e aprovação da revisão em 4 camadas com 10 testes unitários.
 11. **Implementação e Verificação Completa da Story 1.2 (`1-2-driverless-wasapi-audio-ingest-output-engine`):**
-    - `crates/open-boom-wasapi/src/format_converter.rs`: Normalizador de formatos de entrada suportando IEEE Float 32-bit, PCM 16-bit, PCM 24-bit compactado (3 bytes), PCM 24-bit em contêiner de 32 bits (alinhado a MSB) e PCM 32-bit inteiro, todos normalizados para `f32` em `[-1.0, 1.0]` com zero alocações.
-    - `crates/open-boom-wasapi/src/resampler.rs`: Reamostrador de alta fidelidade cúbico de Hermite (Catmull-Rom de 4 pontos) com continuidade $C^1$ entre fronteiras de pacotes (`history` de 4 amostras por canal), passagem direta otimizada para 48 kHz identity, suporte a até 8 canais (7.1 surround) e tolerância numérica a epsilon (`1e-7`) para anular overshoot de quadros.
-    - `crates/open-boom-wasapi/src/mmcss.rs`: Guardião RAII `MmcssGuard` para priorização de thread sob "Pro Audio" (`AvSetMmThreadCharacteristicsW` e `AvRevertMmThreadCharacteristics`), e rastreador de orçamento de execução `CallbackBudgetTracker` (limite estrito de 60% da duração do buffer).
-    - `crates/open-boom-wasapi/src/loopback_capture.rs`: Cliente de captura WASAPI loopback 100% em modo usuário sem drivers `.sys` (Modo B com exclusão de processo, Modo A padrão e modo sintético com fallback gracioso para CI/headless sem placas de som).
-    - `crates/open-boom-wasapi/src/render_client.rs`: Cliente de renderização WASAPI com inicialização de dispositivo endpoint, MMCSS Pro Audio e telemetria de latência de buffer.
-    - `crates/open-boom-wasapi/src/coordinator.rs`: Coordenador `AudioEngineCoordinator` integrando o ciclo de vida de captura e saída com cálculo de latência de ida e volta (< 15ms) e geração de `TelemetrySnapshot`.
-    - `crates/open-boom-wasapi/tests/resampler_tests.rs`: Suíte completa de 21 testes cobrindo conversão de todos os formatos, reamostragem a 44.1k/88.2k/96k/192k/48k, suavidade de fronteiras sem cliques DC, fallback de MMCSS, orçamento de callback e stress test contínuo com zero alocações.
-    - Verificação determinística completa: `cargo check --workspace` (0 erros, 0 warnings), `cargo test --workspace` (31 de 31 testes aprovados) e `npm --prefix src-ui run build` (build do Vite aprovado).
-    - Registro de ADR-009 no `.bmad/04-DECISION-LOG.md`.
-    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.2 (`status: done`).
+    - `crates/open-boom-wasapi/src/format_converter.rs`: Normalizador de formatos de entrada (IEEE Float32, PCM16, PCM24, PCM32) com zero alocações e sanitização de NaN.
+    - `crates/open-boom-wasapi/src/resampler.rs`: Reamostrador cúbico de Hermite (Catmull-Rom de 4 pontos) com continuidade $C^1$, tolerância a epsilon e suporte a 7.1 surround.
+    - `crates/open-boom-wasapi/src/mmcss.rs`: Guardião RAII `MmcssGuard` com priorização "Pro Audio" e monitor de orçamento de callback.
+    - `crates/open-boom-wasapi/src/loopback_capture.rs` e `render_client.rs`: Captura e renderização WASAPI em modo usuário sem drivers de kernel.
+    - `crates/open-boom-wasapi/src/coordinator.rs`: Coordenador garantindo latência de ida e volta < 15ms.
+    - Registro de ADR-009 e aprovação com 31 testes.
+12. **Implementação e Verificação Completa da Story 1.3 (`1-3-lock-free-pod-command-dispatcher-master-power-control`):**
+    - `crates/open-boom-core/src/dsp/pipeline.rs`: Motor `AudioProcessor` com consumo lock-free da fila circular SPSC de structs POD `AudioCommand` (`AD-1`, `NFR2`), com drenagem sem alocações e suporte a `SetMasterPower`, `SetMasterVolume`, `SetMute` e `SetBypass`.
+    - Passthrough Bit-Perfect com 0% CPU (`FR27`, `NFR5`): Cópia direta `output.copy_from_slice(input)` quando `master_power == false`, preservando exatidão de bits com zero aritmética de DSP.
+    - `crates/open-boom-wasapi/src/coordinator.rs`: Integração de `AudioProcessor` e fila SPSC no `AudioEngineCoordinator`, expondo telemetria dinâmica (`dsp_active: bool`).
+    - `crates/open-boom-wasapi/src/mmcss.rs`: Implementação de `Send` e `Sync` para `MmcssGuard`.
+    - `src-tauri/src/lib.rs`: Integração do coordenador no `AppState` de Tauri e comando `get_telemetry` sincronizado dinamicamente.
+    - `src-ui/src/components/MasterPowerSwitch.tsx`: Componente de chave mestre medindo estritamente 48px × 26px com brilho ciano LED neon (`rgba(56, 189, 248, 0.35)`), animação suave e acessibilidade plena (teclado Space/Enter e ARIA `role="switch"`).
+    - `src-ui/src/components/Titlebar.tsx` e `src-ui/src/App.tsx`: Chave mestre integrada ao HUD e despacho de comando via Tauri IPC.
+    - Suíte de 42 testes passando no workspace com zero warnings e build Vite do frontend concluído em 2.16s.
+    - Registro de ADR-010 no `.bmad/04-DECISION-LOG.md`.
+    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.3 (`status: done`).
 
 ## O que está em andamento agora
-* Story 1.2 concluída com sucesso. Pronto para Story 1.3 (`1-3-lock-free-pod-command-dispatcher-master-power-control`).
+* Story 1.3 concluída com sucesso. Pronto para Story 1.4 (`1-4-master-volume-boost-control-device-selection`).
 
 ## Próximo Passo Imediato
-* Iniciar a implementação da **Story 1.3** (`1-3-lock-free-pod-command-dispatcher-master-power-control`: Dispatcher de Comandos POD Lock-Free e Controle de Chave Mestre de Energia).
+* Iniciar a implementação da **Story 1.4** (`1-4-master-volume-boost-control-device-selection`: Controle de Volume Master com Boost de 150% e Seleção Dinâmica de Dispositivos).
 
 ## Diretrizes Permanentes de Ferramentas
 * **Decompilator & REA MCP:** O agente tem acesso e DEVE consultar o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e utilizar o MCP global `rea` sempre que precisar extrair detalhes internos, algoritmos de DSP, estruturas de drivers ou bibliotecas do Boom 3D original.
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.
+
 

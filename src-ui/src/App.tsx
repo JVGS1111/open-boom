@@ -159,6 +159,7 @@ export const App: React.FC = () => {
         const snapshot = await invoke<{
           limiter_gain_reduction_db: number;
           round_trip_latency_ms: number;
+          dsp_active: boolean;
         }>("get_telemetry");
         if (snapshot) {
           setLatencyMs(snapshot.round_trip_latency_ms);

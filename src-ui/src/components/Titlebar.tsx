@@ -1,6 +1,7 @@
 import React from "react";
 import { Sliders, Volume2, VolumeX, Minus, X, Headphones } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { MasterPowerSwitch } from "./MasterPowerSwitch";
 
 interface TitlebarProps {
   masterPower: boolean;
@@ -70,25 +71,15 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 
       {/* Center Controls: Master Power, Device, Volume */}
       <div className="flex items-center gap-4">
-        {/* Master Power Pill Switch */}
+        {/* Master Power Pill Switch (48px x 26px, UX-DR2, FR27) */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onTogglePower}
-            title={masterPower ? "Master DSP Active" : "DSP Bypassed"}
-            className={`relative w-11 h-6 rounded-full transition-all duration-200 cursor-pointer ${
-              masterPower
-                ? "bg-accent-cyan shadow-cyan-glow"
-                : "bg-border-default hover:bg-border-subtle"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-md ${
-                masterPower ? "transform translate-x-5" : ""
-              }`}
-            />
-          </button>
-          <span className="text-[11px] font-medium tracking-wider text-text-secondary uppercase">
+          <MasterPowerSwitch
+            enabled={masterPower}
+            onToggle={onTogglePower}
+          />
+          <span className={`text-[11px] font-semibold tracking-wider uppercase transition-colors ${
+            masterPower ? "text-accent-cyan" : "text-text-muted"
+          }`}>
             {masterPower ? "ON" : "OFF"}
           </span>
         </div>

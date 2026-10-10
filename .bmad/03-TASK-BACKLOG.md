@@ -12,11 +12,12 @@
 - [X] **T1.1**: Criação do repositório `open-boom` e inicialização do Git.
 - [X] **T1.2**: Implantação da estrutura do Memory Harness BMAD (`.bmad/`).
 - [X] **T1.3**: Scaffold da aplicação desktop (UI base, tema escuro, layout e responsividade).
-- [ ] **T1.4**: Construção do Header (Master Switch, Slider de Volume com valor numérico e controles de saída).
+- [X] **T1.4**: Construção do Header (Master Power Switch 48x26 com brilho ciano, Slider de Volume com valor numérico e controles de saída).
 - [ ] **T1.5**: Construção do Dial Circular 3D Surround (knob rotativo com indicador de posição e botão expansor).
 - [ ] **T1.6**: Construção da barra de efeitos (Cards com toggles de Ambiente, Fidelidade, Modo Noturno, Espacial, Tonalidade).
 - [ ] **T1.7**: Construção dos seletores de Headphone EQ (AutoEq) e Equalizador (Presets).
 - [ ] **T1.8**: Criação dos painéis expansíveis / modais (Equalizador com sliders de frequência, posicionamento 3D).
+- [X] **T1.9**: Lock-Free POD Command Dispatcher (`AudioProcessor`, SPSC ring buffer sem alocações, bit-perfect passthrough quando desligado e telemetria sincronizada).
 
 ### Sprint 2: Motor de Áudio & Dispositivos (Marco 2)
 - [ ] **T2.1**: Módulo de descoberta de dispositivos de saída e entrada.

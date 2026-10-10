@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-10-2026 13:25
-last_updated: 10-10-2026 14:45
+last_updated: 10-10-2026 16:15
 project: open-boom
 project_key: NOKEY
 tracking_system: file-system
@@ -39,7 +39,7 @@ development_status:
   epic-1: in-progress
   1-1-project-workspace-scaffolding-desktop-shell-window: done
   1-2-driverless-wasapi-audio-ingest-output-engine: done
-  1-3-lock-free-pod-command-dispatcher-master-power-control: backlog
+  1-3-lock-free-pod-command-dispatcher-master-power-control: done
   1-4-master-volume-boost-control-device-selection: backlog
   1-5-master-lookahead-peak-limiter-telemetry-metering: backlog
   1-6-phase-continuous-instant-a-b-bypass: backlog

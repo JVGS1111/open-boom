@@ -2,7 +2,8 @@
 
 use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{AudioCommand, TelemetrySnapshot};
-use std::sync::Arc;
+use open_boom_wasapi::{AudioEngineCoordinator, LoopbackConfig, RenderConfig};
+use std::sync::{Arc, Mutex};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -16,6 +17,43 @@ use dispatcher::{UiDispatcher, COMMAND_QUEUE_CAPACITY};
 pub struct AppState {
     pub dispatcher: UiDispatcher,
     pub command_queue: Arc<SpscQueue<AudioCommand, COMMAND_QUEUE_CAPACITY>>,
+    pub coordinator: Arc<Mutex<AudioEngineCoordinator>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        let command_queue = SpscQueue::<AudioCommand, COMMAND_QUEUE_CAPACITY>::new();
+        let dispatcher = UiDispatcher::new(command_queue.clone());
+        let coordinator = Arc::new(Mutex::new(AudioEngineCoordinator::with_command_queue(
+            LoopbackConfig::default(),
+            RenderConfig::default(),
+            command_queue.clone(),
+        )));
+        Self {
+            dispatcher,
+            command_queue,
+            coordinator,
+        }
+    }
+
+    pub fn get_telemetry_snapshot(&self) -> TelemetrySnapshot {
+        if let Ok(mut coord) = self.coordinator.lock() {
+            coord.drain_commands();
+            let mut snapshot = coord.telemetry_snapshot();
+            if !coord.is_running() {
+                snapshot.dsp_active = coord.processor().is_dsp_active();
+            }
+            snapshot
+        } else {
+            TelemetrySnapshot::default()
+        }
+    }
 }
 
 #[tauri::command]
@@ -24,15 +62,8 @@ fn dispatch_command(cmd: AudioCommand, state: State<'_, AppState>) -> Result<(),
 }
 
 #[tauri::command]
-fn get_telemetry() -> TelemetrySnapshot {
-    TelemetrySnapshot {
-        limiter_gain_reduction_db: 0.0,
-        round_trip_latency_ms: 11.4,
-        peak_output_l_dbfs: -6.0,
-        peak_output_r_dbfs: -6.0,
-        limiter_active: false,
-        dsp_active: true,
-    }
+fn get_telemetry(state: State<'_, AppState>) -> TelemetrySnapshot {
+    state.get_telemetry_snapshot()
 }
 
 #[tauri::command]
@@ -53,12 +84,7 @@ fn close_window(app_handle: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let command_queue = SpscQueue::<AudioCommand, COMMAND_QUEUE_CAPACITY>::new();
-    let dispatcher = UiDispatcher::new(command_queue.clone());
-    let state = AppState {
-        dispatcher,
-        command_queue,
-    };
+    let state = AppState::new();
 
     tauri::Builder::default()
         .manage(state)
@@ -156,10 +182,33 @@ mod tests {
 
     #[test]
     fn test_telemetry_snapshot() {
-        let t = get_telemetry();
+        let state = AppState::new();
+        let t = state.get_telemetry_snapshot();
         assert_eq!(t.limiter_gain_reduction_db, 0.0);
         assert!(t.round_trip_latency_ms < 15.0);
         assert!(t.dsp_active);
+
+        // Dispatch SetMasterPower(false)
+        state
+            .dispatcher
+            .send(AudioCommand::SetMasterPower(false))
+            .expect("send power off");
+
+        // Allow worker thread to push to queue
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        let t_off = state.get_telemetry_snapshot();
+        assert!(!t_off.dsp_active, "DSP should be inactive after SetMasterPower(false)");
+
+        // Dispatch SetMasterPower(true)
+        state
+            .dispatcher
+            .send(AudioCommand::SetMasterPower(true))
+            .expect("send power on");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+
+        let t_on = state.get_telemetry_snapshot();
+        assert!(t_on.dsp_active, "DSP should be active after SetMasterPower(true)");
     }
 
     #[test]

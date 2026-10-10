@@ -12,7 +12,7 @@ pub mod render_client;
 pub mod resampler;
 pub mod session_manager;
 
-pub use coordinator::AudioEngineCoordinator;
+pub use coordinator::{AudioEngineCoordinator, DEFAULT_COMMAND_QUEUE_CAPACITY};
 pub use format_converter::{convert_samples_to_f32, SampleFormat};
 pub use loopback_capture::{LoopbackCapture, LoopbackConfig, LoopbackMode};
 pub use mmcss::{CallbackBudgetTracker, MmcssGuard};

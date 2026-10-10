@@ -12,6 +12,9 @@ pub struct MmcssGuard {
     is_active: bool,
 }
 
+unsafe impl Send for MmcssGuard {}
+unsafe impl Sync for MmcssGuard {}
+
 impl MmcssGuard {
     /// Attempts to register the calling thread under the specified MMCSS task name.
     ///
