@@ -4,8 +4,9 @@
 //! passthrough when master power is switched OFF.
 
 use crate::dsp::limiter::MasterLimiter;
+use crate::dsp::spatializer_3d::Spatializer3D;
 use crate::ring_buffer::SpscQueue;
-use crate::types::{AudioCommand, TelemetrySnapshot};
+use crate::types::{AudioCommand, TelemetrySnapshot, SURROUND_7_1_CHANNELS};
 
 /// Real-time audio processing pipeline and command handler.
 pub struct AudioProcessor {
@@ -15,6 +16,7 @@ pub struct AudioProcessor {
     is_muted: bool,
     is_bypassed: bool,
     crossfade_pos: f32,
+    pub spatializer: Spatializer3D,
     limiter: MasterLimiter,
     peak_l: f32,
     peak_r: f32,
@@ -36,6 +38,7 @@ impl AudioProcessor {
             is_muted: false,
             is_bypassed: false,
             crossfade_pos: 0.0,
+            spatializer: Spatializer3D::new(),
             limiter: MasterLimiter::new(),
             peak_l: 0.0,
             peak_r: 0.0,
@@ -133,9 +136,23 @@ impl AudioProcessor {
             }
             AudioCommand::ResetFilters => {
                 self.limiter.reset();
+                self.spatializer.reset();
             }
-            AudioCommand::SetSurround3D { .. } => {
-                // Prepared for Story 2.1
+            AudioCommand::SetSurround3D { enabled, intensity } => {
+                self.spatializer.enabled = enabled;
+                self.spatializer.set_intensity(intensity);
+            }
+            AudioCommand::SetSpeakerMute { channel, muted } => {
+                self.spatializer.set_speaker_mute(channel as usize, muted);
+            }
+            AudioCommand::SetSpeakerGain { channel, gain_db } => {
+                self.spatializer.set_speaker_gain_db(channel as usize, gain_db);
+            }
+            AudioCommand::SetSpeakerAzimuth { channel, azimuth_deg } => {
+                self.spatializer.set_speaker_azimuth(channel as usize, azimuth_deg);
+            }
+            AudioCommand::ResetSpeakerPositions => {
+                self.spatializer.reset_speaker_positions();
             }
             AudioCommand::LoadGraphicEqSnapshot { .. } => {
                 // Prepared for Story 3.1
@@ -196,15 +213,22 @@ impl AudioProcessor {
             let dry_l = in_slice[i * 2];
             let dry_r = in_slice[i * 2 + 1];
 
+            let (spat_l, spat_r) = if self.spatializer.enabled {
+                self.spatializer.process_stereo_frame(dry_l, dry_r)
+            } else {
+                (dry_l, dry_r)
+            };
+
+            let proc_l = spat_l * gain;
+            let proc_r = spat_r * gain;
+
             let alpha = self.crossfade_pos;
             let (mix_l, mix_r) = if alpha <= 0.0 {
-                (dry_l * gain, dry_r * gain)
+                (proc_l, proc_r)
             } else if alpha >= 1.0 {
                 (dry_l, dry_r)
             } else {
                 let (g_b, g_a) = (alpha * std::f32::consts::FRAC_PI_2).sin_cos();
-                let proc_l = dry_l * gain;
-                let proc_r = dry_r * gain;
                 (proc_l * g_a + dry_l * g_b, proc_r * g_a + dry_r * g_b)
             };
 
@@ -236,14 +260,21 @@ impl AudioProcessor {
         if !len.is_multiple_of(2) {
             let last_idx = len - 1;
             let dry_val = in_slice[last_idx];
+            let spat_val = if self.spatializer.enabled {
+                let (sl, _) = self.spatializer.process_stereo_frame(dry_val, dry_val);
+                sl
+            } else {
+                dry_val
+            };
+            let proc_val = spat_val * gain;
             let alpha = self.crossfade_pos;
             let mix_val = if alpha <= 0.0 {
-                dry_val * gain
+                proc_val
             } else if alpha >= 1.0 {
                 dry_val
             } else {
                 let (g_b, g_a) = (alpha * std::f32::consts::FRAC_PI_2).sin_cos();
-                dry_val * gain * g_a + dry_val * g_b
+                proc_val * g_a + dry_val * g_b
             };
             let clamped = if mix_val.is_finite() {
                 mix_val.clamp(-self.limiter.ceiling_linear(), self.limiter.ceiling_linear())
@@ -256,6 +287,23 @@ impl AudioProcessor {
 
         self.peak_l = max_l;
         self.peak_r = max_r;
+    }
+
+    /// Processes an 8-channel (7.1) frame [FL, FR, C, LFE, RL, RR, SL, SR] and down-folds
+    /// to binaural stereo [L, R] through the full DSP chain.
+    #[inline]
+    pub fn process_surround_frame(&mut self, channels: &[f32; SURROUND_7_1_CHANNELS]) -> (f32, f32) {
+        if !self.master_power {
+            return (channels[0], channels[1]);
+        }
+        if self.is_muted {
+            return (0.0, 0.0);
+        }
+        let (spat_l, spat_r) = self.spatializer.process_frame(channels);
+        let gain = self.master_volume * self.master_boost;
+        let proc_l = spat_l * gain;
+        let proc_r = spat_r * gain;
+        self.limiter.process_stereo(proc_l, proc_r)
     }
 
     /// Generates a real-time telemetry snapshot of engine state and levels.
@@ -297,6 +345,8 @@ impl AudioProcessor {
             sample_rate: crate::types::INTERNAL_SAMPLE_RATE,
             bit_depth: 32,
             using_virtual_bridge: false,
+            surround_intensity: self.spatializer.target_intensity,
+            surround_enabled: self.spatializer.enabled,
         }
     }
 }

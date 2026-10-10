@@ -34,6 +34,28 @@ pub const ISO_31_BAND_FREQUENCIES: [f32; GRAPHIC_EQ_BANDS] = [
     8000.0, 10000.0, 12500.0, 16000.0, 20000.0,
 ];
 
+/// Standard ITU-R BS.775 7.1 channel indices:
+pub const CH_FRONT_LEFT: usize = 0;
+pub const CH_FRONT_RIGHT: usize = 1;
+pub const CH_CENTER: usize = 2;
+pub const CH_LFE: usize = 3;
+pub const CH_REAR_LEFT: usize = 4;
+pub const CH_REAR_RIGHT: usize = 5;
+pub const CH_SURROUND_LEFT: usize = 6;
+pub const CH_SURROUND_RIGHT: usize = 7;
+
+/// ITU-R BS.775 7.1 default reference azimuth angles (degrees).
+pub const ITU_R_7_1_DEFAULT_AZIMUTHS: [f32; SURROUND_7_1_CHANNELS] = [
+    -30.0,   // Front Left
+    30.0,    // Front Right
+    0.0,     // Center
+    0.0,     // LFE (Subwoofer)
+    -135.0,  // Rear Left
+    135.0,   // Rear Right
+    -90.0,   // Surround Left
+    90.0,    // Surround Right
+];
+
 /// Flat, lock-free Plain Old Data (POD) commands transferred across the SPSC boundary.
 /// Memory layout is fixed and contains zero heap pointers or dynamically sized types.
 #[repr(C)]
@@ -50,6 +72,14 @@ pub enum AudioCommand {
     SetBypass(bool),
     /// 3D Surround spatializer intensity (0.0 to 1.0) and enable switch.
     SetSurround3D { enabled: bool, intensity: f32 },
+    /// Mute or unmute an individual virtual speaker channel (0..7).
+    SetSpeakerMute { channel: u8, muted: bool },
+    /// Adjust relative trim gain for an individual virtual speaker in dB (-12.0 to +12.0 dB).
+    SetSpeakerGain { channel: u8, gain_db: f32 },
+    /// Adjust azimuth angle for an individual virtual speaker in degrees (-180.0 to +180.0 deg).
+    SetSpeakerAzimuth { channel: u8, azimuth_deg: f32 },
+    /// Reset all virtual speaker azimuth angles to ITU-R BS.775 reference positions.
+    ResetSpeakerPositions,
     /// Atomic 31-band graphic EQ snapshot and preamp attenuation offset.
     LoadGraphicEqSnapshot {
         gains_db: [f32; GRAPHIC_EQ_BANDS],
@@ -91,6 +121,10 @@ pub struct TelemetrySnapshot {
     /// Whether capture is operating via a virtual audio device bridge (Mode A)
     /// instead of standalone WASAPI loopback fallback (Mode B).
     pub using_virtual_bridge: bool,
+    /// 3D Surround spatializer intensity (0.0 to 1.0).
+    pub surround_intensity: f32,
+    /// Whether 3D Surround spatializer is currently active.
+    pub surround_enabled: bool,
 }
 
 impl Default for TelemetrySnapshot {
@@ -106,6 +140,8 @@ impl Default for TelemetrySnapshot {
             sample_rate: INTERNAL_SAMPLE_RATE,
             bit_depth: 32,
             using_virtual_bridge: false,
+            surround_intensity: 0.5,
+            surround_enabled: false,
         }
     }
 }
