@@ -1,0 +1,76 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-10-2026 13:25
+last_updated: 10-10-2026 13:25
+project: open-boom
+project_key: NOKEY
+tracking_system: file-system
+story_location: 
+  C:\Users\joaov\Documents\GitHub\open-boom\_bmad-output\implementation-artifacts
+development_status:
+  epic-1: backlog
+  1-1-project-workspace-scaffolding-desktop-shell-window: backlog
+  1-2-driverless-wasapi-audio-ingest-output-engine: backlog
+  1-3-lock-free-pod-command-dispatcher-master-power-control: backlog
+  1-4-master-volume-boost-control-device-selection: backlog
+  1-5-master-lookahead-peak-limiter-telemetry-metering: backlog
+  1-6-phase-continuous-instant-a-b-bypass: backlog
+  1-7-application-preferences-window-geometry-system-startup-persi: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-binaural-7-1-hrtf-convolution-engine-down-folding-matrix: backlog
+  2-2-interactive-circular-3d-surround-dial-control: backlog
+  2-3-8-channel-virtual-speaker-configurator-soundstage-modal: backlog
+  2-4-spatial-virtual-speaker-angular-repositioning: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-31-band-biquad-filter-engine-direct-form-ii-transposed-topol: backlog
+  3-2-dual-mode-equalizer-studio-drawer-10-band-vs-31-band-spline: backlog
+  3-3-offline-autoeq-headphone-database-indexing-instant-fuzzy-sea: backlog
+  3-4-decoupled-parametric-autoeq-stage-auto-gain-preamp-compensat: backlog
+  3-5-genre-factory-presets-custom-preset-persistence: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-5-effect-quick-rack-strip-ui-component: backlog
+  4-2-ambience-reverb-module-schroeder-moorer-fdn-dsp: backlog
+  4-3-fidelity-psychoacoustic-harmonic-exciter-module: backlog
+  4-4-night-mode-dynamic-range-compressor-drc: backlog
+  4-5-spatial-stereo-expander-crossfeed-matrix: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-windows-core-audio-session-manager-dedicated-com-mta-thread: backlog
+  5-2-per-application-mixer-drawer-ui-individual-process-faders: backlog
+  5-3-persistent-application-volume-preferences-automatic-session: backlog
+  epic-5-retrospective: optional

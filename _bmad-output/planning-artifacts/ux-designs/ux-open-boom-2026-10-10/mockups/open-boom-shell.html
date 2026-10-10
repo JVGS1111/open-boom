@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenBoom — Desktop UX Key-Screen Mock</title>
+  <style>
+    :root {
+      --bg: #121316;
+      --surface-base: #16171b;
+      --surface-card: #1c1e24;
+      --surface-card-hover: #22252c;
+      --surface-elevated: #282b34;
+      --border-subtle: #262933;
+      --border-default: #2e323e;
+      --border-focus: #38bdf8;
+      --accent-cyan: #38bdf8;
+      --accent-cyan-glow: rgba(56, 189, 248, 0.35);
+      --accent-blue: #3b82f6;
+      --accent-magenta: #ec4899;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --status-online: #22c55e;
+      --meter-green: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: #0b0c0e;
+      color: var(--text-primary);
+      font-family: 'Segoe UI Variable Text', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    /* Window Shell (Desktop App Frame) */
+    .app-window {
+      width: 860px;
+      background: var(--bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Title Bar / Header */
+    .titlebar {
+      height: 54px;
+      background: var(--surface-base);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-title {
+      font-family: 'Segoe UI Variable Display', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-badge {
+      font-size: 10px;
+      font-family: 'Cascadia Code', monospace;
+      padding: 2px 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 4px;
+    }
+
+    /* Master Switch */
+    .master-switch-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .switch {
+      position: relative;
+      width: 46px;
+      height: 24px;
+      cursor: pointer;
+    }
+
+    .switch input { opacity: 0; width: 0; height: 0; }
+
+    .slider-track {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--border-default);
+      transition: .25s ease;
+      border-radius: 9999px;
+    }
+
+    .slider-track:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--text-muted);
+      transition: .25s ease;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider-track {
+      background-color: var(--accent-cyan);
+      box-shadow: 0 0 12px var(--accent-cyan-glow);
+    }
+
+    input:checked + .slider-track:before {
+      transform: translateX(22px);
+      background-color: #fff;
+    }
+
+    /* Header Controls */
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .device-picker {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 6px 12px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .device-picker:hover {
+      border-color: var(--border-default);
+      color: var(--text-primary);
+    }
+
+    .device-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--status-online);
+      box-shadow: 0 0 6px var(--status-online);
+    }
+
+    .volume-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .vol-slider {
+      width: 100px;
+      accent-color: var(--accent-cyan);
+      height: 4px;
+      cursor: pointer;
+    }
+
+    .vol-value {
+      font-family: 'Cascadia Code', monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      width: 32px;
+    }
+
+    /* Soundstage Center: 3D Dial */
+    .soundstage-panel {
+      padding: 24px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(56, 189, 248, 0.05) 0%, transparent 60%);
+      position: relative;
+    }
+
+    .dial-container {
+      position: relative;
+      width: 210px;
+      height: 210px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+    }
+
+    .dial-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .dial-bg-circle {
+      fill: none;
+      stroke: var(--surface-card);
+      stroke-width: 8;
+    }
+
+    .dial-active-arc {
+      fill: none;
+      stroke: var(--accent-cyan);
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 534;
+      stroke-dashoffset: 200;
+      filter: drop-shadow(0 0 6px var(--accent-cyan-glow));
+      transition: stroke-dashoffset 0.1s ease;
+    }
+
+    .dial-core {
+      position: absolute;
+      width: 140px;
+      height: 140px;
+      background: var(--surface-elevated);
+      border-radius: 50%;
+      border: 1px solid var(--border-default);
+      box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dial-core-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .dial-core-value {
+      font-family: 'Segoe UI Variable Display', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 2px 0;
+    }
+
+    .dial-core-sub {
+      font-family: 'Cascadia Code', monospace;
+      font-size: 10px;
+      color: var(--accent-cyan);
+    }
+
+    .calibrate-button {
+      margin-top: 14px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 4px 14px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .calibrate-button:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    /* Effects Rack Strip */
+    .effects-rack {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      padding: 0 20px 18px;
+    }
+
+    .effect-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all .2s;
+      cursor: pointer;
+    }
+
+    .effect-card.active {
+      border-color: var(--accent-cyan);
+      background: var(--surface-card-hover);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.12);
+    }
+
+    .effect-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .effect-title {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+
+    .effect-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--border-default);
+    }
+
+    .effect-card.active .effect-dot {
+      background: var(--accent-cyan);
+      box-shadow: 0 0 6px var(--accent-cyan);
+    }
+
+    .effect-slider {
+      width: 100%;
+      accent-color: var(--accent-cyan);
+      height: 3px;
+    }
+
+    .effect-footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: 'Cascadia Code', monospace;
+    }
+
+    /* Equalizer & AutoEq Dock */
+    .eq-dock {
+      margin: 0 20px 18px;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .eq-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .eq-profile-chips {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chip {
+      background: var(--surface-base);
+      border: 1px solid var(--border-subtle);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .chip.highlight {
+      border-color: var(--accent-blue);
+      color: #93c5fd;
+    }
+
+    .eq-bands-preview {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      height: 80px;
+      padding: 8px 12px 4px;
+      background: #141519;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      position: relative;
+    }
+
+    .eq-center-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .fader-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      height: 100%;
+      justify-content: flex-end;
+      z-index: 2;
+    }
+
+    .fader-bar {
+      width: 4px;
+      background: var(--accent-blue);
+      border-radius: 2px;
+      transition: height .2s;
+    }
+
+    .fader-freq {
+      font-size: 9px;
+      font-family: 'Cascadia Code', monospace;
+      color: var(--text-muted);
+    }
+
+    /* Footer Status Bar */
+    .statusbar {
+      height: 34px;
+      background: var(--surface-base);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .telemetry-group {
+      display: flex;
+      gap: 16px;
+    }
+
+    .telemetry-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .bypass-btn {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      padding: 2px 8px;
+      cursor: pointer;
+      font-family: 'Cascadia Code', monospace;
+      font-size: 10px;
+    }
+
+    .bypass-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-window">
+    <!-- Header -->
+    <div class="titlebar">
+      <div class="brand-section">
+        <div class="brand-title">
+          <span>OPENBOOM</span>
+          <span class="brand-badge">PRO DSP</span>
+        </div>
+        <div class="master-switch-wrapper">
+          <label class="switch">
+            <input type="checkbox" id="masterSwitch" checked>
+            <span class="slider-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="device-picker">
+          <div class="device-indicator"></div>
+          <span>Headphones (Realtek Audio)</span>
+          <span style="font-size: 9px;">▼</span>
+        </div>
+
+        <div class="volume-group">
+          <span style="color: var(--text-muted); font-size: 11px;">VOL</span>
+          <input type="range" class="vol-slider" min="0" max="150" value="78" id="volSlider">
+          <span class="vol-value" id="volValue">78%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Centerpiece 3D Dial -->
+    <div class="soundstage-panel">
+      <div class="dial-container" id="dialKnob">
+        <svg class="dial-svg" viewBox="0 0 200 200">
+          <circle class="dial-bg-circle" cx="100" cy="100" r="85"></circle>
+          <circle class="dial-active-arc" cx="100" cy="100" r="85" id="dialArc"></circle>
+        </svg>
+        <div class="dial-core">
+          <span class="dial-core-title">3D Surround</span>
+          <span class="dial-core-value" id="dialText">65%</span>
+          <span class="dial-core-sub">BINAURAL HRTF</span>
+        </div>
+      </div>
+
+      <button class="calibrate-button">
+        <span>⚙</span> Calibrate 7.1 Virtual Speakers
+      </button>
+    </div>
+
+    <!-- 5 Effects Rack Strip -->
+    <div class="effects-rack">
+      <div class="effect-card" onclick="toggleCard(this)">
+        <div class="effect-header">
+          <span class="effect-title">Ambience</span>
+          <div class="effect-dot"></div>
+        </div>
+        <input type="range" class="effect-slider" min="0" max="100" value="20">
+        <div class="effect-footer"><span>Reverb</span><span>20%</span></div>
+      </div>
+
+      <div class="effect-card active" onclick="toggleCard(this)">
+        <div class="effect-header">
+          <span class="effect-title">Fidelity</span>
+          <div class="effect-dot"></div>
+        </div>
+        <input type="range" class="effect-slider" min="0" max="100" value="65">
+        <div class="effect-footer"><span>Harmonics</span><span>65%</span></div>
+      </div>
+
+      <div class="effect-card active" onclick="toggleCard(this)">
+        <div class="effect-header">
+          <span class="effect-title">Night Mode</span>
+          <div class="effect-dot"></div>
+        </div>
+        <input type="range" class="effect-slider" min="0" max="100" value="70">
+        <div class="effect-footer"><span>Compress</span><span>70%</span></div>
+      </div>
+
+      <div class="effect-card" onclick="toggleCard(this)">
+        <div class="effect-header">
+          <span class="effect-title">Spatial</span>
+          <div class="effect-dot"></div>
+        </div>
+        <input type="range" class="effect-slider" min="0" max="100" value="40">
+        <div class="effect-footer"><span>Mid/Side</span><span>40%</span></div>
+      </div>
+
+      <div class="effect-card" onclick="toggleCard(this)">
+        <div class="effect-header">
+          <span class="effect-title">Pitch</span>
+          <div class="effect-dot"></div>
+        </div>
+        <input type="range" class="effect-slider" min="-12" max="12" value="0">
+        <div class="effect-footer"><span>Semitones</span><span>0 st</span></div>
+      </div>
+    </div>
+
+    <!-- Equalizer & AutoEq Preview Dock -->
+    <div class="eq-dock">
+      <div class="eq-header">
+        <div class="eq-profile-chips">
+          <div class="chip highlight">
+            <span>🎧</span>
+            <span>HyperX Cloud II (AutoEq)</span>
+          </div>
+          <div class="chip">
+            <span>Preset: Rock / EDM</span>
+          </div>
+        </div>
+        <button class="bypass-btn" style="padding: 4px 10px;">Expand 31-Band Studio</button>
+      </div>
+
+      <div class="eq-bands-preview">
+        <div class="eq-center-line"></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 52px;"></div><span class="fader-freq">32</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 60px;"></div><span class="fader-freq">64</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 48px;"></div><span class="fader-freq">125</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 40px;"></div><span class="fader-freq">250</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 38px;"></div><span class="fader-freq">500</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 42px;"></div><span class="fader-freq">1k</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 54px;"></div><span class="fader-freq">2k</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 58px;"></div><span class="fader-freq">4k</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 50px;"></div><span class="fader-freq">8k</span></div>
+        <div class="fader-col"><div class="fader-bar" style="height: 64px;"></div><span class="fader-freq">16k</span></div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="statusbar">
+      <div class="telemetry-group">
+        <div class="telemetry-item"><span style="color: var(--accent-cyan);">●</span> 48 kHz / 32-bit Float</div>
+        <div class="telemetry-item">Latency: <span style="color: #93c5fd;">9.2 ms</span></div>
+        <div class="telemetry-item">Limiter Headroom: <span style="color: #4ade80;">-0.2 dB FS</span></div>
+      </div>
+      <div>
+        <button class="bypass-btn" id="bypassBtn">A/B BYPASS</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Volume Slider
+    const volSlider = document.getElementById('volSlider');
+    const volValue = document.getElementById('volValue');
+    volSlider.addEventListener('input', (e) => {
+      volValue.textContent = e.target.value + '%';
+    });
+
+    // 3D Dial Interaction
+    const dialContainer = document.getElementById('dialKnob');
+    const dialArc = document.getElementById('dialArc');
+    const dialText = document.getElementById('dialText');
+    let intensity = 65;
+
+    function updateDial(val) {
+      intensity = Math.max(0, Math.min(100, val));
+      dialText.textContent = Math.round(intensity) + '%';
+      const circumference = 534;
+      const offset = circumference - (circumference * (intensity / 100));
+      dialArc.style.strokeDashoffset = offset;
+    }
+
+    dialContainer.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      updateDial(intensity + (e.deltaY < 0 ? 3 : -3));
+    });
+
+    // Card Toggle
+    function toggleCard(card) {
+      card.classList.toggle('active');
+    }
+
+    // Bypass Button
+    const bypassBtn = document.getElementById('bypassBtn');
+    let bypassed = false;
+    bypassBtn.addEventListener('click', () => {
+      bypassed = !bypassed;
+      bypassBtn.style.background = bypassed ? 'var(--accent-magenta)' : 'transparent';
+      bypassBtn.style.color = bypassed ? '#fff' : 'var(--text-secondary)';
+      bypassBtn.textContent = bypassed ? 'BYPASS ACTIVE' : 'A/B BYPASS';
+    });
+
+    updateDial(65);
+  </script>
+</body>
+</html>

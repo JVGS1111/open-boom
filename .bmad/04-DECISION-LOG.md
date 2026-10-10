@@ -27,3 +27,36 @@
 * **Decisão:** Declarar formalmente no BMAD (`AGENTS.md`, `01-ARCHITECTURE.md`, `04-DECISION-LOG.md` e `05-SESSION-STATE.md`) que o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e o MCP `rea` são ferramentas ativas de primeira classe no projeto para análise estática e dinâmica dos binários do Boom 3D.
 * **Consequência:** Sempre que houver incerteza sobre parâmetros matemáticos de DSP ou estruturas de áudio, o agente usará o REA MCP para inspecionar os binários originais.
 
+## ADR-005: Arquitetura de Loopback sem Feedback e Escopo MVP do PRD
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Elaboração formal do PRD (`_bmad-output/planning-artifacts/prds/prd-open-boom-2026-10-10/prd.md`). Riscos levantados de feedback loop no WASAPI padrão e sincronização da jornada UJ-3 com os efeitos.
+* **Decisão:** Adotar a API moderna `AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS` (Windows 10 build 20348+ e Windows 11) como pipeline primário sem driver e incluir o Modo Noturno (Compressor DRC) no MVP para validação imediata do cenário noturno (UJ-3).
+* **Consequência:** Garantia de áudio sem realimentação acústica, latência sub-15ms e 100% de estabilidade de SO sem risco de BSOD.
+
+## ADR-006: Sistema de Design de UX e Primitivas Interativas (DESIGN.md & EXPERIENCE.md)
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Execução do workflow `/bmad-ux` para definir formalmente a identidade visual e as especificações de comportamento da interface do OpenBoom.
+* **Decisão:**
+  1. Adotar a especificação Google Labs DESIGN.md (`_bmad-output/planning-artifacts/ux-designs/ux-open-boom-2026-10-10/DESIGN.md`) e o spine comportamental `EXPERIENCE.md`.
+  2. Plataforma UI: Windows Native (WinUI 3 / WPF XAML) com tema escuro profissional de estúdio de áudio (`#121316` fundo, `#1c1e24` cartões, ciano neon `#38bdf8` e azul `#3b82f6` para sinal de áudio e brilho ativo).
+  3. Layout responsivo com HUD base compacto (mínimo de 780×520px) escalável até janela desktop completa com faders de 31 bandas e espectro FFT.
+  4. Primitivas táteis: Dial 3D Surround rotativo contínuo com micro-passos de mousewheel (5° por tick) e clique polar direto; faders de equalizador com arrasto vertical, detent magnético em 0 dB, snap por duplo clique e modo de precisão com tecla Shift (0.1 dB).
+  5. Promoção de mockup tátil interativo em HTML/JS puro em `mockups/open-boom-shell.html`.
+* **Consequência:** A equipe e os futuros agentes de desenvolvimento possuem um contrato visual e comportamental rígido, sem adivinhações de CSS/XAML, com hierarquia de informação e estados de áudio (ativo, bypass, limitador, troca de endpoint) completamente mapeados.
+
+
+## ADR-007: Arquitetura Hexagonal, Pipeline DSP Desacoplado e Invariantes do Architecture Spine (AD-1 a AD-10)
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Execução formal do workflow `/bmad-architecture` (`_bmad-output/planning-artifacts/architecture/architecture-open-boom-2026-10-10/ARCHITECTURE-SPINE.md`) para definir as invariantes técnicas e evitar divergências de implementação entre a UI e a engine de áudio.
+* **Decisões Principais:**
+  1. **Paradigma Pipes-and-Filters com Hexagonal Decoupling:** Separação estrita entre o Core DSP em tempo real (`crates/open-boom-core`), os adaptadores de sistema operacional (`crates/open-boom-wasapi`), a persistência (`crates/open-boom-storage`) e o shell de UI (`src-tauri` / `src-ui`).
+  2. **Invariantes da Thread de Áudio (AD-1):** Thread de processamento executada sob MMCSS (`Pro Audio`); proibição estrita de alocações na heap (`malloc`/`new`), mutexes bloqueantes e operações de I/O na thread de áudio. Comunicação com a UI via ring buffer SPSC lock-free transportando structs POD planas (`#[repr(C)] AudioCommand`).
+  3. **Prevenção de Slapback Echo no Loopback (AD-2):** Modo A com ponte/cabo virtual padrão do Windows ou Modo B via `AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS` (Windows 10 Build 19041+ e Windows 11 Build 22000+) associado a silenciamento/atenuação programática da sessão original via `ISimpleAudioVolume`, evitando duplicação acústica no DAC.
+  4. **Contrato de Canais e Formato Interno 48 kHz f32 (AD-3):** Ingestão normalizada para 7.1 surround (8 canais); 3D Spatializer dobra 7.1 em 2 canais estéreo binaural via convolução HRTF; estágios subsequentes (EQ, Sweeteners, Limiter) operam em estéreo invariante (2 canais).
+  5. **Equalização Dual Desacoplada (AD-6):** Separação em dois estágios: (1) `ParametricCorrectionStage` com até 12 biquads arbitrários do AutoEq e (2) `GraphicEqStage` com 31 bandas ISO 1/3-oitava fixas. Offset de atenuação do pré-amp (`preamp_offset_db = -max_positive_gain_db`) calculado deterministicamente pela UI para evitar clipping.
+  6. **Limiter de Pico Lookahead Inviolável e Bypass com Fase Contínua (AD-5):** Limitador terminal atuando com lookahead de 2ms cravando teto em -0.2 dBFS. Bypass A/B mantém o buffer de atraso de 2ms e aplica crossfade de 5ms, eliminando pops DC e saltos de latência.
+  7. **Thread MTA Dedicada para Session Mixer (AD-8):** Gerenciamento de sessões Core Audio isolado em thread worker COM inicializada via `CoInitializeEx(None, COINIT_MULTITHREADED)`.
+* **Consequência:** Eliminação total de riscos de concorrência, instabilidade matemática de filtros ou eco por duplicação de áudio, garantindo latência < 15ms e consumo de memória < 40 MB.
