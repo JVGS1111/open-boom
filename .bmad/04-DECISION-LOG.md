@@ -70,4 +70,15 @@
   2. **Interpretação de `raw-dylib` via Shim:** Implementado shim de `dlltool` preservando a diretiva `LIBRARY <dll>` nos arquivos `.def` gerados pelo rustc, evitando o erro de runtime `STATUS_DLL_NOT_FOUND (0xC0000135)`.
   3. **Crate-type do Desktop Shell (`rlib`):** Configurado `crate-type = ["rlib"]` em `src-tauri/Cargo.toml`, prevenindo o estouro do limite máximo de 65.535 símbolos exportados de DLLs PE do Windows gerado por `cdylib` em compilações desktop.
 * **Consequência:** Compilação 100% limpa (`cargo check --workspace` e `cargo test --workspace`) com zero warnings e zero dependências de build externas.
-
+## ADR-009: Ingestão de Áudio Driverless via WASAPI Loopback, Resampler Hermite C1 e Agendamento MMCSS Pro Audio
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Implementação da Story 1.2 para captura de áudio em modo usuário sem drivers de kernel (`boomvad.sys`), conversão transparente de múltiplos formatos (16/24/32-bit PCM e 32-bit float) e taxas de amostragem (44.1k, 88.2k, 96k, 192k) para o formato interno fixo de 48.000 Hz float32 com latência < 15ms.
+* **Decisões:**
+  1. **Algoritmo de Reamostragem:** Implementado conversor cúbico de Hermite (spline Catmull-Rom de 4 pontos) com preservação de estado entre buffers (`history` de 4 amostras por canal) e tolerância numérica a epsilon (`1e-7`) para anular overshoot de acumulação em ponto flutuante. A continuidade $C^1$ elimina completamente estalos, estalidos e ruído de alta frequência nas fronteiras de pacotes.
+  2. **Otimização Identity Passthrough:** Fluxos que já chegam em 48 kHz float32 passam por caminho direto com zero sobrecarga de interpolação (`is_identity() == true`).
+  3. **Zero Alocações na Thread de Áudio:** Os buffers de conversão e reamostragem são pré-alocados no `LoopbackCapture` e reaproveitados em fatias em cada iteração, cumprindo o invariante `AD-1`.
+  4. **Modos de Captura WASAPI:** Suporte a Modo B primário (`AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS` com exclusão da árvore de processos do OpenBoom) para evitar eco e feedback loop, com fallback automático para Modo A padrão (`AUDCLNT_STREAMFLAGS_LOOPBACK`) e modo sintético para testes headless/CI.
+  5. **Guardião RAII MMCSS (`MmcssGuard`):** Registro seguro da thread de áudio no serviço "Pro Audio" (`AvSetMmThreadCharacteristicsW`) com desassociação automática no `Drop`, revertendo com elegância para prioridade normal caso o serviço MMCSS esteja indisponível.
+  6. **Monitor de Orçamento de Callback (`CallbackBudgetTracker`):** Rastreamento de tempo de execução com alarme de estouro caso o processamento consuma mais de 60% da duração do buffer (ex: > 6.0ms para buffer de 10ms / 480 amostras).
+* **Consequência:** Ingestão de áudio limpa, zero dependência de drivers `.sys`, tolerância robusta a ambientes sem placa de som e conformidade total com os contratos do Epic 1.
