@@ -66,7 +66,11 @@ pub fn convert_samples_to_f32(
             for (i, chunk) in src_bytes.chunks_exact(4).enumerate() {
                 let bytes: [u8; 4] = [chunk[0], chunk[1], chunk[2], chunk[3]];
                 let sample = f32::from_le_bytes(bytes);
-                dst[i] = sample.clamp(-1.0, 1.0);
+                dst[i] = if sample.is_nan() {
+                    0.0
+                } else {
+                    sample.clamp(-1.0, 1.0)
+                };
             }
         }
         SampleFormat::Pcm16 => {

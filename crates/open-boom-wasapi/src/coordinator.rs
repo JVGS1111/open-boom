@@ -54,7 +54,7 @@ impl AudioEngineCoordinator {
 
     /// Calculates total round-trip audio latency in milliseconds.
     pub fn round_trip_latency_ms(&self) -> f32 {
-        let capture_latency = 10.0; // Standard 10ms capture buffer
+        let capture_latency = 5.0; // 5ms capture buffer
         let render_latency = self.render.latency_ms().max(5.0);
         capture_latency + render_latency
     }

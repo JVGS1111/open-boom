@@ -34,11 +34,13 @@ impl Resampler {
 
     /// Creates a resampler with arbitrary source and target rates and channel count.
     pub fn with_target_rate(source_rate: u32, target_rate: u32, channels: usize) -> Self {
+        let safe_source_rate = if source_rate == 0 { INTERNAL_SAMPLE_RATE } else { source_rate };
+        let safe_target_rate = if target_rate == 0 { INTERNAL_SAMPLE_RATE } else { target_rate };
         let safe_channels = channels.clamp(1, MAX_RESAMPLER_CHANNELS);
-        let ratio = source_rate as f64 / target_rate as f64;
+        let ratio = safe_source_rate as f64 / safe_target_rate as f64;
         Self {
-            source_rate,
-            target_rate,
+            source_rate: safe_source_rate,
+            target_rate: safe_target_rate,
             channels: safe_channels,
             ratio,
             phase: 0.0,
@@ -80,7 +82,7 @@ impl Resampler {
             input_frames
         } else {
             let span = (input_frames as f64 - self.phase).max(0.0);
-            (span / self.ratio).ceil() as usize + 2
+            (span / self.ratio).ceil() as usize
         }
     }
 
@@ -136,7 +138,7 @@ impl Resampler {
         }
 
         // Preserve inter-chunk state across buffer boundaries
-        let rem = pos - input_frames as f64;
+        let rem = (pos - input_frames as f64).max(0.0);
         self.phase = if rem.abs() < eps { 0.0 } else { rem };
 
         let n = input_frames;

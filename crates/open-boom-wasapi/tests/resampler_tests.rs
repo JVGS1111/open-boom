@@ -226,6 +226,36 @@ fn test_format_conversion_float32() {
 }
 
 #[test]
+fn test_format_conversion_nan_sanitization() {
+    let samples = [0.25f32, f32::NAN, -f32::NAN, 0.75];
+    let mut bytes = Vec::new();
+    for s in samples {
+        bytes.extend_from_slice(&s.to_le_bytes());
+    }
+
+    let mut dst = [0.0f32; 4];
+    let count = convert_samples_to_f32(&bytes, SampleFormat::Float32, &mut dst).unwrap();
+    assert_eq!(count, 4);
+    assert_eq!(dst[0], 0.25);
+    assert_eq!(dst[1], 0.0); // NaN sanitized to 0.0
+    assert_eq!(dst[2], 0.0); // -NaN sanitized to 0.0
+    assert_eq!(dst[3], 0.75);
+}
+
+#[test]
+fn test_format_conversion_destination_buffer_too_small() {
+    let samples = [0.1f32, 0.2, 0.3, 0.4];
+    let mut bytes = Vec::new();
+    for s in samples {
+        bytes.extend_from_slice(&s.to_le_bytes());
+    }
+
+    let mut dst = [0.0f32; 3]; // 3 samples capacity for 4 incoming samples
+    let err = convert_samples_to_f32(&bytes, SampleFormat::Float32, &mut dst).unwrap_err();
+    assert!(matches!(err, EngineError::BufferError(_)));
+}
+
+#[test]
 fn test_format_conversion_pcm16() {
     let pcm_values: [i16; 5] = [0, 32767, -32768, 16384, -16384];
     let mut bytes = Vec::new();
@@ -351,9 +381,11 @@ fn test_loopback_capture_ingest_packet() {
         sample_rate: 44_100,
         channels: 2,
         format: SampleFormat::Pcm16,
+        force_synthetic: true,
         ..Default::default()
     };
     let mut capture = LoopbackCapture::new(config);
+    capture.start().unwrap();
 
     // Construct 441 frames of stereo 16-bit PCM audio (882 samples = 1764 bytes)
     let mut raw_bytes = Vec::with_capacity(441 * 2 * 2);
@@ -372,6 +404,47 @@ fn test_loopback_capture_ingest_packet() {
     for s in &output_frames_48k[..frames_written * 2] {
         assert!((*s - 0.5).abs() < 1e-3);
     }
+}
+
+#[test]
+fn test_loopback_capture_not_capturing_rejection() {
+    let config = LoopbackConfig {
+        sample_rate: 44_100,
+        channels: 2,
+        format: SampleFormat::Pcm16,
+        ..Default::default()
+    };
+    let mut capture = LoopbackCapture::new(config);
+    // Note: capture.start() is NOT called
+
+    let raw_bytes = [0u8; 1764];
+    let mut output_frames_48k = vec![0.0f32; 1024 * 2];
+    let err = capture
+        .ingest_packet(&raw_bytes, &mut output_frames_48k)
+        .unwrap_err();
+    assert!(matches!(err, EngineError::BufferError(_)));
+}
+
+#[test]
+fn test_loopback_capture_undersized_output_buffer_rejected() {
+    let config = LoopbackConfig {
+        sample_rate: 44_100,
+        channels: 2,
+        format: SampleFormat::Pcm16,
+        force_synthetic: true,
+        ..Default::default()
+    };
+    let mut capture = LoopbackCapture::new(config);
+    capture.start().unwrap();
+
+    // 441 frames of stereo audio requires 480 frames = 960 samples
+    let raw_bytes = vec![0u8; 441 * 2 * 2];
+    let mut undersized_output = vec![0.0f32; 500]; // 500 samples < 960 samples required
+
+    let err = capture
+        .ingest_packet(&raw_bytes, &mut undersized_output)
+        .unwrap_err();
+    assert!(matches!(err, EngineError::BufferError(_)));
 }
 
 #[test]
@@ -403,6 +476,21 @@ fn test_render_client_synthetic_fallback() {
 }
 
 #[test]
+fn test_render_client_force_synthetic() {
+    let config = RenderConfig {
+        force_synthetic: true,
+        ..Default::default()
+    };
+    let mut render = RenderClient::with_config(config);
+    assert!(render.start().is_ok());
+    assert!(render.is_rendering());
+    assert_eq!(render.latency_ms(), 5.0);
+    assert!(render.mmcss_active());
+    assert!(render.stop().is_ok());
+    assert!(!render.is_rendering());
+}
+
+#[test]
 fn test_audio_engine_coordinator_lifecycle() {
     let capture_config = LoopbackConfig {
         allow_synthetic_fallback: true,
@@ -418,12 +506,24 @@ fn test_audio_engine_coordinator_lifecycle() {
 
     assert!(coordinator.start().is_ok());
     assert!(coordinator.is_running());
-    assert!(coordinator.round_trip_latency_ms() > 0.0);
+    let rt_latency = coordinator.round_trip_latency_ms();
+    assert!(rt_latency > 0.0);
+    assert!(rt_latency < 15.0, "Round-trip latency {}ms must be < 15ms", rt_latency);
 
     let telemetry = coordinator.telemetry_snapshot();
     assert!(telemetry.dsp_active);
     assert_eq!(telemetry.round_trip_latency_ms, coordinator.round_trip_latency_ms());
+    assert!(telemetry.round_trip_latency_ms < 15.0);
 
     assert!(coordinator.stop().is_ok());
     assert!(!coordinator.is_running());
+}
+
+#[test]
+fn test_coordinator_sub_15ms_latency_guarantee() {
+    let coordinator = AudioEngineCoordinator::default();
+    let latency = coordinator.round_trip_latency_ms();
+    assert!(latency < 15.0, "Default round-trip latency {}ms must be < 15ms", latency);
+    let telemetry = coordinator.telemetry_snapshot();
+    assert!(telemetry.round_trip_latency_ms < 15.0);
 }

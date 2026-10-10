@@ -65,10 +65,10 @@ pub struct LoopbackCapture {
 impl LoopbackCapture {
     /// Creates a new loopback capture client with the specified configuration.
     pub fn new(config: LoopbackConfig) -> Self {
-        let channels = config.channels as usize;
+        let channels = (config.channels as usize).clamp(1, crate::resampler::MAX_RESAMPLER_CHANNELS);
         let resampler = Resampler::with_channels(config.sample_rate, channels);
         // Preallocate scratch space for up to ~100ms at 192 kHz 8-channel (153,600 samples)
-        let scratch_capacity = 32_768;
+        let scratch_capacity = 163_840;
         Self {
             config,
             is_capturing: false,
@@ -108,12 +108,41 @@ impl LoopbackCapture {
         raw_bytes: &[u8],
         output_frames_48k: &mut [f32],
     ) -> EngineResult<usize> {
+        if !self.is_capturing {
+            return Err(EngineError::BufferError(
+                "Capture client is not running".to_string(),
+            ));
+        }
+
+        if self.config.channels == 0
+            || self.config.channels as usize > crate::resampler::MAX_RESAMPLER_CHANNELS
+        {
+            return Err(EngineError::UnsupportedFormat(format!(
+                "Channels {} outside supported range 1..={}",
+                self.config.channels,
+                crate::resampler::MAX_RESAMPLER_CHANNELS
+            )));
+        }
+
         if raw_bytes.is_empty() {
             return Ok(0);
         }
 
         let bps = self.config.format.bytes_per_sample();
         let sample_count = raw_bytes.len() / bps;
+        let channels = self.config.channels as usize;
+        let input_frames = sample_count / channels;
+
+        let required_frames = self.resampler.required_output_frames(input_frames);
+        let required_samples = required_frames * channels;
+        if output_frames_48k.len() < required_samples {
+            return Err(EngineError::BufferError(format!(
+                "Output buffer capacity {} too small for required {} samples ({} frames)",
+                output_frames_48k.len(),
+                required_samples,
+                required_frames
+            )));
+        }
 
         // Ensure preallocated scratch buffer capacity without reallocating inside real-time loop
         if sample_count > self.ingest_scratch.len() {
@@ -146,6 +175,16 @@ impl LoopbackCapture {
     /// falls back to Mode A (standard render loopback). In headless CI environments without
     /// audio hardware, returns `EngineError::DeviceInitialization` or falls back to synthetic capture.
     pub fn start(&mut self) -> EngineResult<()> {
+        if self.config.channels == 0
+            || self.config.channels as usize > crate::resampler::MAX_RESAMPLER_CHANNELS
+        {
+            return Err(EngineError::UnsupportedFormat(format!(
+                "Channels {} outside supported range 1..={}",
+                self.config.channels,
+                crate::resampler::MAX_RESAMPLER_CHANNELS
+            )));
+        }
+
         if self.config.force_synthetic {
             self.active_mode = Some(LoopbackMode::Synthetic);
             self.is_capturing = true;

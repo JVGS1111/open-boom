@@ -20,7 +20,7 @@ impl Default for RenderConfig {
             device_id: None,
             sample_rate: INTERNAL_SAMPLE_RATE,
             channels: 2,
-            buffer_duration_ms: 10.0, // 10ms = 480 samples at 48 kHz
+            buffer_duration_ms: 5.0, // 5ms buffer duration for sub-15ms Pro Audio
             allow_synthetic_fallback: false,
             force_synthetic: false,
         }
@@ -119,7 +119,13 @@ impl RenderClient {
             let init_result = (|| -> windows::core::Result<(f32, MmcssGuard)> {
                 let enumerator: IMMDeviceEnumerator =
                     unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
-                let device = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole)? };
+                let device = if let Some(ref id) = self.config.device_id {
+                    use windows::core::HSTRING;
+                    let h_id = HSTRING::from(id.as_str());
+                    unsafe { enumerator.GetDevice(&h_id)? }
+                } else {
+                    unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole)? }
+                };
                 let audio_client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None)? };
 
                 let latency_ms = match unsafe { audio_client.GetStreamLatency() } {

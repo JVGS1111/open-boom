@@ -3,7 +3,7 @@ title: 'Story 1.2: Driverless WASAPI Audio Ingest & Output Engine'
 type: 'feature'
 created: '2026-10-10'
 baseline_revision: '32a5f6dce73247b83e510ce09f84d211b1e26b94'
-status: 'done'
+status: 'in-review'
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
