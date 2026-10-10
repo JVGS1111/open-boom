@@ -77,7 +77,7 @@ impl RenderClient {
 
     /// Returns whether the audio thread is actively registered under MMCSS Pro Audio.
     pub fn mmcss_active(&self) -> bool {
-        self.mmcss_guard.as_ref().map_or(false, |g| g.is_active())
+        self.mmcss_guard.as_ref().is_some_and(|g| g.is_active())
     }
 
     /// Reference to the callback execution budget tracker.

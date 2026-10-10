@@ -142,6 +142,16 @@ impl AudioEngineCoordinator {
         self.render.device_id()
     }
 
+    /// Returns whether the audio processor is currently in bypass mode.
+    pub fn is_bypassed(&self) -> bool {
+        self.processor.is_bypassed()
+    }
+
+    /// Returns current equal-power crossfade position of the audio processor.
+    pub fn crossfade_pos(&self) -> f32 {
+        self.processor.crossfade_pos()
+    }
+
     /// Drains any pending commands from the attached SPSC queue into the processor.
     pub fn drain_commands(&mut self) {
         if let Some(queue) = &self.command_queue {

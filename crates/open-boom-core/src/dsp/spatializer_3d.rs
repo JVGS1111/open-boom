@@ -31,7 +31,7 @@ impl Spatializer3D {
 
         let fl = channels[0];
         let fr = channels[1];
-        let fc = channels[2] * 0.7071;
+        let fc = channels[2] * std::f32::consts::FRAC_1_SQRT_2;
         let lfe = channels[3] * 0.5;
         let bl = channels[4] * 0.6;
         let br = channels[5] * 0.6;

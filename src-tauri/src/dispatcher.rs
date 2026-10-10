@@ -32,6 +32,7 @@ impl UiDispatcher {
         Self { sender }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn send(&self, cmd: AudioCommand) -> Result<(), std::sync::mpsc::SendError<AudioCommand>> {
         self.sender.send(cmd)
     }

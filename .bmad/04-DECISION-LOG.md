@@ -135,6 +135,15 @@
   5. **Métricas de UI e Taxa de Polling:** Polling no `src-ui/src/App.tsx` otimizado para 60ms (~16.6 Hz), permitindo animação instantânea do badge pulsante âmbar/vermelho (`LIMITER: -0.2 dBFS (-X.X dB)`) e atualização visual do medidor de headroom e metadados de áudio sem sobrecarga de IPC.
 * **Consequência:** Proteção acústica absoluta contra estouros digitais, transparência sonora impecável com zero clipping mesmo sob 150% de ganho, e instrumentação visual de estúdio profissional no HUD.
 
+---
 
-
-
+### ADR-014: Comutação A/B Instantânea com Alinhamento de Fase (Crossfade Equal-Power 5ms e Retenção Lookahead 2ms)
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** A Story 1.6 demandava: (1) comutação de A/B Bypass instantânea sub-10ms entre sinal DSP processado e sinal direto sem coloração; (2) eliminação total de estalos DC, clicks e saltos de volume/fase; (3) crossfade suave de 5ms (240 amostras a 48 kHz) com retenção do atraso de 2ms do limitador lookahead em ambos os caminhos; (4) integração visual no status bar (`Hardware Passthrough (Bypassed)`) e atalho global `Ctrl + Shift + B`.
+* **Decisões:**
+  1. **Crossfade de Potência Constante (Equal-Power):** Coeficientes de transição calculados via $g_A = \cos(\alpha \cdot \frac{\pi}{2})$ (processado) e $g_B = \sin(\alpha \cdot \frac{\pi}{2})$ (seco/bypass), onde $\alpha \in [0.0, 1.0]$ transita em exatamente 240 frames ($5\text{ ms}$). A propriedade $g_A^2 + g_B^2 = 1.0$ garante energia acústica constante sem quedas ou surtos de volume.
+  2. **Alinhamento Temporal e Retenção do Lookahead:** O sinal seco é direcionado através da mesma linha de atraso de 96 frames (2ms) do `MasterLimiter`, garantindo que não ocorra salto temporal ($\Delta t = 0\text{ ms}$) ou desfasamento acústico na comutação A/B.
+  3. **Estabilidade contra Chattering:** Comutações repetidas ou rápidas invertem a direção de $\alpha$ de forma contínua e sem descontinuidades, com zero DC pops mesmo sob 100 comutações consecutivas.
+  4. **Atalho e UI:** Mapeado `Ctrl + Shift + B` no `App.tsx` com bloqueio de repetição (`e.repeat`), proteção contra cliques com master power desligado (`disabled={!masterPower}`), e indicação textual `Hardware Passthrough (Bypassed)` no dock de status.
+* **Consequência:** Avaliação acústica fidedigna e imediata das melhorias de DSP sem interrupção rítmica ou clicks perceptíveis.

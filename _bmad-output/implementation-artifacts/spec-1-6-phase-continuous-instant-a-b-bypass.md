@@ -3,7 +3,7 @@ title: 'Story 1.6: Phase-Continuous Instant A/B Bypass'
 type: 'feature'
 created: '2026-10-10'
 baseline_revision: 'd2e5dfa9cf6c36f58d14f499e2e4bc5cde65468f'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context:
@@ -76,7 +76,19 @@ deferred: []
 
 ## Review Triage Log
 
-<!-- Append-only. Populated by step-04 on EVERY review pass. -->
+### 2026-10-10 — Review pass
+- verdicts: 10 findings — high 1, medium 4, low 3, false 2, maybe-false 0
+- findings:
+  - `[high]` `[patch]` Tautological and unverified output audio mixing during crossfade in `test_crossfade_duration_and_equal_power_ramp` — Patched: configured non-unity volume (0.5), verified intermediate output sample levels and that dry audio emerges at unity level 0.5 upon full bypass in `crates/open-boom-core/tests/pipeline_tests.rs`.
+  - `[medium]` `[patch]` Missing verification that uncolored dry signal bypasses volume attenuation when bypass is engaged — Patched: verified that an impulse injected at master volume 0.5 emerges at full uncolored level 0.8 in `test_bypass_retains_2ms_lookahead_delay_and_phase_alignment`.
+  - `[medium]` `[patch]` Missing HTML `disabled` attribute and styling guard on A/B Bypass button when master power is switched off — Patched: added `disabled={!masterPower}` and conditional styling in `src-ui/src/components/StatusBar.tsx`.
+  - `[medium]` `[patch]` Holding shortcut keys triggers repeated keydown events and unthrottled IPC command spamming — Patched: guarded with `if (e.repeat) return;` and `if (!masterPower) return;` in `src-ui/src/App.tsx`.
+  - `[medium]` `[patch]` React state updater contains impure side-effect command dispatch — Patched: decoupled command dispatch from functional state updater in `src-ui/src/App.tsx`.
+  - `[low]` `[patch]` Non-finite values at trailing odd sample in odd-length buffers — Patched: added finite check `if mix_val.is_finite()` before clamping in `crates/open-boom-core/src/dsp/pipeline.rs`.
+  - `[low]` `[patch]` Separate `cos()` and `sin()` transcendental calls on real-time audio thread — Patched: optimized to single `(sin, cos) = theta.sin_cos()` in `crates/open-boom-core/src/dsp/pipeline.rs`.
+  - `[low]` `[patch]` Telemetry hides limiter gain reduction during bypass mode — Patched: reported true `limiter.gain_reduction_db()` under master power regardless of bypass state.
+  - `[false]` `[reject]` Sample rate fixed at 48 kHz in `CROSSFADE_SAMPLES` causes 2.5ms crossfade at 96 kHz — Refuted: by architectural invariant `AD-3`, the internal DSP pipeline operates at fixed 48 kHz float32; the resampler converts all external formats to 48 kHz.
+  - `[false]` `[reject]` Bypass delay of 2ms lookahead violates "zero timing delays" — Refuted: relative differential delay between stream A and stream B must be exactly zero to prevent comb filtering and acoustic phase jumps during A/B switching (`AD-5`, Reading 2).
 
 ## Design Notes
 

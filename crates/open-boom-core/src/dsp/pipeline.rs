@@ -14,6 +14,7 @@ pub struct AudioProcessor {
     master_boost: f32,
     is_muted: bool,
     is_bypassed: bool,
+    crossfade_pos: f32,
     limiter: MasterLimiter,
     peak_l: f32,
     peak_r: f32,
@@ -34,6 +35,7 @@ impl AudioProcessor {
             master_boost: 1.0,
             is_muted: false,
             is_bypassed: false,
+            crossfade_pos: 0.0,
             limiter: MasterLimiter::new(),
             peak_l: 0.0,
             peak_r: 0.0,
@@ -80,6 +82,12 @@ impl AudioProcessor {
     #[inline]
     pub fn is_bypassed(&self) -> bool {
         self.is_bypassed
+    }
+
+    /// Returns current equal-power crossfade position (0.0 = fully processed, 1.0 = fully bypassed).
+    #[inline]
+    pub fn crossfade_pos(&self) -> f32 {
+        self.crossfade_pos
     }
 
     /// Drains and processes all pending commands from an SPSC lock-free queue.
@@ -161,7 +169,7 @@ impl AudioProcessor {
                 max_l = max_l.max(out_slice[i * 2].abs());
                 max_r = max_r.max(out_slice[i * 2 + 1].abs());
             }
-            if len % 2 != 0 {
+            if !len.is_multiple_of(2) {
                 max_l = max_l.max(out_slice[len - 1].abs());
             }
             self.peak_l = max_l;
@@ -177,34 +185,45 @@ impl AudioProcessor {
             return;
         }
 
-        // Pure bypass mode: direct passthrough without limiter/DSP
-        if self.is_bypassed {
-            out_slice.copy_from_slice(in_slice);
-            let mut max_l: f32 = 0.0;
-            let mut max_r: f32 = 0.0;
-            let frames = len / 2;
-            for i in 0..frames {
-                max_l = max_l.max(out_slice[i * 2].abs());
-                max_r = max_r.max(out_slice[i * 2 + 1].abs());
-            }
-            if len % 2 != 0 {
-                max_l = max_l.max(out_slice[len - 1].abs());
-            }
-            self.peak_l = max_l;
-            self.peak_r = max_r;
-            return;
-        }
-
         let gain = self.master_volume * self.master_boost;
         let mut max_l: f32 = 0.0;
         let mut max_r: f32 = 0.0;
 
         let frames = len / 2;
-        for i in 0..frames {
-            let in_l = in_slice[i * 2] * gain;
-            let in_r = in_slice[i * 2 + 1] * gain;
+        let step = 1.0f32 / crate::types::CROSSFADE_SAMPLES as f32;
 
-            let (out_l, out_r) = self.limiter.process_stereo(in_l, in_r);
+        for i in 0..frames {
+            let dry_l = in_slice[i * 2];
+            let dry_r = in_slice[i * 2 + 1];
+
+            let alpha = self.crossfade_pos;
+            let (mix_l, mix_r) = if alpha <= 0.0 {
+                (dry_l * gain, dry_r * gain)
+            } else if alpha >= 1.0 {
+                (dry_l, dry_r)
+            } else {
+                let (g_b, g_a) = (alpha * std::f32::consts::FRAC_PI_2).sin_cos();
+                let proc_l = dry_l * gain;
+                let proc_r = dry_r * gain;
+                (proc_l * g_a + dry_l * g_b, proc_r * g_a + dry_r * g_b)
+            };
+
+            // Advance crossfade position smoothly towards target
+            if self.is_bypassed {
+                if self.crossfade_pos < 1.0 {
+                    self.crossfade_pos = (self.crossfade_pos + step).min(1.0);
+                    if (1.0 - self.crossfade_pos).abs() < 1e-6 {
+                        self.crossfade_pos = 1.0;
+                    }
+                }
+            } else if self.crossfade_pos > 0.0 {
+                self.crossfade_pos = (self.crossfade_pos - step).max(0.0);
+                if self.crossfade_pos < 1e-6 {
+                    self.crossfade_pos = 0.0;
+                }
+            }
+
+            let (out_l, out_r) = self.limiter.process_stereo(mix_l, mix_r);
 
             out_slice[i * 2] = out_l;
             out_slice[i * 2 + 1] = out_r;
@@ -214,10 +233,23 @@ impl AudioProcessor {
         }
 
         // Handle odd trailing sample directly without advancing stereo limiter circular buffer
-        if len % 2 != 0 {
+        if !len.is_multiple_of(2) {
             let last_idx = len - 1;
-            let val = in_slice[last_idx] * gain;
-            let clamped = val.clamp(-self.limiter.ceiling_linear(), self.limiter.ceiling_linear());
+            let dry_val = in_slice[last_idx];
+            let alpha = self.crossfade_pos;
+            let mix_val = if alpha <= 0.0 {
+                dry_val * gain
+            } else if alpha >= 1.0 {
+                dry_val
+            } else {
+                let (g_b, g_a) = (alpha * std::f32::consts::FRAC_PI_2).sin_cos();
+                dry_val * gain * g_a + dry_val * g_b
+            };
+            let clamped = if mix_val.is_finite() {
+                mix_val.clamp(-self.limiter.ceiling_linear(), self.limiter.ceiling_linear())
+            } else {
+                0.0
+            };
             out_slice[last_idx] = clamped;
             max_l = max_l.max(clamped.abs());
         }
@@ -240,7 +272,7 @@ impl AudioProcessor {
             -100.0
         };
 
-        let limiter_gr = if self.master_power && !self.is_bypassed {
+        let limiter_gr = if self.master_power {
             self.limiter.gain_reduction_db()
         } else {
             0.0

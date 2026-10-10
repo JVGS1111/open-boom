@@ -30,8 +30,10 @@ impl AppState {
     pub fn new() -> Self {
         let command_queue = SpscQueue::<AudioCommand, COMMAND_QUEUE_CAPACITY>::new();
         let dispatcher = UiDispatcher::new(command_queue.clone());
-        let mut render_config = RenderConfig::default();
-        render_config.allow_synthetic_fallback = true;
+        let render_config = RenderConfig {
+            allow_synthetic_fallback: true,
+            ..Default::default()
+        };
         let coordinator = Arc::new(Mutex::new(AudioEngineCoordinator::with_command_queue(
             LoopbackConfig::default(),
             render_config,

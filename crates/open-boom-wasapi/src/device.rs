@@ -161,7 +161,7 @@ impl AudioDeviceManager {
                 Err(_) => continue,
             };
 
-            let is_default = default_id.as_ref().map_or(false, |def| def == &id_str);
+            let is_default = default_id.as_ref().is_some_and(|def| def == &id_str);
 
             let friendly_name = unsafe {
                 match device.OpenPropertyStore(STGM_READ) {

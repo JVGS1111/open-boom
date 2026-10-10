@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 10/10/2026 - 18:30
+* **Data/Hora:** 10/10/2026 - 19:15
 * **Sprint Ativa:** Sprint 1: Fundação do Projeto & UI Shell (Marco 1)
-* **Tarefa Atual:** Story 1.4 (`1-4-master-volume-boost-control-device-selection`) CONCLUÍDA com status `done` (todos os 60 testes do workspace passando, zero warnings, frontend compilando).
+* **Tarefa Atual:** Story 1.6 (`1-6-phase-continuous-instant-a-b-bypass`) CONCLUÍDA com status `done` (todos os 70 testes do workspace passando, zero warnings, frontend compilando).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -66,12 +66,20 @@
     - Suíte de 66 testes passando no workspace com zero warnings e build Vite do frontend concluído em 2.19s.
     - Registro de ADR-013 no `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.5 (`status: done`).
+16. **Implementação e Verificação Completa da Story 1.6 (`1-6-phase-continuous-instant-a-b-bypass`):**
+    - `crates/open-boom-core/src/types.rs`: Definição de `CROSSFADE_SAMPLES = 240` (5ms a 48.000 Hz).
+    - `crates/open-boom-core/src/dsp/pipeline.rs`: Adicionado `crossfade_pos: f32`, interpolação equal-power $\cos/\sin$ ($g_A^2 + g_B^2 = 1.0$), e roteamento de sinal dry com preservação estrita do atraso lookahead de 2ms (96 frames) e teto brickwall do `MasterLimiter`, garantindo zero saltos de fase e zero cliques/pops.
+    - `crates/open-boom-wasapi/src/coordinator.rs`: Adicionados métodos de conveniência `is_bypassed()` e `crossfade_pos()`.
+    - `crates/open-boom-core/tests/pipeline_tests.rs`: Testes unitários para rampa de crossfade de 240 frames, invariante de equal-power, retenção de atraso lookahead de 2ms no modo bypass, estabilidade contra chattering rápido (100 toggles com $\Delta y$ delimitado), e precedência de passthrough bit-perfect com restauração do estado de crossfade ao desligar/ligar master power (70 testes passando no workspace).
+    - `src-ui/src/App.tsx`: Registrado listener global de atalho de teclado `Ctrl + Shift + B` e despacho via Tauri IPC.
+    - `src-ui/src/components/StatusBar.tsx`: Renderização de `Hardware Passthrough (Bypassed)` em estilo ardósia suave (`text-text-muted`) quando bypass ativo, badge de limiter refletindo bypass, e tooltip do botão atualizado com atalho.
+    - Build do frontend React/Vite concluído sem erros em 1.73s.
 
 ## O que está em andamento agora
-* Story 1.5 concluída e verificada com status `done`.
+* Story 1.6 concluída e verificada com status `done`.
 
 ## Próximo Passo Imediato
-* Implementar a **Story 1.6** (`1-6-phase-continuous-instant-a-b-bypass`: Comutação A/B Instantânea com Alinhamento de Fase e Crossfade de 5ms).
+* Implementar a **Story 1.7** (`1-7-application-preferences-window-geometry-system-startup-persi`: Persistência de Preferências, Geometria e Inicialização com o Sistema).
 
 ## Diretrizes Permanentes de Ferramentas
 * **Decompilator & REA MCP:** O agente tem acesso e DEVE consultar o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e utilizar o MCP global `rea` sempre que precisar extrair detalhes internos, algoritmos de DSP, estruturas de drivers ou bibliotecas do Boom 3D original.

@@ -204,10 +204,31 @@ export const App: React.FC = () => {
   };
 
   const handleToggleBypass = () => {
+    if (!masterPower) return;
     const nextBypass = !bypassActive;
     setBypassActive(nextBypass);
     dispatchCommand({ SetBypass: nextBypass });
   };
+
+  // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl + Shift + B: Toggle Master DSP Bypass (A/B Test)
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "b" || e.key === "B" || e.code === "KeyB")
+      ) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (!masterPower) return;
+        handleToggleBypass();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [bypassActive, masterPower]);
 
   // Poll real-time telemetry from Tauri core
   useEffect(() => {

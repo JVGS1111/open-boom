@@ -15,6 +15,9 @@ pub const SURROUND_7_1_CHANNELS: usize = 8;
 /// Lookahead limiter delay in samples (2ms at 48 kHz = 96 samples).
 pub const LIMITER_LOOKAHEAD_SAMPLES: usize = 96;
 
+/// Equal-power A/B bypass crossfade duration in samples (5ms at 48 kHz = 240 samples).
+pub const CROSSFADE_SAMPLES: usize = 240;
+
 /// Mandatory true peak limiter ceiling in dBFS (-0.2 dBFS).
 pub const LIMITER_CEILING_DBFS: f32 = -0.2;
 

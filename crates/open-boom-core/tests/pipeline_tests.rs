@@ -2,7 +2,7 @@
 
 use open_boom_core::dsp::pipeline::AudioProcessor;
 use open_boom_core::ring_buffer::SpscQueue;
-use open_boom_core::types::AudioCommand;
+use open_boom_core::types::{AudioCommand, CROSSFADE_SAMPLES, LIMITER_LOOKAHEAD_SAMPLES};
 
 #[test]
 fn test_audio_processor_initial_state() {
@@ -461,7 +461,10 @@ fn test_limiter_headroom_metering() {
     // 4. A/B Bypass engaged: passthrough preserves peak metering informativeness
     proc.handle_command(AudioCommand::SetMasterPower(true));
     proc.handle_command(AudioCommand::SetBypass(true));
-    proc.process_interleaved(&input_6db, &mut output_6db);
+    // Warm up lookahead buffer and complete 240-frame crossfade (>= 336 frames)
+    for _ in 0..200 {
+        proc.process_interleaved(&input_6db, &mut output_6db);
+    }
     let t_bypassed = proc.telemetry_snapshot();
     assert!(
         (t_bypassed.limiter_headroom_db - 5.82).abs() < 0.1,
@@ -470,5 +473,260 @@ fn test_limiter_headroom_metering() {
     assert_eq!(t_bypassed.limiter_gain_reduction_db, 0.0);
     assert!(!t_bypassed.dsp_active);
 }
+
+#[test]
+fn test_crossfade_duration_and_equal_power_ramp() {
+    assert_eq!(CROSSFADE_SAMPLES, 240);
+    // 240 samples at 48 kHz = 5ms
+    let duration_ms = (CROSSFADE_SAMPLES as f32 / 48000.0) * 1000.0;
+    assert!((duration_ms - 5.0).abs() < 1e-4);
+
+    let mut proc = AudioProcessor::new();
+    // Set volume to 0.5 so processed differs from dry (0.5 vs 1.0)
+    proc.handle_command(AudioCommand::SetMasterVolume { volume: 0.5, boost: 1.0 });
+    assert_eq!(proc.crossfade_pos(), 0.0);
+
+    // Warm up lookahead delay with constant input 0.5 (below -0.2 dBFS limiter threshold)
+    let in_dc = [0.5f32, 0.5f32];
+    let mut out_dc = [0.0f32; 2];
+    for _ in 0..120 {
+        proc.process_interleaved(&in_dc, &mut out_dc);
+    }
+    // At start (alpha=0), output should be 0.5 * 0.5 = 0.25
+    assert!((out_dc[0] - 0.25).abs() < 1e-3);
+
+    // Engage A/B Bypass
+    proc.handle_command(AudioCommand::SetBypass(true));
+
+    // Process frame by frame for 240 frames
+    let in_frame = [0.5f32, 0.5f32];
+    let mut out_frame = [0.0f32; 2];
+
+    for frame_idx in 0..CROSSFADE_SAMPLES {
+        let expected_alpha = frame_idx as f32 / CROSSFADE_SAMPLES as f32;
+        assert!(
+            (proc.crossfade_pos() - expected_alpha).abs() < 1e-5,
+            "Frame {} crossfade_pos was {} but expected {}",
+            frame_idx,
+            proc.crossfade_pos(),
+            expected_alpha
+        );
+
+        // Verify equal-power invariant: g_a^2 + g_b^2 == 1.0
+        let (g_b, g_a) = (proc.crossfade_pos() * std::f32::consts::FRAC_PI_2).sin_cos();
+        let total_power = g_a * g_a + g_b * g_b;
+        assert!(
+            (total_power - 1.0).abs() < 1e-6,
+            "Equal-power invariant violated at frame {}: power = {}",
+            frame_idx,
+            total_power
+        );
+
+        proc.process_interleaved(&in_frame, &mut out_frame);
+    }
+
+    // After exactly 240 frames, crossfade_pos must be 1.0
+    assert_eq!(proc.crossfade_pos(), 1.0);
+
+    // Drain lookahead buffer (96 frames) so full bypass (dry 0.5) emerges
+    for _ in 0..100 {
+        proc.process_interleaved(&in_frame, &mut out_frame);
+    }
+    assert!(
+        (out_frame[0] - 0.5).abs() < 1e-3,
+        "Full bypass must output uncolored dry level 0.5 (got {})",
+        out_frame[0]
+    );
+
+    // Disengage A/B Bypass
+    proc.handle_command(AudioCommand::SetBypass(false));
+
+    // Ramp down for 240 frames
+    for frame_idx in 0..CROSSFADE_SAMPLES {
+        let expected_alpha = 1.0 - (frame_idx as f32 / CROSSFADE_SAMPLES as f32);
+        assert!(
+            (proc.crossfade_pos() - expected_alpha).abs() < 1e-5,
+            "Disengage frame {} crossfade_pos was {} but expected {}",
+            frame_idx,
+            proc.crossfade_pos(),
+            expected_alpha
+        );
+
+        let (g_b, g_a) = (proc.crossfade_pos() * std::f32::consts::FRAC_PI_2).sin_cos();
+        let total_power = g_a * g_a + g_b * g_b;
+        assert!((total_power - 1.0).abs() < 1e-6);
+
+        proc.process_interleaved(&in_frame, &mut out_frame);
+    }
+
+    // After 240 frames, crossfade_pos must be 0.0
+    assert_eq!(proc.crossfade_pos(), 0.0);
+
+    // Drain lookahead buffer so processed level (0.25) emerges
+    for _ in 0..100 {
+        proc.process_interleaved(&in_frame, &mut out_frame);
+    }
+    assert!(
+        (out_frame[0] - 0.25).abs() < 1e-3,
+        "Processed audio must return to volume 0.25 (got {})",
+        out_frame[0]
+    );
+}
+
+#[test]
+fn test_bypass_retains_2ms_lookahead_delay_and_phase_alignment() {
+    let mut proc = AudioProcessor::new();
+    // Set volume to 0.5 so processed level is 0.4 and dry is 0.8
+    proc.handle_command(AudioCommand::SetMasterVolume { volume: 0.5, boost: 1.0 });
+    proc.handle_command(AudioCommand::SetBypass(true));
+
+    // Advance 240 frames to complete crossfade into full bypass
+    let silence = [0.0f32; 2];
+    let mut out = [0.0f32; 2];
+    for _ in 0..CROSSFADE_SAMPLES {
+        proc.process_interleaved(&silence, &mut out);
+    }
+    assert_eq!(proc.crossfade_pos(), 1.0);
+
+    // Now inject a stereo impulse in bypass mode
+    let mut impulse_buf = [0.0f32; 300];
+    impulse_buf[0] = 0.8; // Left
+    impulse_buf[1] = 0.8; // Right
+    let mut impulse_out = [0.0f32; 300];
+
+    proc.process_interleaved(&impulse_buf, &mut impulse_out);
+
+    // First 96 frames (indices 0..191) must be 0.0 because dry audio also goes through 2ms lookahead delay!
+    for i in 0..(LIMITER_LOOKAHEAD_SAMPLES * 2) {
+        assert_eq!(
+            impulse_out[i], 0.0,
+            "Sample at index {} before 96-frame lookahead delay must be 0.0 in bypass mode",
+            i
+        );
+    }
+
+    // The impulse must emerge at frame 96 (indices 192, 193) as unattenuated dry level 0.8 (NOT 0.4!)
+    assert!(
+        (impulse_out[192] - 0.8).abs() < 1e-3,
+        "Left channel must retain uncolored dry impulse after lookahead delay in bypass mode (got {})",
+        impulse_out[192]
+    );
+    assert!(
+        (impulse_out[193] - 0.8).abs() < 1e-3,
+        "Right channel must retain uncolored dry impulse after lookahead delay in bypass mode (got {})",
+        impulse_out[193]
+    );
+}
+
+#[test]
+fn test_rapid_bypass_toggle_chattering_stability_zero_clicks() {
+    let mut proc = AudioProcessor::new();
+
+    // Configure 120% boost so processed != dry
+    proc.handle_command(AudioCommand::SetMasterVolume { volume: 1.0, boost: 1.2 });
+
+    let mut prev_out_l = 0.0f32;
+    let mut prev_out_r = 0.0f32;
+    let mut in_buffer = [0.0f32; 4];
+    let mut out_buffer = [0.0f32; 4];
+
+    // Toggle 100 times in rapid succession
+    for i in 0..100 {
+        let bypass = i % 2 == 1;
+        proc.handle_command(AudioCommand::SetBypass(bypass));
+
+        // Generate gentle 1 kHz sine wave
+        for frame in 0..2 {
+            let t = (i * 2 + frame) as f32 / 48000.0;
+            let sample = (2.0 * std::f32::consts::PI * 1000.0 * t).sin() * 0.5;
+            in_buffer[frame * 2] = sample;
+            in_buffer[frame * 2 + 1] = sample;
+        }
+
+        proc.process_interleaved(&in_buffer, &mut out_buffer);
+
+        assert!(
+            proc.crossfade_pos() >= 0.0 && proc.crossfade_pos() <= 1.0,
+            "crossfade_pos {} out of bounds [0.0, 1.0]",
+            proc.crossfade_pos()
+        );
+
+        for frame in 0..2 {
+            let s_l = out_buffer[frame * 2];
+            let s_r = out_buffer[frame * 2 + 1];
+
+            assert!(!s_l.is_nan() && !s_l.is_infinite());
+            assert!(!s_r.is_nan() && !s_r.is_infinite());
+
+            // Check that consecutive samples do not jump abruptly (zero clicks/pops)
+            if i > 50 { // After lookahead delay filled
+                let diff_l = (s_l - prev_out_l).abs();
+                let diff_r = (s_r - prev_out_r).abs();
+                assert!(
+                    diff_l < 0.25,
+                    "Discontinuity detected on Left channel: delta = {}",
+                    diff_l
+                );
+                assert!(
+                    diff_r < 0.25,
+                    "Discontinuity detected on Right channel: delta = {}",
+                    diff_r
+                );
+            }
+
+            prev_out_l = s_l;
+            prev_out_r = s_r;
+        }
+    }
+}
+
+#[test]
+fn test_master_power_off_precedence_and_crossfade_state_restoration() {
+    let mut proc = AudioProcessor::new();
+
+    // Start bypass transition
+    proc.handle_command(AudioCommand::SetBypass(true));
+
+    // Process 120 frames (halfway = 0.5)
+    let silence = [0.0f32; 2];
+    let mut out = [0.0f32; 2];
+    for _ in 0..120 {
+        proc.process_interleaved(&silence, &mut out);
+    }
+    assert!((proc.crossfade_pos() - 0.5).abs() < 1e-4);
+
+    // Turn master power OFF
+    proc.handle_command(AudioCommand::SetMasterPower(false));
+    assert!(!proc.master_power());
+
+    // Process audio during power OFF: bit-perfect passthrough takes precedence
+    let input = [0.12f32, -0.34f32, 0.56f32, -0.78f32];
+    let mut output = [0.0f32; 4];
+    proc.process_interleaved(&input, &mut output);
+
+    for idx in 0..input.len() {
+        assert_eq!(
+            input[idx].to_bits(),
+            output[idx].to_bits(),
+            "Power OFF must take precedence with bit-perfect passthrough"
+        );
+    }
+
+    // Crossfade position is preserved during power OFF
+    assert!((proc.crossfade_pos() - 0.5).abs() < 1e-4);
+
+    // Turn master power back ON
+    proc.handle_command(AudioCommand::SetMasterPower(true));
+    assert!(proc.master_power());
+
+    // Resume remaining 120 frames towards bypass
+    for _ in 0..120 {
+        proc.process_interleaved(&silence, &mut out);
+    }
+
+    // Now fully bypassed at 1.0
+    assert_eq!(proc.crossfade_pos(), 1.0);
+}
+
 
 

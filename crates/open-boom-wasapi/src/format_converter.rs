@@ -1,4 +1,5 @@
 //! Audio sample format conversion to normalized 32-bit floating point PCM.
+#![allow(clippy::chunks_exact_to_as_chunks)]
 
 use open_boom_core::types::{EngineError, EngineResult};
 
@@ -43,7 +44,7 @@ pub fn convert_samples_to_f32(
     if src_bytes.is_empty() {
         return Ok(0);
     }
-    if src_bytes.len() % bps != 0 {
+    if !src_bytes.len().is_multiple_of(bps) {
         return Err(EngineError::UnsupportedFormat(format!(
             "Input buffer length {} is not a multiple of sample size {} for {:?}",
             src_bytes.len(),

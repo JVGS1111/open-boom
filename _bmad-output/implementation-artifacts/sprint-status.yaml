@@ -42,7 +42,7 @@ development_status:
   1-3-lock-free-pod-command-dispatcher-master-power-control: done
   1-4-master-volume-boost-control-device-selection: done
   1-5-master-lookahead-peak-limiter-telemetry-metering: done
-  1-6-phase-continuous-instant-a-b-bypass: backlog
+  1-6-phase-continuous-instant-a-b-bypass: done
   1-7-application-preferences-window-geometry-system-startup-persi: backlog
   1-8-virtual-audio-device-bridge-rea-reverse-engineering: backlog
   epic-1-retrospective: optional

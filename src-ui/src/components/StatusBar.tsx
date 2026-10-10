@@ -26,7 +26,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   dspActive,
   masterPower = true,
 }) => {
-  const isEngaged = masterPower && !bypassActive;
+  const isEngaged = masterPower && !bypassActive && dspActive;
   const isLimiting = isEngaged && (limiterActive || limiterGainReductionDb < -0.05);
 
   const sampleRateText =
@@ -101,18 +101,32 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     <footer className="h-9 bg-surface-base border-t border-border-subtle flex items-center justify-between px-4 select-none shrink-0 text-xs">
       {/* Engine Status & Latency Badge */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 text-text-secondary">
-          <Cpu className="w-3.5 h-3.5 text-accent-cyan" />
-          <span className="font-mono text-[11px] text-text-primary font-medium">
-            {sampleRateText}
-          </span>
-          <span className="text-border-default">|</span>
-          <span className="font-mono text-[11px] text-text-primary font-medium">
-            {bitDepthText}
-          </span>
-          <span className="text-border-default">|</span>
-          <span className="text-[11px] text-text-muted">Pro Audio MMCSS</span>
-        </div>
+        {bypassActive ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-1.5 text-text-muted"
+            title="A/B Bypass Active (Hardware Passthrough with 2ms Limiter Protection)"
+          >
+            <Cpu className="w-3.5 h-3.5 text-text-muted" />
+            <span className="font-mono text-[11px] text-text-muted font-medium">
+              Hardware Passthrough (Bypassed)
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-text-secondary">
+            <Cpu className="w-3.5 h-3.5 text-accent-cyan" />
+            <span className="font-mono text-[11px] text-text-primary font-medium">
+              {sampleRateText}
+            </span>
+            <span className="text-border-default">|</span>
+            <span className="font-mono text-[11px] text-text-primary font-medium">
+              {bitDepthText}
+            </span>
+            <span className="text-border-default">|</span>
+            <span className="text-[11px] text-text-muted">Pro Audio MMCSS</span>
+          </div>
+        )}
 
         <div className="h-3 w-px bg-border-subtle" />
 
@@ -153,15 +167,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {/* 1-Click A/B Instant Bypass Switch */}
         <button
           type="button"
+          disabled={!masterPower}
           onClick={onToggleBypass}
-          className={`px-3 py-1 rounded font-semibold text-[11px] tracking-wider transition-all duration-150 cursor-pointer ${
-            bypassActive
-              ? "bg-status-warning text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]"
-              : dspActive
-              ? "bg-surface-card hover:bg-surface-elevated text-text-primary border border-border-subtle hover:border-border-default"
-              : "bg-surface-base text-text-muted opacity-50 cursor-not-allowed"
+          className={`px-3 py-1 rounded font-semibold text-[11px] tracking-wider transition-all duration-150 ${
+            !masterPower
+              ? "bg-surface-base text-text-muted opacity-50 cursor-not-allowed"
+              : bypassActive
+              ? "bg-status-warning text-black shadow-[0_0_10px_rgba(245,158,11,0.4)] cursor-pointer"
+              : "bg-surface-card hover:bg-surface-elevated text-text-primary border border-border-subtle hover:border-border-default cursor-pointer"
           }`}
-          title="Instant 1-Click Phase-Continuous A/B Bypass"
+          title="Instant 1-Click Phase-Continuous A/B Bypass (Ctrl + Shift + B)"
         >
           {bypassActive ? "BYPASSED (RAW)" : "A/B BYPASS"}
         </button>
