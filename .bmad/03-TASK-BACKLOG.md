@@ -20,7 +20,7 @@
 - [X] **T1.9**: Lock-Free POD Command Dispatcher (`AudioProcessor`, SPSC ring buffer sem alocações, bit-perfect passthrough quando desligado e telemetria sincronizada).
 
 ### Sprint 2: Motor de Áudio & Dispositivos (Marco 2)
-- [ ] **T2.1**: Módulo de descoberta de dispositivos de saída e entrada.
+- [X] **T2.1**: Módulo de descoberta de dispositivos de saída e entrada (MMDeviceAPI enumeration, dynamic switching < 500ms, fallback recovery e popover selector - Story 1.4).
 - [X] **T2.2**: Pipeline de captura e reprodução de baixa latência (WASAPI Loopback Mode B/A, Resampler Hermite C1 48 kHz, MMCSS Pro Audio, RenderClient).
 - [ ] **T2.3**: Integração do controle de volume do sistema e mixer por aplicativo.
 

@@ -4,7 +4,8 @@
 use std::sync::Arc;
 use open_boom_core::dsp::pipeline::AudioProcessor;
 use open_boom_core::ring_buffer::SpscQueue;
-use open_boom_core::types::{AudioCommand, EngineResult, TelemetrySnapshot};
+use open_boom_core::types::{AudioCommand, AudioDeviceInfo, EngineResult, TelemetrySnapshot};
+use crate::device::AudioDeviceManager;
 use crate::loopback_capture::{LoopbackCapture, LoopbackConfig};
 use crate::render_client::{RenderClient, RenderConfig};
 
@@ -17,6 +18,7 @@ pub struct AudioEngineCoordinator {
     render: RenderClient,
     processor: AudioProcessor,
     command_queue: Option<Arc<SpscQueue<AudioCommand, DEFAULT_COMMAND_QUEUE_CAPACITY>>>,
+    device_manager: AudioDeviceManager,
     is_running: bool,
 }
 
@@ -29,11 +31,18 @@ impl Default for AudioEngineCoordinator {
 impl AudioEngineCoordinator {
     /// Creates a new audio engine coordinator with the specified capture and render configs.
     pub fn new(capture_config: LoopbackConfig, render_config: RenderConfig) -> Self {
+        let allow_synthetic = render_config.allow_synthetic_fallback || render_config.force_synthetic;
+        let device_manager = if render_config.force_synthetic {
+            AudioDeviceManager::with_forced_synthetic(true)
+        } else {
+            AudioDeviceManager::with_synthetic_fallback(allow_synthetic)
+        };
         Self {
             capture: LoopbackCapture::new(capture_config),
             render: RenderClient::with_config(render_config),
             processor: AudioProcessor::new(),
             command_queue: None,
+            device_manager,
             is_running: false,
         }
     }
@@ -44,11 +53,18 @@ impl AudioEngineCoordinator {
         render_config: RenderConfig,
         command_queue: Arc<SpscQueue<AudioCommand, DEFAULT_COMMAND_QUEUE_CAPACITY>>,
     ) -> Self {
+        let allow_synthetic = render_config.allow_synthetic_fallback || render_config.force_synthetic;
+        let device_manager = if render_config.force_synthetic {
+            AudioDeviceManager::with_forced_synthetic(true)
+        } else {
+            AudioDeviceManager::with_synthetic_fallback(allow_synthetic)
+        };
         Self {
             capture: LoopbackCapture::new(capture_config),
             render: RenderClient::with_config(render_config),
             processor: AudioProcessor::new(),
             command_queue: Some(command_queue),
+            device_manager,
             is_running: false,
         }
     }
@@ -94,6 +110,36 @@ impl AudioEngineCoordinator {
     /// Returns whether the audio engine is actively running.
     pub fn is_running(&self) -> bool {
         self.is_running
+    }
+
+    /// Reference to the device manager.
+    pub fn device_manager(&self) -> &AudioDeviceManager {
+        &self.device_manager
+    }
+
+    /// Mutable reference to the device manager.
+    pub fn device_manager_mut(&mut self) -> &mut AudioDeviceManager {
+        &mut self.device_manager
+    }
+
+    /// Enumerates active audio render endpoints on the system.
+    pub fn enumerate_devices(&self) -> EngineResult<Vec<AudioDeviceInfo>> {
+        self.device_manager.enumerate_devices()
+    }
+
+    /// Switches the audio render endpoint to the specified device ID, or default if None.
+    pub fn switch_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        self.render.switch_device(device_id)
+    }
+
+    /// Handles loss of active render endpoint by falling back to system default within 500ms.
+    pub fn handle_device_lost(&mut self) -> EngineResult<()> {
+        self.render.handle_device_lost()
+    }
+
+    /// Returns the currently active render device ID, if explicitly configured.
+    pub fn current_device_id(&self) -> Option<&str> {
+        self.render.device_id()
     }
 
     /// Drains any pending commands from the attached SPSC queue into the processor.

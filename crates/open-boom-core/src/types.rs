@@ -81,6 +81,25 @@ pub struct TelemetrySnapshot {
     pub dsp_active: bool,
 }
 
+/// Information about an enumerated audio output render endpoint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct AudioDeviceInfo {
+    pub id: String,
+    pub name: String,
+    pub is_default: bool,
+}
+
+impl AudioDeviceInfo {
+    pub fn new(id: impl Into<String>, name: impl Into<String>, is_default: bool) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            is_default,
+        }
+    }
+}
+
 /// Engine errors conforming to the tagged Result algebra.
 #[derive(Debug, Error)]
 pub enum EngineError {

@@ -1,7 +1,7 @@
 //! Desktop shell runtime and system tray lifecycle manager for OpenBoom.
 
 use open_boom_core::ring_buffer::SpscQueue;
-use open_boom_core::types::{AudioCommand, TelemetrySnapshot};
+use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot};
 use open_boom_wasapi::{AudioEngineCoordinator, LoopbackConfig, RenderConfig};
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -30,9 +30,11 @@ impl AppState {
     pub fn new() -> Self {
         let command_queue = SpscQueue::<AudioCommand, COMMAND_QUEUE_CAPACITY>::new();
         let dispatcher = UiDispatcher::new(command_queue.clone());
+        let mut render_config = RenderConfig::default();
+        render_config.allow_synthetic_fallback = true;
         let coordinator = Arc::new(Mutex::new(AudioEngineCoordinator::with_command_queue(
             LoopbackConfig::default(),
-            RenderConfig::default(),
+            render_config,
             command_queue.clone(),
         )));
         Self {
@@ -64,6 +66,24 @@ fn dispatch_command(cmd: AudioCommand, state: State<'_, AppState>) -> Result<(),
 #[tauri::command]
 fn get_telemetry(state: State<'_, AppState>) -> TelemetrySnapshot {
     state.get_telemetry_snapshot()
+}
+
+#[tauri::command]
+fn get_audio_devices(state: State<'_, AppState>) -> Result<Vec<AudioDeviceInfo>, String> {
+    let coord = state.coordinator.lock().map_err(|e| e.to_string())?;
+    coord.enumerate_devices().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
+    let mut coord = state.coordinator.lock().map_err(|e| e.to_string())?;
+    coord.switch_device(device_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
+    let mut coord = state.coordinator.lock().map_err(|e| e.to_string())?;
+    coord.handle_device_lost().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -155,6 +175,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             dispatch_command,
             get_telemetry,
+            get_audio_devices,
+            set_audio_device,
+            trigger_device_fallback,
             minimize_window,
             close_window,
         ])
@@ -297,6 +320,38 @@ mod tests {
         // 6. SetBypass
         let cmd6: AudioCommand = serde_json::from_str(r#"{"SetBypass": true}"#).unwrap();
         assert_eq!(cmd6, AudioCommand::SetBypass(true));
+    }
+
+    #[test]
+    fn test_device_info_serialization() {
+        let dev = AudioDeviceInfo::new("dev_123", "Headphones (Test)", true);
+        let serialized = serde_json::to_string(&dev).expect("serialize AudioDeviceInfo");
+        let deserialized: AudioDeviceInfo =
+            serde_json::from_str(&serialized).expect("deserialize AudioDeviceInfo");
+        assert_eq!(dev, deserialized);
+        assert_eq!(deserialized.id, "dev_123");
+        assert_eq!(deserialized.name, "Headphones (Test)");
+        assert!(deserialized.is_default);
+    }
+
+    #[test]
+    fn test_coordinator_device_switching_and_fallback() {
+        let state = AppState::new();
+        let mut coord = state.coordinator.lock().expect("lock coordinator");
+
+        // Enumerate devices (synthetic or hardware)
+        let devices = coord.enumerate_devices().expect("enumerate devices");
+        assert!(!devices.is_empty(), "Devices list must not be empty");
+
+        // Switch to explicit synthetic or specific device
+        let target_id = devices[0].id.clone();
+        let switch_res = coord.switch_device(Some(target_id));
+        assert!(switch_res.is_ok(), "Switch device must succeed");
+
+        // Handle device lost recovery
+        let fallback_res = coord.handle_device_lost();
+        assert!(fallback_res.is_ok(), "Fallback recovery must succeed");
+        assert_eq!(coord.current_device_id(), None, "Current device must reset to None (system default)");
     }
 }
 

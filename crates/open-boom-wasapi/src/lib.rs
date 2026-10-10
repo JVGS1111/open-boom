@@ -5,6 +5,7 @@
 //! and MMDeviceAPI session manager.
 
 pub mod coordinator;
+pub mod device;
 pub mod format_converter;
 pub mod loopback_capture;
 pub mod mmcss;
@@ -13,6 +14,7 @@ pub mod resampler;
 pub mod session_manager;
 
 pub use coordinator::{AudioEngineCoordinator, DEFAULT_COMMAND_QUEUE_CAPACITY};
+pub use device::AudioDeviceManager;
 pub use format_converter::{convert_samples_to_f32, SampleFormat};
 pub use loopback_capture::{LoopbackCapture, LoopbackConfig, LoopbackMode};
 pub use mmcss::{CallbackBudgetTracker, MmcssGuard};

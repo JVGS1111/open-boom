@@ -5,13 +5,25 @@ import { SoundstageDial } from "./components/SoundstageDial";
 import { EqualizerPreview } from "./components/EqualizerPreview";
 import { EffectsRackPreview, EffectModule } from "./components/EffectsRackPreview";
 import { StatusBar } from "./components/StatusBar";
+import { NotificationBanner } from "./components/NotificationBanner";
+import { AudioDeviceInfo } from "./components/DeviceSelector";
 
 export const App: React.FC = () => {
   // Master Engine State
   const [masterPower, setMasterPower] = useState(true);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
-  const [activeDevice] = useState("Headphones (Realtek Audio)");
+
+  // Audio Endpoints & Routing State
+  const [devices, setDevices] = useState<AudioDeviceInfo[]>([
+    {
+      id: "default",
+      name: "Headphones (Realtek Audio)",
+      is_default: true,
+    },
+  ]);
+  const [activeDeviceId, setActiveDeviceId] = useState("default");
+  const [notification, setNotification] = useState<string | null>(null);
 
   // 3D Spatializer State
   const [surroundEnabled, setSurroundEnabled] = useState(true);
@@ -72,6 +84,23 @@ export const App: React.FC = () => {
     }
   };
 
+  // Enumerate active audio render endpoints on mount
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        const enumerated = await invoke<AudioDeviceInfo[]>("get_audio_devices");
+        if (enumerated && enumerated.length > 0) {
+          setDevices(enumerated);
+          const defaultDev = enumerated.find((d) => d.is_default) || enumerated[0];
+          setActiveDeviceId(defaultDev.id);
+        }
+      } catch {
+        // Fallback for browser preview
+      }
+    };
+    fetchDevices();
+  }, []);
+
   const handleTogglePower = () => {
     const nextPower = !masterPower;
     setMasterPower(nextPower);
@@ -79,12 +108,15 @@ export const App: React.FC = () => {
   };
 
   const handleVolumeChange = (newVol: number) => {
-    setVolume(newVol);
-    if (isMuted && newVol > 0) {
+    const clampedSlider = Math.max(0, Math.min(1.5, newVol));
+    setVolume(clampedSlider);
+    if (isMuted && clampedSlider > 0) {
       setIsMuted(false);
     }
-    const linearVol = Math.min(1.0, newVol);
-    const boost = Math.max(1.0, newVol);
+    // Perceptual logarithmic taper:
+    // 0%–100% applies p^2 taper, 101%–150% applies clean linear preamp boost factor
+    const linearVol = clampedSlider <= 1.0 ? clampedSlider * clampedSlider : 1.0;
+    const boost = clampedSlider > 1.0 ? clampedSlider : 1.0;
     dispatchCommand({ SetMasterVolume: { volume: linearVol, boost } });
   };
 
@@ -92,6 +124,27 @@ export const App: React.FC = () => {
     const nextMute = !isMuted;
     setIsMuted(nextMute);
     dispatchCommand({ SetMute: nextMute });
+  };
+
+  const handleSelectDevice = async (deviceId: string) => {
+    setActiveDeviceId(deviceId);
+    try {
+      await invoke("set_audio_device", { deviceId });
+    } catch {
+      // If endpoint switch fails, fall back to default endpoint within 500ms and alert
+      setNotification(
+        "Audio endpoint initialization failed. Falling back to Windows default endpoint."
+      );
+      try {
+        await invoke("trigger_device_fallback");
+        const defaultDev = devices.find((d) => d.is_default) || devices[0];
+        if (defaultDev) {
+          setActiveDeviceId(defaultDev.id);
+        }
+      } catch {
+        // Fallback
+      }
+    }
   };
 
   const handleToggleSurround = () => {
@@ -174,7 +227,13 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full h-full min-w-[780px] min-h-[520px] bg-background flex flex-col justify-between overflow-hidden border border-border-subtle shadow-2xl">
+    <div className="w-full h-full min-w-[780px] min-h-[520px] bg-background flex flex-col justify-between overflow-hidden border border-border-subtle shadow-2xl relative">
+      {/* Fallback Notification Banner */}
+      <NotificationBanner
+        message={notification}
+        onDismiss={() => setNotification(null)}
+      />
+
       {/* 1. Custom Frameless Draggable Titlebar */}
       <Titlebar
         masterPower={masterPower}
@@ -183,7 +242,9 @@ export const App: React.FC = () => {
         onVolumeChange={handleVolumeChange}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
-        activeDevice={activeDevice}
+        devices={devices}
+        activeDeviceId={activeDeviceId}
+        onSelectDevice={handleSelectDevice}
       />
 
       {/* 2. Main Studio Content Area */}

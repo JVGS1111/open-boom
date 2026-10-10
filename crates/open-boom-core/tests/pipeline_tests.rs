@@ -186,3 +186,39 @@ fn test_empty_and_mismatched_buffers() {
     assert!(!output[0].is_nan());
     assert!(!output[1].is_nan());
 }
+
+#[test]
+fn test_volume_and_boost_perceptual_curve_and_snap() {
+    let mut proc = AudioProcessor::new();
+
+    // 1. Slider at 50% (0.5) -> p^2 perceptual curve = 0.25 (-12.04 dB)
+    let slider_50 = 0.5f32;
+    let vol_50 = slider_50 * slider_50;
+    proc.handle_command(AudioCommand::SetMasterVolume {
+        volume: vol_50,
+        boost: 1.0,
+    });
+    assert_eq!(proc.master_volume(), 0.25);
+    assert_eq!(proc.master_boost(), 1.0);
+    let db_50 = 20.0 * (0.25f32).log10();
+    assert!((db_50 - (-12.0412)).abs() < 0.01);
+
+    // 2. Slider at 135% (1.35) -> volume 1.0, boost factor 1.35 (+2.61 dB)
+    proc.handle_command(AudioCommand::SetMasterVolume {
+        volume: 1.0,
+        boost: 1.35,
+    });
+    assert_eq!(proc.master_volume(), 1.0);
+    assert_eq!(proc.master_boost(), 1.35);
+    let db_135 = 20.0 * (1.35f32).log10();
+    assert!((db_135 - 2.6067).abs() < 0.01);
+
+    // 3. Double-click snap to 100% (1.0 volume, 1.0 boost, 0.0 dB)
+    proc.handle_command(AudioCommand::SetMasterVolume {
+        volume: 1.0,
+        boost: 1.0,
+    });
+    assert_eq!(proc.master_volume(), 1.0);
+    assert_eq!(proc.master_boost(), 1.0);
+}
+

@@ -1,7 +1,8 @@
 import React from "react";
-import { Sliders, Volume2, VolumeX, Minus, X, Headphones } from "lucide-react";
+import { Sliders, Volume2, VolumeX, Minus, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MasterPowerSwitch } from "./MasterPowerSwitch";
+import { DeviceSelector, AudioDeviceInfo } from "./DeviceSelector";
 
 interface TitlebarProps {
   masterPower: boolean;
@@ -10,7 +11,9 @@ interface TitlebarProps {
   onVolumeChange: (vol: number) => void;
   isMuted: boolean;
   onToggleMute: () => void;
-  activeDevice: string;
+  devices: AudioDeviceInfo[];
+  activeDeviceId: string;
+  onSelectDevice: (deviceId: string) => void;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
@@ -20,7 +23,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   onVolumeChange,
   isMuted,
   onToggleMute,
-  activeDevice,
+  devices,
+  activeDeviceId,
+  onSelectDevice,
 }) => {
   const handleMinimize = async () => {
     try {
@@ -41,12 +46,19 @@ export const Titlebar: React.FC<TitlebarProps> = ({
     }
   };
 
-  // Convert linear volume (0.0 - 1.5) to dB display string
+  // Convert slider position (0.0 - 1.5) to perceptual dB display string:
+  // - 0.0 to 1.0 maps to p^2 logarithmic taper (-12.0 dB at 0.5, 0.0 dB at 1.0)
+  // - 1.01 to 1.5 maps to clean digital preamp gain (+2.6 dB at 1.35)
   const getDbString = () => {
-    if (isMuted || volume <= 0 || Number.isNaN(volume)) return "-inf dB";
-    if (Math.abs(volume - 1.0) < 0.01) return "0.0 dB";
+    if (isMuted || volume <= 0.001 || Number.isNaN(volume)) return "-inf dB";
+    if (Math.abs(volume - 1.0) < 0.005) return "0.0 dB";
+    if (volume < 1.0) {
+      const gain = volume * volume;
+      const db = 20 * Math.log10(gain);
+      return `${db.toFixed(1)} dB`;
+    }
     const db = 20 * Math.log10(volume);
-    return `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`;
+    return `+${db.toFixed(1)} dB`;
   };
 
   return (
@@ -86,27 +98,23 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 
         <div className="h-4 w-px bg-border-subtle" />
 
-        {/* Audio Output Endpoint Indicator */}
-        <div
-          className="flex items-center gap-2 bg-surface-card border border-border-subtle hover:border-border-default px-2.5 py-1 rounded-md text-xs text-text-secondary transition-colors cursor-pointer"
-          title="Active WASAPI Output Endpoint"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-status-online shadow-[0_0_6px_#22c55e]" />
-          <Headphones className="w-3.5 h-3.5 text-text-muted" />
-          <span className="max-w-[140px] truncate font-medium text-text-primary">
-            {activeDevice}
-          </span>
-        </div>
+        {/* Dynamic Output Endpoint Selector Popover (FR1, EXPERIENCE.md §4.3) */}
+        <DeviceSelector
+          devices={devices}
+          activeDeviceId={activeDeviceId}
+          onSelectDevice={onSelectDevice}
+        />
 
         <div className="h-4 w-px bg-border-subtle" />
 
-        {/* Master Volume & Boost Slider */}
+        {/* Master Volume & Boost Slider (0%–150%, UX-DR3) */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onToggleMute}
-            className="text-text-secondary hover:text-text-primary transition-colors p-1"
+            className="text-text-secondary hover:text-text-primary transition-colors p-1 cursor-pointer"
             title={isMuted ? "Unmute" : "Mute"}
+            aria-label={isMuted ? "Unmute audio" : "Mute audio"}
           >
             {isMuted ? (
               <VolumeX className="w-4 h-4 text-meter-red" />
@@ -122,10 +130,19 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             value={isMuted ? 0 : volume}
             onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
             onDoubleClick={() => onVolumeChange(1.0)} // Snap to 100% (0.0 dB)
-            title="Master Volume (0% - 150%). Double click to reset to 0 dB."
+            title="Master Volume (0% - 150%). Double click to reset to 0 dB (100%)."
+            aria-label="Master Volume and Boost"
+            aria-valuemin={0}
+            aria-valuemax={1.5}
+            aria-valuenow={isMuted ? 0 : volume}
+            aria-valuetext={getDbString()}
             className="w-24 h-1.5 bg-border-subtle rounded-lg appearance-none cursor-pointer accent-accent-cyan"
           />
-          <span className="text-[11px] font-mono text-text-secondary w-14 text-right">
+          <span
+            onDoubleClick={() => onVolumeChange(1.0)}
+            title="Double-click to reset to 0.0 dB"
+            className="text-[11px] font-mono text-text-secondary w-14 text-right cursor-pointer select-none hover:text-text-primary transition-colors"
+          >
             {getDbString()}
           </span>
         </div>

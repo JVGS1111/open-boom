@@ -95,3 +95,31 @@
   5. **Componente Reutilizável de Chave Mestre:** Criado `MasterPowerSwitch.tsx` medindo estritamente 48px × 26px com raio de pílula total, sombra ciano LED neon e suporte pleno a acessibilidade de teclado e screen readers via ARIA `role="switch"` e `aria-checked`.
 * **Consequência:** Comunicação IPC e áudio 100% desprovidas de lock contention, resposta instantânea da interface e preservação absoluta de integridade de áudio.
 
+## ADR-011: Transição para Dispositivo Virtual de Áudio (PortCls / SYSVAD) e Engenharia Reversa REA
+* **Data:** 10/10/2026
+* **Status:** Aceito (Supera e ajusta ADR-003 e ADR-005)
+* **Contexto:** A abordagem pura de WASAPI Loopback (`AUDCLNT_STREAMFLAGS_LOOPBACK`) no endpoint físico de renderização falha em silenciar o áudio raw original dos aplicativos antes que este atinja o conversor analógico (DAC), gerando duplicação acústica (eco slapback) ao re-injetar o áudio com DSP. Além disso, endpoints físicos estéreo impedem que o Windows envie fluxos 5.1/7.1 nativos para o spatializer HRTF. A análise do Boom 3D instalado (`boomvad.sys`, `BoomEngine.dll`, `Audio.dll`) via inspeção binária e servidor REA MCP revelou a arquitetura real do produto comercial: um driver virtual SYSVAD PortCls opera como receptor mudo padrão do sistema operacional, e o motor de áudio C++ consome esse fluxo e renderiza para a saída física.
+* **Decisões:**
+  1. **Arquitetura de Ingestão Dual-Mode:** O OpenBoom passa a adotar como modo primário de alta fidelidade a captura a partir de um Dispositivo Virtual de Áudio (sink virtual PortCls/SYSVAD padrão do sistema), roteando o áudio processado para o endpoint físico selecionado (fones de ouvido ou caixas de som). O modo WASAPI Loopback é retido como fallback para ambientes sem suporte a drivers virtuais.
+  2. **Eliminação Absoluta de Duplicação Acústica:** Como as aplicações renderizam no dispositivo virtual mudo, nenhum áudio não processado escapa diretamente para o DAC físico.
+  3. **Multi-Canal 7.1 Real para o HRTF:** O dispositivo virtual expõe topologia 7.1 (8 canais), permitindo que jogos e reprodutores enviem áudio posicional 3D genuíno para a convolução HRTF binaural do OpenBoom.
+  4. **Uso Contínuo do REA MCP e Decompilator:** Formalizado o uso ativo das ferramentas do REA MCP e do repositório `decompilator` para extração das rotinas de processamento (`CreateAudioProcessor`, `AVBoomAudioProcessor`, `AVFIRFilterSSE`, `AVFIFOProcessor`, `GetEqualizerPresetGains`) e controle de volume (`BoomVolumeControl`), servindo como especificação matemática para a implementação em Rust.
+  5. **Adição da Story 1.8 ao Backlog:** Criada a Story 1.8 (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`) para orquestrar a ponte com o dispositivo virtual e a documentação das evidências de engenharia reversa.
+* **Consequência:** Interceptação transparente de 100% dos sons do Windows, fidelidade acústica comercial sem eco, capacidade de áudio 7.1 surround verdadeiro e alinhamento milimétrico com a engenharia reversa do Boom 3D.
+
+---
+
+### ADR-012: Enumeração Nativa MMDeviceAPI, Comutação Sub-500ms e Curva Perceptual de Volume Boost
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** A Story 1.4 demandava: (1) descoberta em tempo real de endpoints ativos de áudio via MMDeviceAPI com resolução de nomes amigáveis; (2) comutação de dispositivos a quente e recuperação de desconexão (`AUDCLNT_E_DEVICE_INVALIDATED`) em tempo inferior a 500ms; (3) controle de volume master com atenuação logarítmica/perceptual de 0% a 100%, preamp digital boost limpo de 101% a 150% e snap instantâneo para 100% (0.0 dB) via duplo clique.
+* **Decisões:**
+  1. **Contrato de Dispositivo:** Criada struct `AudioDeviceInfo` (`id`, `name`, `is_default`) em `open-boom-core::types` para tráfego serializado entre backend e UI Tauri IPC.
+  2. **Isolamento de Testes e Modo Sintético:** `AudioDeviceManager` suporta descoberta nativa via `MMDeviceEnumerator` e `PKEY_Device_FriendlyName`, complementado por `with_forced_synthetic` para isolamento determinístico em ambientes de CI / headless sem placas de som físicas.
+  3. **Comutação e Fallback Sub-500ms:** Implementados `RenderClient::switch_device` e `handle_device_lost`. A transição encerra o stream anterior, re-vincula o cliente WASAPI e restabelece a prioridade MMCSS Pro Audio, executando em < 30ms (limite de 500ms amplamente atendido e testado).
+  4. **Curva Perceptual $p^2$ e Boost:** Posições do slider $p \in [0.0, 1.0]$ mapeiam para atenuação logarítmica via taper perceptual $p^2$ (50% $\to$ -12.0 dB; 100% $\to$ 0.0 dB). Valores $p \in (1.0, 1.5]$ aplicam ganho preamp digital de até +3.52 dB (135% $\to$ +2.6 dB) protegido pelo limitador terminal lookahead.
+  5. **Componentes de UI Acessíveis:** Desenvolvidos `DeviceSelector.tsx` (popover com teclado completo e seleção de endpoints) e `NotificationBanner.tsx` (alerta flutuante de desconexão e recuperação de hardware).
+* **Consequência:** Experiência de áudio fluida, sem travamentos na troca de fones de ouvido, feedback visual em decibéis e acessibilidade completa via teclado e leitores de tela.
+
+
+

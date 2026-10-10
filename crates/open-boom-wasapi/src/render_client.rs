@@ -180,4 +180,50 @@ impl RenderClient {
         self.is_rendering = false;
         Ok(())
     }
+
+    /// Dynamically switches audio rendering to a new endpoint within 500ms.
+    /// If the target endpoint fails to initialize, falls back to the default endpoint.
+    pub fn switch_device(&mut self, new_device_id: Option<String>) -> EngineResult<()> {
+        let prev_device_id = self.config.device_id.clone();
+        let was_rendering = self.is_rendering;
+
+        if was_rendering {
+            let _ = self.stop();
+        }
+
+        self.config.device_id = new_device_id.clone();
+
+        if was_rendering {
+            if let Err(err) = self.start() {
+                // If switching to a specific device failed and it was not already None (default),
+                // attempt graceful fallback to default endpoint
+                if new_device_id.is_some() {
+                    self.config.device_id = None;
+                    if let Ok(()) = self.start() {
+                        return Ok(());
+                    }
+                }
+                // Restore previous state if fallback also failed
+                self.config.device_id = prev_device_id;
+                let _ = self.start();
+                return Err(err);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handles device disconnection or invalidation (AUDCLNT_E_DEVICE_INVALIDATED),
+    /// recovering within 500ms by falling back to the Windows default console endpoint.
+    pub fn handle_device_lost(&mut self) -> EngineResult<()> {
+        let was_rendering = self.is_rendering;
+        if was_rendering {
+            let _ = self.stop();
+        }
+        self.config.device_id = None;
+        if was_rendering {
+            self.start()?;
+        }
+        Ok(())
+    }
 }

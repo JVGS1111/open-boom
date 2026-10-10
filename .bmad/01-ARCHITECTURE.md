@@ -13,8 +13,10 @@
 |                        OpenBoom Audio Engine Core                       |
 |                                                                         |
 |  [ Ingestão de Áudio ]                                                  |
-|     ├─ WASAPI Loopback Capture (Dispositivo Padrão / Virtual Cable)     |
-|     └─ IAudioSessionManager2 (Mixer por aplicação individual)           |
+|     ├─ Modo Primário: Virtual Audio Device Sink (PortCls / SYSVAD / boomvad) |
+|     │    └─ Captura transparente multi-canal (até 7.1) sem duplicação acústica |
+|     ├─ Modo Fallback: WASAPI Process-Loopback Capture (Modo Driverless) |
+|     └─ IAudioSessionManager2 (Mixer por aplicação individual no Virtual Sink) |
 |                                                                         |
 |  [ Pipeline de DSP em Tempo Real (Buffers PCM Float32) ]               |
 |     ├─ 1. Pré-Amp & Gain Staging                                        |
