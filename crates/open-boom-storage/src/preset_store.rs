@@ -7,7 +7,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Top-level OpenBoom user settings and preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub master_power: bool,
     pub master_volume: f32,
@@ -21,6 +22,8 @@ pub struct AppConfig {
     pub graphic_eq_gains_db: [f32; GRAPHIC_EQ_BANDS],
     pub surround_enabled: bool,
     pub surround_intensity: f32,
+    pub bypass_active: bool,
+    pub launch_on_startup: bool,
 }
 
 impl Default for AppConfig {
@@ -36,46 +39,109 @@ impl Default for AppConfig {
             window_x: None,
             window_y: None,
             graphic_eq_gains_db: [0.0; GRAPHIC_EQ_BANDS],
-            surround_enabled: false,
-            surround_intensity: 0.7,
+            surround_enabled: true,
+            surround_intensity: 0.72,
+            bypass_active: false,
+            launch_on_startup: false,
         }
     }
 }
 
-/// Storage coordinator managing atomic file operations.
+/// Storage coordinator managing atomic file operations in `%APPDATA%\OpenBoom\`.
+#[derive(Debug, Clone)]
 pub struct PresetStore {
     base_dir: PathBuf,
 }
 
+impl Default for PresetStore {
+    fn default() -> Self {
+        Self::new(Self::default_dir())
+    }
+}
+
 impl PresetStore {
+    /// Resolves the default OpenBoom storage directory: `%APPDATA%\OpenBoom\`.
+    pub fn default_dir() -> PathBuf {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            PathBuf::from(appdata).join("OpenBoom")
+        } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            PathBuf::from(userprofile)
+                .join("AppData")
+                .join("Roaming")
+                .join("OpenBoom")
+        } else {
+            std::env::temp_dir().join("OpenBoom")
+        }
+    }
+
+    /// Initializes a `PresetStore` targeting the specified directory.
     pub fn new<P: AsRef<Path>>(base_dir: P) -> Self {
         Self {
             base_dir: base_dir.as_ref().to_path_buf(),
         }
     }
 
-    /// Atomically persists configuration using a unique .tmp file and atomic rename.
+    /// Target directory where configurations and presets are stored.
+    pub fn base_dir(&self) -> &Path {
+        &self.base_dir
+    }
+
+    /// Target path for main `config.json`.
+    pub fn config_path(&self) -> PathBuf {
+        self.base_dir.join("config.json")
+    }
+
+    /// Atomically persists configuration using a unique `.tmp` file and atomic replacement.
     pub fn save_config(&self, config: &AppConfig) -> io::Result<()> {
         fs::create_dir_all(&self.base_dir)?;
-        let target_path = self.base_dir.join("config.json");
+        let target_path = self.config_path();
         let tmp_path = self.base_dir.join(format!("config.{}.tmp", std::process::id()));
 
         let json = serde_json::to_string_pretty(config)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-        fs::write(&tmp_path, json)?;
-        fs::rename(&tmp_path, &target_path)?;
+        // Write to staging file first
+        if let Err(e) = fs::write(&tmp_path, json) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+
+        // Atomically replace target file using rename (MoveFileExW MOVEFILE_REPLACE_EXISTING on Windows)
+        if let Err(e) = fs::rename(&tmp_path, &target_path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+
         Ok(())
     }
 
-    /// Loads configuration from disk, returning Default if missing.
+    /// Loads configuration from disk. Recovers defaults gracefully if file is missing or invalid JSON.
     pub fn load_config(&self) -> io::Result<AppConfig> {
-        let target_path = self.base_dir.join("config.json");
+        let target_path = self.config_path();
         if !target_path.exists() {
             return Ok(AppConfig::default());
         }
 
-        let content = fs::read_to_string(&target_path)?;
-        serde_json::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        let content = match fs::read_to_string(&target_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to read OpenBoom config at {:?}: {}. Using defaults.",
+                    target_path, e
+                );
+                return Ok(AppConfig::default());
+            }
+        };
+
+        match serde_json::from_str::<AppConfig>(&content) {
+            Ok(cfg) => Ok(cfg),
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to parse OpenBoom config.json ({:?}): {}. Falling back to default configuration.",
+                    target_path, e
+                );
+                Ok(AppConfig::default())
+            }
+        }
     }
 }

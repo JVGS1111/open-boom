@@ -1,5 +1,5 @@
 import React from "react";
-import { Sliders, Volume2, VolumeX, Minus, X } from "lucide-react";
+import { Sliders, Volume2, VolumeX, Minus, X, Settings } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MasterPowerSwitch } from "./MasterPowerSwitch";
 import { DeviceSelector, AudioDeviceInfo } from "./DeviceSelector";
@@ -14,6 +14,7 @@ interface TitlebarProps {
   devices: AudioDeviceInfo[];
   activeDeviceId: string;
   onSelectDevice: (deviceId: string) => void;
+  onOpenSettings?: () => void;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
@@ -26,6 +27,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   devices,
   activeDeviceId,
   onSelectDevice,
+  onOpenSettings,
 }) => {
   const handleMinimize = async () => {
     try {
@@ -152,6 +154,15 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       <div className="flex items-center gap-1">
         <button
           type="button"
+          onClick={onOpenSettings}
+          className="w-8 h-8 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-card transition-colors cursor-pointer mr-0.5"
+          title="Settings & Preferences"
+          aria-label="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
           onClick={handleMinimize}
           className="w-8 h-8 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-card transition-colors cursor-pointer"
           title="Minimize"
@@ -170,3 +181,4 @@ export const Titlebar: React.FC<TitlebarProps> = ({
     </header>
   );
 };
+

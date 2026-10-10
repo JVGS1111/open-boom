@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 10/10/2026 - 19:15
+* **Data/Hora:** 10/10/2026 - 19:42
 * **Sprint Ativa:** Sprint 1: Fundação do Projeto & UI Shell (Marco 1)
-* **Tarefa Atual:** Story 1.6 (`1-6-phase-continuous-instant-a-b-bypass`) CONCLUÍDA com status `done` (todos os 70 testes do workspace passando, zero warnings, frontend compilando).
+* **Tarefa Atual:** Story 1.7 (`1-7-application-preferences-window-geometry-system-startup-persi`) CONCLUÍDA com status `done` (todos os 78 testes do workspace passando, zero warnings, frontend compilando).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -74,12 +74,24 @@
     - `src-ui/src/App.tsx`: Registrado listener global de atalho de teclado `Ctrl + Shift + B` e despacho via Tauri IPC.
     - `src-ui/src/components/StatusBar.tsx`: Renderização de `Hardware Passthrough (Bypassed)` em estilo ardósia suave (`text-text-muted`) quando bypass ativo, badge de limiter refletindo bypass, e tooltip do botão atualizado com atalho.
     - Build do frontend React/Vite concluído sem erros em 1.73s.
+17. **Implementação e Verificação Completa da Story 1.7 (`1-7-application-preferences-window-geometry-system-startup-persi`):**
+    - `crates/open-boom-storage/src/preset_store.rs`: `AppConfig` com `#[serde(default)]` e suporte a todos os parâmetros de sessão, persistência atômica via staging `config.<pid>.tmp` e `MoveFileExW` / `fs::rename` atômico em `%APPDATA%\OpenBoom\config.json`, resolução robusta de diretório e recuperação com fallback gracioso para `AppConfig::default()` na presença de JSON ausente ou corrompido (`FR29`, `AD-10`).
+    - `crates/open-boom-storage/src/startup.rs`: `StartupManager` gerenciando chaves de inicialização em `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` sem requerer privilégios administrativos (UAC) e com modo mock para testes e isolamento headless.
+    - `crates/open-boom-storage/tests/storage_tests.rs`: Suíte de 6 testes unitários cobrindo persistência atômica, recuperação contra corrupção, campos parciais, resolução de diretório e ciclo de vida de registro de inicialização.
+    - `src-tauri/src/lib.rs`: Exposição dos comandos IPC `load_app_config`, `save_app_config`, `get_launch_on_startup` e `set_launch_on_startup`, restauração de coordenadas de janela no setup, e menu nativo de bandeja do sistema estendido (`FR28`) com Master Power, Mudo, Presets ("Harman Acoustic", "Bass Boost", "Vocal Clarity") e Sair, com despacho via dispatcher e sincronização de eventos com a UI.
+    - `src-ui/src/components/SettingsModal.tsx`: Modal Dark Fluent com toggle de inicialização com o Windows, badge de persistência atômica NTFS e dismiss por tecla Escape (UX-DR11).
+    - `src-ui/src/components/Titlebar.tsx`: Botão de Settings (ícone engrenagem) abrindo modal de preferências.
+    - `src-ui/src/App.tsx`: Restauração automática de preferências e volume no carregamento, auto-save com debounce de 250ms e captura de posição da janela, e listeners para eventos da bandeja do sistema.
+    - Suíte de 78 testes passando no workspace com zero warnings e build Vite do frontend concluído em 1.68s.
+    - Registro de ADR-015 no `.bmad/04-DECISION-LOG.md`.
+    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.7 (`status: done`).
 
 ## O que está em andamento agora
-* Story 1.6 concluída e verificada com status `done`.
+* Story 1.7 concluída e verificada com status `done`.
 
 ## Próximo Passo Imediato
-* Implementar a **Story 1.7** (`1-7-application-preferences-window-geometry-system-startup-persi`: Persistência de Preferências, Geometria e Inicialização com o Sistema).
+* Implementar a **Story 1.8** (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`: Engenharia Reversa e Ingestão via Virtual Audio Device / `boomvad.sys`).
+
 
 ## Diretrizes Permanentes de Ferramentas
 * **Decompilator & REA MCP:** O agente tem acesso e DEVE consultar o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e utilizar o MCP global `rea` sempre que precisar extrair detalhes internos, algoritmos de DSP, estruturas de drivers ou bibliotecas do Boom 3D original.

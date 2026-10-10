@@ -1,14 +1,15 @@
 //! Desktop shell runtime and system tray lifecycle manager for OpenBoom.
 
 use open_boom_core::ring_buffer::SpscQueue;
-use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot};
+use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot, GRAPHIC_EQ_BANDS};
+use open_boom_storage::{AppConfig, PresetStore, StartupManager};
 use open_boom_wasapi::{AudioEngineCoordinator, LoopbackConfig, RenderConfig};
 use std::sync::{Arc, Mutex};
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, State, WindowEvent,
+    AppHandle, Emitter, Manager, State, WindowEvent,
 };
 
 pub mod dispatcher;
@@ -18,6 +19,8 @@ pub struct AppState {
     pub dispatcher: UiDispatcher,
     pub command_queue: Arc<SpscQueue<AudioCommand, COMMAND_QUEUE_CAPACITY>>,
     pub coordinator: Arc<Mutex<AudioEngineCoordinator>>,
+    pub store: PresetStore,
+    pub startup: StartupManager,
 }
 
 impl Default for AppState {
@@ -39,11 +42,22 @@ impl AppState {
             render_config,
             command_queue.clone(),
         )));
+        let store = PresetStore::default();
+        let startup = StartupManager::new();
         Self {
             dispatcher,
             command_queue,
             coordinator,
+            store,
+            startup,
         }
+    }
+
+    pub fn with_store_and_startup(store: PresetStore, startup: StartupManager) -> Self {
+        let mut state = Self::new();
+        state.store = store;
+        state.startup = startup;
+        state
     }
 
     pub fn get_telemetry_snapshot(&self) -> TelemetrySnapshot {
@@ -104,6 +118,30 @@ fn close_window(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn load_app_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
+    state.store.load_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_app_config(config: AppConfig, state: State<'_, AppState>) -> Result<(), String> {
+    state.store.save_config(&config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_launch_on_startup(state: State<'_, AppState>) -> Result<bool, String> {
+    state.startup.is_enabled().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_launch_on_startup(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    if enabled {
+        state.startup.enable_current_exe().map_err(|e| e.to_string())
+    } else {
+        state.startup.disable().map_err(|e| e.to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new();
@@ -111,6 +149,14 @@ pub fn run() {
     tauri::Builder::default()
         .manage(state)
         .setup(|app| {
+            // Restore window geometry if previously saved
+            let initial_config = app.state::<AppState>().store.load_config().unwrap_or_default();
+            if let Some(window) = app.get_webview_window("main") {
+                if let (Some(x), Some(y)) = (initial_config.window_x, initial_config.window_y) {
+                    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                }
+            }
+
             // Load tray icon
             let icon = app
                 .default_window_icon()
@@ -123,10 +169,32 @@ pub fn run() {
                     Image::new(&DEFAULT_ICON, 2, 2)
                 });
 
-            // Create tray context menu allowing the user to restore or quit
+            // Enhanced native system tray context menu (FR28)
             let open_item = MenuItem::with_id(app, "open", "Open OpenBoom", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit OpenBoom", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+            let power_item = MenuItem::with_id(app, "toggle_power", "Master Power", true, None::<&str>)?;
+            let mute_item = MenuItem::with_id(app, "toggle_mute", "Mute", true, None::<&str>)?;
+
+            let preset_acoustic = MenuItem::with_id(app, "preset_acoustic", "Harman Acoustic", true, None::<&str>)?;
+            let preset_bass = MenuItem::with_id(app, "preset_bass", "Bass Boost", true, None::<&str>)?;
+            let preset_vocal = MenuItem::with_id(app, "preset_vocal", "Vocal Clarity", true, None::<&str>)?;
+            let presets_menu = Submenu::with_items(app, "Presets", true, &[&preset_acoustic, &preset_bass, &preset_vocal])?;
+
+            let separator1 = PredefinedMenuItem::separator(app)?;
+            let separator2 = PredefinedMenuItem::separator(app)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Exit OpenBoom", true, None::<&str>)?;
+
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &open_item,
+                    &separator1,
+                    &power_item,
+                    &mute_item,
+                    &presets_menu,
+                    &separator2,
+                    &quit_item,
+                ],
+            )?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(icon)
@@ -141,6 +209,62 @@ pub fn run() {
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
                             }
+                        }
+                        "toggle_power" => {
+                            let state = app.state::<AppState>();
+                            let current_power = if let Ok(mut coord) = state.coordinator.lock() {
+                                coord.drain_commands();
+                                coord.processor().master_power()
+                            } else {
+                                true
+                            };
+                            let next_power = !current_power;
+                            let _ = state.dispatcher.send(AudioCommand::SetMasterPower(next_power));
+                            let _ = app.emit("tray-power-toggled", next_power);
+                        }
+                        "toggle_mute" => {
+                            let state = app.state::<AppState>();
+                            let current_mute = if let Ok(mut coord) = state.coordinator.lock() {
+                                coord.drain_commands();
+                                coord.processor().is_muted()
+                            } else {
+                                false
+                            };
+                            let next_mute = !current_mute;
+                            let _ = state.dispatcher.send(AudioCommand::SetMute(next_mute));
+                            let _ = app.emit("tray-mute-toggled", next_mute);
+                        }
+                        "preset_acoustic" => {
+                            let state = app.state::<AppState>();
+                            let _ = state.dispatcher.send(AudioCommand::LoadGraphicEqSnapshot {
+                                gains_db: [0.0; GRAPHIC_EQ_BANDS],
+                                preamp_offset_db: 0.0,
+                            });
+                            let _ = app.emit("tray-preset-selected", "Harman Acoustic");
+                        }
+                        "preset_bass" => {
+                            let state = app.state::<AppState>();
+                            let mut gains = [0.0; GRAPHIC_EQ_BANDS];
+                            for (i, gain) in gains.iter_mut().enumerate().take(6) {
+                                *gain = 4.0 - (i as f32 * 0.5);
+                            }
+                            let _ = state.dispatcher.send(AudioCommand::LoadGraphicEqSnapshot {
+                                gains_db: gains,
+                                preamp_offset_db: -2.0,
+                            });
+                            let _ = app.emit("tray-preset-selected", "Bass Boost");
+                        }
+                        "preset_vocal" => {
+                            let state = app.state::<AppState>();
+                            let mut gains = [0.0; GRAPHIC_EQ_BANDS];
+                            for gain in gains.iter_mut().take(20).skip(12) {
+                                *gain = 2.5;
+                            }
+                            let _ = state.dispatcher.send(AudioCommand::LoadGraphicEqSnapshot {
+                                gains_db: gains,
+                                preamp_offset_db: -1.0,
+                            });
+                            let _ = app.emit("tray-preset-selected", "Vocal Clarity");
                         }
                         "quit" => {
                             app.exit(0);
@@ -182,10 +306,15 @@ pub fn run() {
             trigger_device_fallback,
             minimize_window,
             close_window,
+            load_app_config,
+            save_app_config,
+            get_launch_on_startup,
+            set_launch_on_startup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -358,5 +487,38 @@ mod tests {
         assert!(fallback_res.is_ok(), "Fallback recovery must succeed");
         assert_eq!(coord.current_device_id(), None, "Current device must reset to None (system default)");
     }
+
+    #[test]
+    fn test_app_state_storage_and_startup() {
+        let temp_dir = std::env::temp_dir().join(format!("tauri_state_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let store = PresetStore::new(&temp_dir);
+        let startup = StartupManager::mock();
+        let state = AppState::with_store_and_startup(store, startup);
+
+        // Verify config load & save
+        let initial_cfg = state.store.load_config().expect("load config");
+        assert_eq!(initial_cfg, AppConfig::default());
+
+        let mut mod_cfg = initial_cfg;
+        mod_cfg.master_volume = 1.2;
+        mod_cfg.active_output_device = Some("dev_test".to_string());
+        mod_cfg.launch_on_startup = true;
+        state.store.save_config(&mod_cfg).expect("save config");
+
+        let reloaded = state.store.load_config().expect("reload config");
+        assert_eq!(reloaded, mod_cfg);
+
+        // Verify startup manager
+        assert!(!state.startup.is_enabled().expect("initially disabled"));
+        state.startup.enable("test_exe.exe").expect("enable");
+        assert!(state.startup.is_enabled().expect("enabled"));
+        state.startup.disable().expect("disable");
+        assert!(!state.startup.is_enabled().expect("disabled"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }
+
 

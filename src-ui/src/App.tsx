@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Titlebar } from "./components/Titlebar";
 import { SoundstageDial } from "./components/SoundstageDial";
 import { EqualizerPreview } from "./components/EqualizerPreview";
@@ -7,6 +9,7 @@ import { EffectsRackPreview, EffectModule } from "./components/EffectsRackPrevie
 import { StatusBar } from "./components/StatusBar";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
+import { SettingsModal } from "./components/SettingsModal";
 
 export const App: React.FC = () => {
   // Master Engine State
@@ -30,7 +33,7 @@ export const App: React.FC = () => {
   const [surroundIntensity, setSurroundIntensity] = useState(0.72);
 
   // Equalizer State (31 Bands)
-  const [activeEqPreset] = useState("Harman Acoustic");
+  const [activeEqPreset, setActiveEqPreset] = useState("Harman Acoustic");
   const [eqGains] = useState<number[]>([
     2.5, 3.0, 2.0, 1.5, 0.5, 0.0, -0.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0,
     1.5, 1.0, 0.5, 0.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 2.0, 1.5, 1.0, 0.5,
@@ -79,6 +82,13 @@ export const App: React.FC = () => {
   const [sampleRate, setSampleRate] = useState(48000);
   const [bitDepth, setBitDepth] = useState(32);
 
+  // Settings Modal & Windows Startup State (Story 1.7)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [launchOnStartup, setLaunchOnStartup] = useState(false);
+  const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+
   // Helper to dispatch IPC command safely to Tauri
   const dispatchCommand = async (commandObj: unknown) => {
     try {
@@ -88,22 +98,206 @@ export const App: React.FC = () => {
     }
   };
 
-  // Enumerate active audio render endpoints on mount
+  // 1. Restore configuration and Windows startup settings on mount (FR29)
+  useEffect(() => {
+    const restoreConfig = async () => {
+      try {
+        const config = await invoke<{
+          master_power: boolean;
+          master_volume: number;
+          master_boost: number;
+          is_muted: boolean;
+          active_output_device: string | null;
+          window_width: number;
+          window_height: number;
+          window_x: number | null;
+          window_y: number | null;
+          graphic_eq_gains_db: number[];
+          surround_enabled: boolean;
+          surround_intensity: number;
+          bypass_active: boolean;
+          launch_on_startup: boolean;
+        }>("load_app_config");
+
+        if (config) {
+          setMasterPower(config.master_power);
+          dispatchCommand({ SetMasterPower: config.master_power });
+
+          // Reconstruct slider from stored volume and boost
+          const restoredVol =
+            config.master_boost > 1.0
+              ? config.master_boost
+              : Math.sqrt(config.master_volume);
+          setVolume(restoredVol);
+          dispatchCommand({
+            SetMasterVolume: {
+              volume: config.master_volume,
+              boost: config.master_boost,
+            },
+          });
+
+          setIsMuted(config.is_muted);
+          dispatchCommand({ SetMute: config.is_muted });
+
+          if (config.active_output_device) {
+            setActiveDeviceId(config.active_output_device);
+            try {
+              await invoke("set_audio_device", {
+                deviceId: config.active_output_device,
+              });
+            } catch {
+              // Graceful fallback
+            }
+          }
+
+          setSurroundEnabled(config.surround_enabled);
+          setSurroundIntensity(config.surround_intensity);
+          dispatchCommand({
+            SetSurround3D: {
+              enabled: config.surround_enabled,
+              intensity: config.surround_intensity,
+            },
+          });
+
+          setBypassActive(config.bypass_active);
+          dispatchCommand({ SetBypass: config.bypass_active });
+
+          setLaunchOnStartup(config.launch_on_startup);
+        }
+      } catch {
+        // Browser mode fallback
+      }
+
+      // Check current Windows registry status
+      try {
+        const startupActive = await invoke<boolean>("get_launch_on_startup");
+        setLaunchOnStartup(startupActive);
+      } catch {
+        // Browser mode fallback
+      }
+
+      setHasLoadedConfig(true);
+    };
+
+    restoreConfig();
+  }, []);
+
+  // 2. Enumerate active audio render endpoints on mount
   useEffect(() => {
     const fetchDevices = async () => {
       try {
         const enumerated = await invoke<AudioDeviceInfo[]>("get_audio_devices");
         if (enumerated && enumerated.length > 0) {
           setDevices(enumerated);
-          const defaultDev = enumerated.find((d) => d.is_default) || enumerated[0];
-          setActiveDeviceId(defaultDev.id);
+          // If activeDeviceId is default, pick default device
+          if (activeDeviceId === "default") {
+            const defaultDev = enumerated.find((d) => d.is_default) || enumerated[0];
+            setActiveDeviceId(defaultDev.id);
+          }
         }
       } catch {
         // Fallback for browser preview
       }
     };
     fetchDevices();
+  }, [activeDeviceId]);
+
+  // 3. Listen to tray context menu actions from Tauri backend (FR28)
+  useEffect(() => {
+    let unlistenPower: (() => void) | undefined;
+    let unlistenMute: (() => void) | undefined;
+    let unlistenPreset: (() => void) | undefined;
+
+    const setupListeners = async () => {
+      try {
+        unlistenPower = await listen<boolean>("tray-power-toggled", (event) => {
+          setMasterPower(event.payload);
+        });
+        unlistenMute = await listen<boolean>("tray-mute-toggled", (event) => {
+          setIsMuted(event.payload);
+        });
+        unlistenPreset = await listen<string>("tray-preset-selected", (event) => {
+          setActiveEqPreset(event.payload);
+          setNotification(`Preset activated: ${event.payload}`);
+        });
+      } catch {
+        // Browser mode fallback
+      }
+    };
+
+    setupListeners();
+
+    return () => {
+      if (unlistenPower) unlistenPower();
+      if (unlistenMute) unlistenMute();
+      if (unlistenPreset) unlistenPreset();
+    };
   }, []);
+
+  // 4. Auto-save configuration to atomic storage on user settings change (FR29, AD-10)
+  useEffect(() => {
+    if (!hasLoadedConfig) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      let windowX: number | null = null;
+      let windowY: number | null = null;
+      try {
+        const win = getCurrentWindow();
+        const pos = await win.outerPosition();
+        windowX = pos.x;
+        windowY = pos.y;
+      } catch {
+        // Browser mode fallback
+      }
+
+      const linearVol = volume <= 1.0 ? volume * volume : 1.0;
+      const boost = volume > 1.0 ? volume : 1.0;
+
+      const configPayload = {
+        master_power: masterPower,
+        master_volume: linearVol,
+        master_boost: boost,
+        is_muted: isMuted,
+        active_output_device: activeDeviceId === "default" ? null : activeDeviceId,
+        window_width: 840,
+        window_height: 560,
+        window_x: windowX,
+        window_y: windowY,
+        graphic_eq_gains_db: eqGains,
+        surround_enabled: surroundEnabled,
+        surround_intensity: surroundIntensity,
+        bypass_active: bypassActive,
+        launch_on_startup: launchOnStartup,
+      };
+
+      try {
+        await invoke("save_app_config", { config: configPayload });
+      } catch (err) {
+        console.error("Failed to persist app config:", err);
+      }
+    }, 250);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [
+    hasLoadedConfig,
+    masterPower,
+    volume,
+    isMuted,
+    activeDeviceId,
+    surroundEnabled,
+    surroundIntensity,
+    bypassActive,
+    launchOnStartup,
+    eqGains,
+  ]);
 
   const handleTogglePower = () => {
     const nextPower = !masterPower;
@@ -117,8 +311,6 @@ export const App: React.FC = () => {
     if (isMuted && clampedSlider > 0) {
       setIsMuted(false);
     }
-    // Perceptual logarithmic taper:
-    // 0%–100% applies p^2 taper, 101%–150% applies clean linear preamp boost factor
     const linearVol = clampedSlider <= 1.0 ? clampedSlider * clampedSlider : 1.0;
     const boost = clampedSlider > 1.0 ? clampedSlider : 1.0;
     dispatchCommand({ SetMasterVolume: { volume: linearVol, boost } });
@@ -135,7 +327,6 @@ export const App: React.FC = () => {
     try {
       await invoke("set_audio_device", { deviceId });
     } catch {
-      // If endpoint switch fails, fall back to default endpoint within 500ms and alert
       setNotification(
         "Audio endpoint initialization failed. Falling back to Windows default endpoint."
       );
@@ -210,6 +401,17 @@ export const App: React.FC = () => {
     dispatchCommand({ SetBypass: nextBypass });
   };
 
+  const handleToggleStartup = async () => {
+    const nextVal = !launchOnStartup;
+    setLaunchOnStartup(nextVal);
+    try {
+      await invoke("set_launch_on_startup", { enabled: nextVal });
+    } catch (err) {
+      console.error("Failed to set startup status:", err);
+      setNotification(`Failed to configure Windows startup: ${String(err)}`);
+    }
+  };
+
   // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -269,6 +471,14 @@ export const App: React.FC = () => {
 
   return (
     <div className="w-full h-full min-w-[780px] min-h-[520px] bg-background flex flex-col justify-between overflow-hidden border border-border-subtle shadow-2xl relative">
+      {/* Settings Modal (Story 1.7, FR29) */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        launchOnStartup={launchOnStartup}
+        onToggleStartup={handleToggleStartup}
+      />
+
       {/* Fallback Notification Banner */}
       <NotificationBanner
         message={notification}
@@ -286,6 +496,7 @@ export const App: React.FC = () => {
         devices={devices}
         activeDeviceId={activeDeviceId}
         onSelectDevice={handleSelectDevice}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* 2. Main Studio Content Area */}
