@@ -10,6 +10,7 @@ import { StatusBar } from "./components/StatusBar";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
 import { SettingsModal } from "./components/SettingsModal";
+import { SoundstageConfiguratorModal } from "./components/SoundstageConfiguratorModal";
 
 export const App: React.FC = () => {
   // Master Engine State
@@ -89,6 +90,18 @@ export const App: React.FC = () => {
   const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Soundstage Configurator Modal State (Story 2.3 & 2.4, FR7)
+  const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false);
+  const [speakerMuted, setSpeakerMuted] = useState<boolean[]>([
+    false, false, false, false, false, false, false, false,
+  ]);
+  const [speakerGainsDb, setSpeakerGainsDb] = useState<number[]>([
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+  ]);
+  const [speakerAzimuthsDeg, setSpeakerAzimuthsDeg] = useState<number[]>([
+    -30, 30, 0, 180, -135, 135, -90, 90,
+  ]);
+
 
   // Helper to dispatch IPC command safely to Tauri
   const dispatchCommand = async (commandObj: unknown) => {
@@ -116,6 +129,9 @@ export const App: React.FC = () => {
           graphic_eq_gains_db: number[];
           surround_enabled: boolean;
           surround_intensity: number;
+          speaker_muted?: boolean[];
+          speaker_gains_db?: number[];
+          speaker_azimuths_deg?: number[];
           bypass_active: boolean;
           launch_on_startup: boolean;
         }>("load_app_config");
@@ -159,6 +175,27 @@ export const App: React.FC = () => {
               intensity: config.surround_intensity,
             },
           });
+
+          if (config.speaker_muted && config.speaker_muted.length === 8) {
+            setSpeakerMuted(config.speaker_muted);
+            config.speaker_muted.forEach((m, idx) => {
+              if (m) dispatchCommand({ SetSpeakerMute: { channel: idx, muted: true } });
+            });
+          }
+
+          if (config.speaker_gains_db && config.speaker_gains_db.length === 8) {
+            setSpeakerGainsDb(config.speaker_gains_db);
+            config.speaker_gains_db.forEach((g, idx) => {
+              if (g !== 0.0) dispatchCommand({ SetSpeakerGain: { channel: idx, gain_db: g } });
+            });
+          }
+
+          if (config.speaker_azimuths_deg && config.speaker_azimuths_deg.length === 8) {
+            setSpeakerAzimuthsDeg(config.speaker_azimuths_deg);
+            config.speaker_azimuths_deg.forEach((az, idx) => {
+              dispatchCommand({ SetSpeakerAzimuth: { channel: idx, azimuth_deg: az } });
+            });
+          }
 
           setBypassActive(config.bypass_active);
           dispatchCommand({ SetBypass: config.bypass_active });
@@ -271,6 +308,9 @@ export const App: React.FC = () => {
         graphic_eq_gains_db: eqGains,
         surround_enabled: surroundEnabled,
         surround_intensity: surroundIntensity,
+        speaker_muted: speakerMuted,
+        speaker_gains_db: speakerGainsDb,
+        speaker_azimuths_deg: speakerAzimuthsDeg,
         bypass_active: bypassActive,
         launch_on_startup: launchOnStartup,
       };
@@ -295,6 +335,9 @@ export const App: React.FC = () => {
     activeDeviceId,
     surroundEnabled,
     surroundIntensity,
+    speakerMuted,
+    speakerGainsDb,
+    speakerAzimuthsDeg,
     bypassActive,
     launchOnStartup,
     eqGains,
@@ -413,6 +456,57 @@ export const App: React.FC = () => {
     }
   };
 
+  // Virtual Soundstage Speaker Handlers (Story 2.3 & 2.4, FR7)
+  const handleToggleSpeakerMute = (channelIndex: number) => {
+    setSpeakerMuted((prev) => {
+      const next = [...prev];
+      next[channelIndex] = !next[channelIndex];
+      dispatchCommand({
+        SetSpeakerMute: { channel: channelIndex, muted: next[channelIndex] },
+      });
+      return next;
+    });
+  };
+
+  const handleSpeakerGainChange = (channelIndex: number, gainDb: number) => {
+    setSpeakerGainsDb((prev) => {
+      const next = [...prev];
+      next[channelIndex] = gainDb;
+      dispatchCommand({
+        SetSpeakerGain: { channel: channelIndex, gain_db: gainDb },
+      });
+      return next;
+    });
+  };
+
+  const handleSpeakerAzimuthChange = (channelIndex: number, azimuthDeg: number) => {
+    setSpeakerAzimuthsDeg((prev) => {
+      const next = [...prev];
+      next[channelIndex] = azimuthDeg;
+      dispatchCommand({
+        SetSpeakerAzimuth: { channel: channelIndex, azimuth_deg: azimuthDeg },
+      });
+      return next;
+    });
+  };
+
+  const handleResetSpeakerPositions = () => {
+    const defaultAzimuths = [-30, 30, 0, 180, -135, 135, -90, 90];
+    setSpeakerAzimuthsDeg(defaultAzimuths);
+    dispatchCommand("ResetSpeakerPositions");
+  };
+
+  const handleResetAllSpeakers = () => {
+    const unmuted = [false, false, false, false, false, false, false, false];
+    const zeroGains = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    setSpeakerMuted(unmuted);
+    setSpeakerGainsDb(zeroGains);
+    for (let i = 0; i < 8; i++) {
+      dispatchCommand({ SetSpeakerMute: { channel: i, muted: false } });
+      dispatchCommand({ SetSpeakerGain: { channel: i, gain_db: 0.0 } });
+    }
+  };
+
   // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -426,6 +520,17 @@ export const App: React.FC = () => {
         if (e.repeat) return;
         if (!masterPower) return;
         handleToggleBypass();
+      }
+
+      // Ctrl + Shift + S: Toggle Soundstage Configurator Modal
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "s" || e.key === "S" || e.code === "KeyS")
+      ) {
+        e.preventDefault();
+        if (e.repeat) return;
+        setIsConfiguratorOpen((prev) => !prev);
       }
     };
 
@@ -484,6 +589,20 @@ export const App: React.FC = () => {
         onToggleStartup={handleToggleStartup}
       />
 
+      {/* 8-Channel Virtual Speaker Configurator Modal (Story 2.3 & 2.4, FR7) */}
+      <SoundstageConfiguratorModal
+        isOpen={isConfiguratorOpen}
+        onClose={() => setIsConfiguratorOpen(false)}
+        speakerMuted={speakerMuted}
+        speakerGainsDb={speakerGainsDb}
+        speakerAzimuthsDeg={speakerAzimuthsDeg}
+        onToggleMute={handleToggleSpeakerMute}
+        onGainChange={handleSpeakerGainChange}
+        onAzimuthChange={handleSpeakerAzimuthChange}
+        onResetPositions={handleResetSpeakerPositions}
+        onResetAll={handleResetAllSpeakers}
+      />
+
       {/* Fallback Notification Banner */}
       <NotificationBanner
         message={notification}
@@ -513,6 +632,7 @@ export const App: React.FC = () => {
             intensity={surroundIntensity}
             onIntensityChange={handleSurroundIntensityChange}
             onToggle={handleToggleSurround}
+            onOpenConfigurator={() => setIsConfiguratorOpen(true)}
           />
         </section>
 

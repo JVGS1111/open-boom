@@ -1,6 +1,6 @@
 //! Atomic JSON preset and configuration persistence in %APPDATA%/OpenBoom/.
 
-use open_boom_core::types::GRAPHIC_EQ_BANDS;
+use open_boom_core::types::{GRAPHIC_EQ_BANDS, ITU_R_7_1_DEFAULT_AZIMUTHS, SURROUND_7_1_CHANNELS};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -22,6 +22,9 @@ pub struct AppConfig {
     pub graphic_eq_gains_db: [f32; GRAPHIC_EQ_BANDS],
     pub surround_enabled: bool,
     pub surround_intensity: f32,
+    pub speaker_muted: [bool; SURROUND_7_1_CHANNELS],
+    pub speaker_gains_db: [f32; SURROUND_7_1_CHANNELS],
+    pub speaker_azimuths_deg: [f32; SURROUND_7_1_CHANNELS],
     pub bypass_active: bool,
     pub launch_on_startup: bool,
 }
@@ -41,6 +44,9 @@ impl Default for AppConfig {
             graphic_eq_gains_db: [0.0; GRAPHIC_EQ_BANDS],
             surround_enabled: true,
             surround_intensity: 0.72,
+            speaker_muted: [false; SURROUND_7_1_CHANNELS],
+            speaker_gains_db: [0.0; SURROUND_7_1_CHANNELS],
+            speaker_azimuths_deg: ITU_R_7_1_DEFAULT_AZIMUTHS,
             bypass_active: false,
             launch_on_startup: false,
         }
