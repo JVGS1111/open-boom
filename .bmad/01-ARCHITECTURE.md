@@ -54,3 +54,9 @@
 ### C. Persistência e Configuração
 * Armazenamento de presets e configurações do usuário em formato JSON limpo.
 * Cache local da base AutoEq para consulta instantânea offline.
+
+### D. Pipeline de Verificação & REA MCP (Engenharia Reversa)
+* **Repositório de Análise:** `c:\Users\joaov\Documents\GitHub\decompilator`.
+* **Servidor MCP:** Servidor global `rea` (Reverse Engineer Anything).
+* **Finalidade:** Para garantir fidelidade máxima na reprodução dos efeitos (filtros biquad, matrizes de rotação 3D Surround, parâmetros do exciter de fidelidade e compressor de modo noturno), o agente deve inspecionar os binários reais de referência (`BoomEngine.dll`, `AudioEffectComponent.dll`, `Audio.dll`) via MCP `rea` (`inspect_native_instruction`, `read_bytes`, `procedure_assembly`, `batch_decompile`).
+

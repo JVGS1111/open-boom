@@ -19,3 +19,11 @@
 * **Status:** Aceito
 * **Contexto:** O Boom 3D original utiliza um driver de kernel proprietário (`boomvad.sys`) assinado com certificado WHQL comercial.
 * **Decisão:** Para o OpenBoom, a interceptação de áudio deve utilizar APIs padrão do Windows (WASAPI Loopback, dispositivos virtuais livres ou Windows Audio Processing Objects - APO), eliminando a barreira de instalação de drivers não assinados.
+
+## ADR-004: Vinculação Explícita ao Repositório Decompilator e MCP do REA
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Necessidade imperativa de garantir que o agente nunca "esqueça" ou perca a referência do ferramental de engenharia reversa do repositório `decompilator` e do servidor MCP do REA.
+* **Decisão:** Declarar formalmente no BMAD (`AGENTS.md`, `01-ARCHITECTURE.md`, `04-DECISION-LOG.md` e `05-SESSION-STATE.md`) que o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e o MCP `rea` são ferramentas ativas de primeira classe no projeto para análise estática e dinâmica dos binários do Boom 3D.
+* **Consequência:** Sempre que houver incerteza sobre parâmetros matemáticos de DSP ou estruturas de áudio, o agente usará o REA MCP para inspecionar os binários originais.
+
