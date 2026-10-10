@@ -344,6 +344,8 @@ mod tests {
         assert_eq!(t.sample_rate, 48_000);
         assert_eq!(t.bit_depth, 32);
         assert_eq!(t.limiter_headroom_db, 20.0);
+        let expected_bridge = state.coordinator.lock().unwrap().is_using_virtual_bridge();
+        assert_eq!(t.using_virtual_bridge, expected_bridge);
 
         // Dispatch SetMasterPower(false)
         state

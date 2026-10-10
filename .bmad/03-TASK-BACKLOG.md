@@ -20,6 +20,7 @@
 - [X] **T1.9**: Lock-Free POD Command Dispatcher (`AudioProcessor`, SPSC ring buffer sem alocações, bit-perfect passthrough quando desligado e telemetria sincronizada).
 - [X] **T1.10**: Comutação A/B Instantânea com Alinhamento de Fase (Crossfade equal-power 5ms, retenção do lookahead 2ms, zero pops/clicks, atalho Ctrl+Shift+B e status Hardware Passthrough - Story 1.6).
 - [X] **T1.11**: Persistência Atômica de Configurações, Geometria da Janela e Inicialização no Windows (PresetStore com staging .tmp e replace MoveFileExW em %APPDATA%\OpenBoom\config.json, StartupManager em HKCU\...\Run sem UAC, menu de contexto da bandeja do sistema e SettingsModal acessível - Story 1.7).
+- [X] **T1.12**: Ponte de Dispositivo Virtual & Engenharia Reversa REA (VirtualAudioBridge dual-mode Modo A/B, heurísticas de detecção de endpoints virtuais, recuperação de invalidation sub-500ms, relatório técnico REA em .bmad/evidence/rea-boom-engine-reverse-engineering-report.md, telemetria using_virtual_bridge e badge no StatusBar - Story 1.8).
 
 ### Sprint 2: Motor de Áudio & Dispositivos (Marco 2)
 - [X] **T2.1**: Módulo de descoberta de dispositivos de saída e entrada (MMDeviceAPI enumeration, dynamic switching < 500ms, fallback recovery e popover selector - Story 1.4).

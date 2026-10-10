@@ -296,6 +296,7 @@ impl AudioProcessor {
             limiter_headroom_db: headroom_db,
             sample_rate: crate::types::INTERNAL_SAMPLE_RATE,
             bit_depth: 32,
+            using_virtual_bridge: false,
         }
     }
 }

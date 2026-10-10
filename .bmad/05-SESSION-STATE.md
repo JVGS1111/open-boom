@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 10/10/2026 - 19:42
-* **Sprint Ativa:** Sprint 1: Fundação do Projeto & UI Shell (Marco 1)
-* **Tarefa Atual:** Story 1.7 (`1-7-application-preferences-window-geometry-system-startup-persi`) CONCLUÍDA com status `done` (todos os 78 testes do workspace passando, zero warnings, frontend compilando).
+* **Data/Hora:** 10/10/2026 - 20:10
+* **Sprint Ativa:** Sprint 1: Fundação do Projeto & UI Shell (Marco 1) - Concluída!
+* **Tarefa Atual:** Story 1.8 (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`) CONCLUÍDA com status `done` (todos os 84 testes do workspace passando, zero warnings, frontend compilando). Todas as 8 histórias do Epic 1 finalizadas com sucesso!
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -85,12 +85,24 @@
     - Suíte de 78 testes passando no workspace com zero warnings e build Vite do frontend concluído em 1.68s.
     - Registro de ADR-015 no `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 1.7 (`status: done`).
+18. **Implementação e Verificação Completa da Story 1.8 (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`):**
+    - `crates/open-boom-core/src/types.rs`: Extensão do contrato de telemetria com `using_virtual_bridge: bool` em `TelemetrySnapshot`.
+    - `crates/open-boom-wasapi/src/device.rs`: Métodos `is_virtual_device_name` e `find_virtual_device` com heurísticas de identificação de virtual audio adapters (Boom Audio, VB-Audio Cable, VAC, VoiceMeeter, etc.) e suporte a dispositivos sintéticos para isolamento determinístico. Detecção validada em tempo real com o dispositivo físico `Boom Audio` instalado no host.
+    - `crates/open-boom-wasapi/src/virtual_bridge.rs`: Componente `VirtualAudioBridge` com suporte a Modo A (Virtual Sink) e Modo B (Loopback Fallback com exclusão de árvore de processos), garantindo zero eco acústico e comutação graciosa sub-500ms sob invalidação de hardware (`AUDCLNT_E_DEVICE_INVALIDATED`).
+    - `crates/open-boom-wasapi/src/coordinator.rs`: Integração do `VirtualAudioBridge` ao `AudioEngineCoordinator`, sincronização com `telemetry_snapshot()` e métodos de ciclo de vida e comutação instantânea.
+    - `crates/open-boom-wasapi/tests/virtual_bridge_tests.rs`: 6 testes unitários cobrindo heurísticas de nomes, detecção de Modo A, fallback para Modo B, invalidation em tempo de execução e telemetria do coordenador.
+    - `.bmad/evidence/rea-boom-engine-reverse-engineering-report.md`: Relatório completo de engenharia reversa REA documentando os pontos de entrada exportados de `BoomEngine.dll` (`CreateAudioProcessor`, `CreateSession`, `GetEqualizerPresetGains`), estruturas de classes internas (`AVBoomAudioProcessor`, `AVCSessionBase`, `Choreographer`), vetorização SIMD de `soundtouch::FIRFilterSSE`, buffer FIFO (`AVFIFOProcessor`), arquitetura de driver SYSVAD `boomvad.sys` e camada gerenciada `Audio.dll` (`IsBoom`, `IsBoomDeviceStereo`, `SwitchToBoom` via `IPolicyConfigVista`).
+    - `src-ui/src/components/StatusBar.tsx`: Renderização do badge de topologia de captura no dock de status (`Virtual Sink (Echo-Free)` em verde ou `Loopback Mode` em âmbar) com ícone `Radio`.
+    - `src-ui/src/App.tsx`: Polling de telemetria atualizado para capturar `using_virtual_bridge` e repassar ao `StatusBar`.
+    - Suíte de 84 testes passando no workspace com zero warnings e build Vite do frontend concluído em 1.71s.
+    - Registro de ADR-016 no `.bmad/04-DECISION-LOG.md`.
+    - Atualização formal de `sprint-status.yaml` (Epic 1 agora 100% `done`), `03-TASK-BACKLOG.md` e spec de Story 1.8 (`status: done`).
 
 ## O que está em andamento agora
-* Story 1.7 concluída e verificada com status `done`.
+* Todas as 8 histórias do **Epic 1: Fundação do Projeto & UI Shell** concluídas com 100% dos testes verdes.
 
 ## Próximo Passo Imediato
-* Implementar a **Story 1.8** (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`: Engenharia Reversa e Ingestão via Virtual Audio Device / `boomvad.sys`).
+* Realizar Retrospectiva do Epic 1 (`epic-1-retrospective`) ou iniciar o planejamento e desenvolvimento do **Epic 2: 3D Spatializer & HRTF Convolution Engine**.
 
 
 ## Diretrizes Permanentes de Ferramentas

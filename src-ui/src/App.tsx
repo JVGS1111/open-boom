@@ -81,6 +81,7 @@ export const App: React.FC = () => {
   const [limiterActive, setLimiterActive] = useState(false);
   const [sampleRate, setSampleRate] = useState(48000);
   const [bitDepth, setBitDepth] = useState(32);
+  const [usingVirtualBridge, setUsingVirtualBridge] = useState(false);
 
   // Settings Modal & Windows Startup State (Story 1.7)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -444,6 +445,7 @@ export const App: React.FC = () => {
           sample_rate: number;
           bit_depth: number;
           limiter_active: boolean;
+          using_virtual_bridge: boolean;
         }>("get_telemetry");
         if (snapshot) {
           setLatencyMs(snapshot.round_trip_latency_ms);
@@ -459,6 +461,9 @@ export const App: React.FC = () => {
           }
           if (typeof snapshot.limiter_active === "boolean") {
             setLimiterActive(snapshot.limiter_active);
+          }
+          if (typeof snapshot.using_virtual_bridge === "boolean") {
+            setUsingVirtualBridge(snapshot.using_virtual_bridge);
           }
         }
       } catch {
@@ -542,6 +547,7 @@ export const App: React.FC = () => {
         bitDepth={bitDepth}
         dspActive={masterPower && !bypassActive}
         masterPower={masterPower}
+        usingVirtualBridge={usingVirtualBridge}
       />
     </div>
   );

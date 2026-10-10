@@ -88,6 +88,9 @@ pub struct TelemetrySnapshot {
     pub sample_rate: u32,
     /// Active audio stream bit depth (e.g. 32 for 32-bit float).
     pub bit_depth: u32,
+    /// Whether capture is operating via a virtual audio device bridge (Mode A)
+    /// instead of standalone WASAPI loopback fallback (Mode B).
+    pub using_virtual_bridge: bool,
 }
 
 impl Default for TelemetrySnapshot {
@@ -102,6 +105,7 @@ impl Default for TelemetrySnapshot {
             limiter_headroom_db: 20.0,
             sample_rate: INTERNAL_SAMPLE_RATE,
             bit_depth: 32,
+            using_virtual_bridge: false,
         }
     }
 }

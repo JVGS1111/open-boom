@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldAlert, Zap, Cpu } from "lucide-react";
+import { ShieldAlert, Zap, Cpu, Radio } from "lucide-react";
 
 interface StatusBarProps {
   bypassActive: boolean;
@@ -12,6 +12,7 @@ interface StatusBarProps {
   bitDepth?: number;
   dspActive: boolean;
   masterPower?: boolean;
+  usingVirtualBridge?: boolean;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -25,6 +26,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   bitDepth = 32,
   dspActive,
   masterPower = true,
+  usingVirtualBridge = false,
 }) => {
   const isEngaged = masterPower && !bypassActive && dspActive;
   const isLimiting = isEngaged && (limiterActive || limiterGainReductionDb < -0.05);
@@ -138,6 +140,31 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <Zap className="w-3 h-3 text-status-online" />
           <span>{latencyMs.toFixed(1)} ms</span>
         </div>
+
+        <div className="h-3 w-px bg-border-subtle" />
+
+        {/* Virtual Bridge Capture Topology Badge (Story 1.8) */}
+        {usingVirtualBridge ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-status-online/10 border border-status-online/40 text-[10px] font-mono text-status-online shadow-[0_0_8px_rgba(34,197,94,0.15)]"
+            title="Audio captured via Virtual Audio Device sink with zero slapback echo (Mode A)"
+          >
+            <Radio className="w-3 h-3 text-status-online" />
+            <span className="font-medium tracking-wide">Virtual Sink (Echo-Free)</span>
+          </div>
+        ) : (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-status-warning/10 border border-status-warning/40 text-[10px] font-mono text-status-warning"
+            title="Audio captured via driverless WASAPI loopback with process exclusion (Mode B)"
+          >
+            <Radio className="w-3 h-3 text-status-warning opacity-80" />
+            <span className="font-medium tracking-wide">Loopback Mode</span>
+          </div>
+        )}
       </div>
 
       {/* Limiter Telemetry & A/B Bypass */}

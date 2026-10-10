@@ -8,6 +8,7 @@ use open_boom_core::types::{AudioCommand, AudioDeviceInfo, EngineResult, Telemet
 use crate::device::AudioDeviceManager;
 use crate::loopback_capture::{LoopbackCapture, LoopbackConfig};
 use crate::render_client::{RenderClient, RenderConfig};
+use crate::virtual_bridge::{BridgeMode, VirtualAudioBridge, VirtualBridgeConfig};
 
 /// Default capacity for SPSC command ring buffer.
 pub const DEFAULT_COMMAND_QUEUE_CAPACITY: usize = 256;
@@ -19,6 +20,7 @@ pub struct AudioEngineCoordinator {
     processor: AudioProcessor,
     command_queue: Option<Arc<SpscQueue<AudioCommand, DEFAULT_COMMAND_QUEUE_CAPACITY>>>,
     device_manager: AudioDeviceManager,
+    bridge: VirtualAudioBridge,
     is_running: bool,
 }
 
@@ -37,12 +39,19 @@ impl AudioEngineCoordinator {
         } else {
             AudioDeviceManager::with_synthetic_fallback(allow_synthetic)
         };
+        let mut bridge = VirtualAudioBridge::new(VirtualBridgeConfig {
+            allow_synthetic_fallback: allow_synthetic,
+            ..Default::default()
+        });
+        let _ = bridge.detect(&device_manager);
+
         Self {
             capture: LoopbackCapture::new(capture_config),
             render: RenderClient::with_config(render_config),
             processor: AudioProcessor::new(),
             command_queue: None,
             device_manager,
+            bridge,
             is_running: false,
         }
     }
@@ -59,12 +68,46 @@ impl AudioEngineCoordinator {
         } else {
             AudioDeviceManager::with_synthetic_fallback(allow_synthetic)
         };
+        let mut bridge = VirtualAudioBridge::new(VirtualBridgeConfig {
+            allow_synthetic_fallback: allow_synthetic,
+            ..Default::default()
+        });
+        let _ = bridge.detect(&device_manager);
+
         Self {
             capture: LoopbackCapture::new(capture_config),
             render: RenderClient::with_config(render_config),
             processor: AudioProcessor::new(),
             command_queue: Some(command_queue),
             device_manager,
+            bridge,
+            is_running: false,
+        }
+    }
+
+    /// Creates an audio engine coordinator with explicit virtual bridge configuration.
+    pub fn with_bridge_config(
+        capture_config: LoopbackConfig,
+        render_config: RenderConfig,
+        bridge_config: VirtualBridgeConfig,
+        command_queue: Option<Arc<SpscQueue<AudioCommand, DEFAULT_COMMAND_QUEUE_CAPACITY>>>,
+    ) -> Self {
+        let allow_synthetic = render_config.allow_synthetic_fallback || render_config.force_synthetic;
+        let device_manager = if render_config.force_synthetic {
+            AudioDeviceManager::with_forced_synthetic(true)
+        } else {
+            AudioDeviceManager::with_synthetic_fallback(allow_synthetic)
+        };
+        let mut bridge = VirtualAudioBridge::new(bridge_config);
+        let _ = bridge.detect(&device_manager);
+
+        Self {
+            capture: LoopbackCapture::new(capture_config),
+            render: RenderClient::with_config(render_config),
+            processor: AudioProcessor::new(),
+            command_queue,
+            device_manager,
+            bridge,
             is_running: false,
         }
     }
@@ -175,6 +218,39 @@ impl AudioEngineCoordinator {
         capture_latency + render_latency + dsp_lookahead_latency
     }
 
+    /// Reference to the virtual audio bridge.
+    pub fn bridge(&self) -> &VirtualAudioBridge {
+        &self.bridge
+    }
+
+    /// Mutable reference to the virtual audio bridge.
+    pub fn bridge_mut(&mut self) -> &mut VirtualAudioBridge {
+        &mut self.bridge
+    }
+
+    /// Returns whether the engine is actively routing audio through the virtual bridge (Mode A).
+    pub fn is_using_virtual_bridge(&self) -> bool {
+        self.bridge.is_using_virtual_bridge()
+    }
+
+    /// Returns the currently active bridge operating mode (Mode A vs Mode B).
+    pub fn bridge_mode(&self) -> BridgeMode {
+        self.bridge.active_mode()
+    }
+
+    /// Detects the virtual audio bridge endpoint and synchronizes capture mode.
+    pub fn detect_virtual_bridge(&mut self) -> EngineResult<BridgeMode> {
+        self.bridge.detect(&self.device_manager)
+    }
+
+    /// Handles loss or invalidation of the virtual device endpoint within 500ms.
+    ///
+    /// Transitions capture smoothly from Mode A to driverless loopback fallback (Mode B).
+    pub fn handle_virtual_device_lost(&mut self) -> EngineResult<BridgeMode> {
+        let new_mode = self.bridge.handle_device_invalidated();
+        Ok(new_mode)
+    }
+
     /// Generates a telemetry snapshot reflecting live DSP state and levels.
     pub fn telemetry_snapshot(&self) -> TelemetrySnapshot {
         let mut snapshot = self.processor.telemetry_snapshot();
@@ -183,22 +259,26 @@ impl AudioEngineCoordinator {
         snapshot.dsp_active = self.is_running && self.processor.is_dsp_active();
         snapshot.sample_rate = self.render.config.sample_rate;
         snapshot.bit_depth = 32;
+        snapshot.using_virtual_bridge = self.bridge.is_using_virtual_bridge();
         snapshot
     }
 
     /// Starts both capture and render clients in the proper initialization order.
     pub fn start(&mut self) -> EngineResult<()> {
+        let _ = self.bridge.detect(&self.device_manager);
         self.render.start()?;
         if let Err(err) = self.capture.start() {
             let _ = self.render.stop();
             return Err(err);
         }
+        let _ = self.bridge.start();
         self.is_running = true;
         Ok(())
     }
 
     /// Stops both audio streams cleanly.
     pub fn stop(&mut self) -> EngineResult<()> {
+        let _ = self.bridge.stop();
         let _ = self.capture.stop();
         let _ = self.render.stop();
         self.is_running = false;

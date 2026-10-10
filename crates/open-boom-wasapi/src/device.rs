@@ -7,6 +7,7 @@ use open_boom_core::types::{AudioDeviceInfo, EngineError, EngineResult};
 pub struct AudioDeviceManager {
     allow_synthetic_fallback: bool,
     force_synthetic: bool,
+    include_synthetic_virtual: bool,
 }
 
 impl AudioDeviceManager {
@@ -15,6 +16,7 @@ impl AudioDeviceManager {
         Self {
             allow_synthetic_fallback: false,
             force_synthetic: false,
+            include_synthetic_virtual: false,
         }
     }
 
@@ -23,6 +25,7 @@ impl AudioDeviceManager {
         Self {
             allow_synthetic_fallback,
             force_synthetic: false,
+            include_synthetic_virtual: false,
         }
     }
 
@@ -31,7 +34,31 @@ impl AudioDeviceManager {
         Self {
             allow_synthetic_fallback: true,
             force_synthetic,
+            include_synthetic_virtual: false,
         }
+    }
+
+    /// Creates a device manager that forces synthetic devices including a synthetic virtual endpoint.
+    pub fn with_forced_synthetic_and_virtual(force_synthetic: bool, include_virtual: bool) -> Self {
+        Self {
+            allow_synthetic_fallback: true,
+            force_synthetic,
+            include_synthetic_virtual: include_virtual,
+        }
+    }
+
+    /// Sets whether synthetic enumeration includes a virtual audio sink.
+    pub fn set_include_synthetic_virtual(&mut self, include_virtual: bool) {
+        self.include_synthetic_virtual = include_virtual;
+    }
+
+    /// Returns a synthetic virtual device descriptor for testing.
+    pub fn synthetic_virtual_device() -> AudioDeviceInfo {
+        AudioDeviceInfo::new(
+            "synthetic_boomvad",
+            "Boom Audio Virtual Device",
+            false,
+        )
     }
 
     /// Returns a list of synthetic fallback audio devices for testing and headless environments.
@@ -53,18 +80,22 @@ impl AudioDeviceManager {
     /// Enumerates all active audio render endpoints on the system.
     pub fn enumerate_devices(&self) -> EngineResult<Vec<AudioDeviceInfo>> {
         if self.force_synthetic {
-            return Ok(Self::synthetic_devices());
+            let mut devices = Self::synthetic_devices();
+            if self.include_synthetic_virtual {
+                devices.push(Self::synthetic_virtual_device());
+            }
+            return Ok(devices);
         }
 
         #[cfg(windows)]
         {
             match self.enumerate_windows_devices() {
                 Ok(devices) if !devices.is_empty() => Ok(devices),
-                Ok(_) if self.allow_synthetic_fallback => Ok(Self::synthetic_devices()),
+                Ok(_) if self.allow_synthetic_fallback => Ok(self.synthetic_device_list()),
                 Ok(devices) => Ok(devices),
                 Err(err) => {
                     if self.allow_synthetic_fallback {
-                        Ok(Self::synthetic_devices())
+                        Ok(self.synthetic_device_list())
                     } else {
                         Err(err)
                     }
@@ -74,13 +105,41 @@ impl AudioDeviceManager {
         #[cfg(not(windows))]
         {
             if self.allow_synthetic_fallback {
-                Ok(Self::synthetic_devices())
+                Ok(self.synthetic_device_list())
             } else {
                 Err(EngineError::DeviceInitialization(
                     "WASAPI device enumeration requires Windows platform".to_string(),
                 ))
             }
         }
+    }
+
+    fn synthetic_device_list(&self) -> Vec<AudioDeviceInfo> {
+        let mut devices = Self::synthetic_devices();
+        if self.include_synthetic_virtual {
+            devices.push(Self::synthetic_virtual_device());
+        }
+        devices
+    }
+
+    /// Checks whether the given endpoint friendly name corresponds to a known
+    /// virtual audio adapter or cable sink (e.g. boomvad, VB-Audio Cable, VAC).
+    pub fn is_virtual_device_name(name: &str) -> bool {
+        let lower = name.to_lowercase();
+        lower.contains("boom")
+            || lower.contains("vb-audio")
+            || lower.contains("cable")
+            || lower.contains("voicemeeter")
+            || lower.contains("vac")
+            || lower.contains("virtual audio")
+            || lower.contains("virtual cable")
+            || lower.contains("openboom")
+    }
+
+    /// Finds an active virtual audio device endpoint on the system, if present.
+    pub fn find_virtual_device(&self) -> EngineResult<Option<AudioDeviceInfo>> {
+        let devices = self.enumerate_devices()?;
+        Ok(devices.into_iter().find(|d| Self::is_virtual_device_name(&d.name)))
     }
 
     /// Returns the default console audio render endpoint.
