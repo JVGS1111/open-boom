@@ -60,3 +60,14 @@
   6. **Limiter de Pico Lookahead Inviolável e Bypass com Fase Contínua (AD-5):** Limitador terminal atuando com lookahead de 2ms cravando teto em -0.2 dBFS. Bypass A/B mantém o buffer de atraso de 2ms e aplica crossfade de 5ms, eliminando pops DC e saltos de latência.
   7. **Thread MTA Dedicada para Session Mixer (AD-8):** Gerenciamento de sessões Core Audio isolado em thread worker COM inicializada via `CoInitializeEx(None, COINIT_MULTITHREADED)`.
 * **Consequência:** Eliminação total de riscos de concorrência, instabilidade matemática de filtros ou eco por duplicação de áudio, garantindo latência < 15ms e consumo de memória < 40 MB.
+
+## ADR-008: Resolução do Toolchain Windows GNU, rust-lld e Formato de Crate para Shell Desktop
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Durante o scaffold da Story 1.1 sob o toolchain `stable-x86_64-pc-windows-gnu`, a compilação do Tauri v2 e dependências nativas (`raw-dylib`, `windows-sys`, `parking_lot_core`) exigiu `dlltool` e ferramentas de recurso (`windres`).
+* **Decisões:**
+  1. **Configuração de Linker (`rust-lld`):** Definido `rust-lld` em `.cargo/config.toml` para o target `x86_64-pc-windows-gnu`, permitindo linkagem rápida e resolução direta de bibliotecas COFF e GNU.
+  2. **Interpretação de `raw-dylib` via Shim:** Implementado shim de `dlltool` preservando a diretiva `LIBRARY <dll>` nos arquivos `.def` gerados pelo rustc, evitando o erro de runtime `STATUS_DLL_NOT_FOUND (0xC0000135)`.
+  3. **Crate-type do Desktop Shell (`rlib`):** Configurado `crate-type = ["rlib"]` em `src-tauri/Cargo.toml`, prevenindo o estouro do limite máximo de 65.535 símbolos exportados de DLLs PE do Windows gerado por `cdylib` em compilações desktop.
+* **Consequência:** Compilação 100% limpa (`cargo check --workspace` e `cargo test --workspace`) com zero warnings e zero dependências de build externas.
+

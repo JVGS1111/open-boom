@@ -11,7 +11,7 @@
 ### Sprint 1: Fundação do Projeto & UI Shell (Marco 1)
 - [X] **T1.1**: Criação do repositório `open-boom` e inicialização do Git.
 - [X] **T1.2**: Implantação da estrutura do Memory Harness BMAD (`.bmad/`).
-- [/] **T1.3**: Scaffold da aplicação desktop (UI base, tema escuro, layout e responsividade).
+- [X] **T1.3**: Scaffold da aplicação desktop (UI base, tema escuro, layout e responsividade).
 - [ ] **T1.4**: Construção do Header (Master Switch, Slider de Volume com valor numérico e controles de saída).
 - [ ] **T1.5**: Construção do Dial Circular 3D Surround (knob rotativo com indicador de posição e botão expansor).
 - [ ] **T1.6**: Construção da barra de efeitos (Cards com toggles de Ambiente, Fidelidade, Modo Noturno, Espacial, Tonalidade).

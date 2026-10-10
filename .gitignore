@@ -1,0 +1,36 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# Node.js and frontend builds
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri build artifacts
+src-tauri/target/
+
+# BMAD artifacts
+.bmad/render/
+_bmad/
+.agent/
+.agents/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Temporary files and logs
+*.log
+*.tmp

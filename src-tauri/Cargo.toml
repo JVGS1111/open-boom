@@ -1,0 +1,22 @@
+[package]
+name = "open-boom"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "open_boom_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+open-boom-core = { path = "../crates/open-boom-core" }
+open-boom-wasapi = { path = "../crates/open-boom-wasapi" }
+open-boom-storage = { path = "../crates/open-boom-storage" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { workspace = true }

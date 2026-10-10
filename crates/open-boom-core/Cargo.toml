@@ -1,0 +1,15 @@
+[package]
+name = "open-boom-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true, optional = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
