@@ -97,12 +97,10 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
       if (deltaAngle <= totalSweepDeg) {
         nextFraction = deltaAngle / totalSweepDeg;
       } else {
-        // In the 60° bottom dead-zone: snap to 1.0 if closer to 300°, else 0.0
-        if (deltaAngle < startAngleDeg + totalSweepDeg + 30) {
-          nextFraction = 1.0;
-        } else {
-          nextFraction = 0.0;
-        }
+        // In the 60° bottom dead-zone (totalSweepDeg to 360°):
+        // Midpoint of the dead zone is 300° + 30° = 330°
+        const deadZoneMid = totalSweepDeg + (360 - totalSweepDeg) / 2;
+        nextFraction = deltaAngle < deadZoneMid ? 1.0 : 0.0;
       }
 
       const rounded = Math.round(nextFraction * 100) / 100;
@@ -237,7 +235,7 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
               stroke="#38bdf8"
               strokeWidth="10"
               strokeLinecap="round"
-              className="drop-shadow-[0_0_8px_rgba(56,189,248,0.45)] transition-all duration-75"
+              className="drop-shadow-[0_0_8px_rgba(56,189,248,0.45)]"
             />
           )}
 

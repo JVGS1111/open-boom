@@ -466,8 +466,8 @@ export const App: React.FC = () => {
         master_boost: boost,
         is_muted: isMuted,
         active_output_device: activeDeviceId === "default" ? null : activeDeviceId,
-        window_width: 840,
-        window_height: 560,
+        window_width: 920,
+        window_height: 600,
         window_x: windowX,
         window_y: windowY,
         graphic_eq_gains_db: eqGains,
@@ -1072,7 +1072,7 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full h-full min-w-[780px] min-h-[520px] bg-background flex flex-col justify-between overflow-hidden border border-border-subtle shadow-2xl relative">
+    <div className="w-full h-full min-w-[880px] min-h-[580px] bg-background flex flex-col justify-between overflow-hidden border border-border-subtle shadow-2xl relative">
       {/* Settings Modal (Story 1.7, FR29) */}
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -1155,7 +1155,7 @@ export const App: React.FC = () => {
 
         {/* Right rack panel: Dual EQ & Effects Rack */}
         <section className="col-span-7 flex flex-col gap-2.5 overflow-hidden">
-          <div className="flex-1">
+          <div className="flex-1 min-h-0">
             <EqualizerPreview
               activePreset={activeEqPreset}
               isPresetDirty={presetDirty}
@@ -1167,7 +1167,7 @@ export const App: React.FC = () => {
               onOpenAutoEq={() => setIsAutoEqOpen(true)}
             />
           </div>
-          <div className="flex-1">
+          <div className="shrink-0">
             <EffectsRackStrip
               modules={effectModules}
               onToggleModule={handleToggleEffect}

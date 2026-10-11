@@ -71,7 +71,7 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
       {/* Visual EQ Curve Faders Preview (Clickable trigger to expand drawer) */}
       <div
         onClick={onExpand}
-        className="h-20 bg-surface-base/80 hover:bg-surface-base rounded border border-border-subtle hover:border-accent-blue/40 p-2 flex items-end justify-between gap-0.5 relative overflow-hidden cursor-pointer transition-colors group"
+        className="flex-1 min-h-[72px] bg-surface-base/80 hover:bg-surface-base rounded border border-border-subtle hover:border-accent-blue/40 p-2 flex items-end justify-between gap-0.5 relative overflow-hidden cursor-pointer transition-colors group"
         title="Click to expand Equalizer Studio Drawer"
       >
         {/* Center 0 dB Reference Grid Line */}

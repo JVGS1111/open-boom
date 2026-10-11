@@ -77,7 +77,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
     <div
       role="region"
       aria-label="Dynamic Effects Rack"
-      className="grid grid-cols-5 gap-2 h-full"
+      className="grid grid-cols-5 gap-2 w-full"
     >
       {modules.map((mod) => {
         const isModActive = mod.enabled && !disabled && !mod.isComingSoon;
@@ -88,7 +88,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
             key={mod.id}
             tabIndex={disabled || mod.isComingSoon ? -1 : 0}
             onKeyDown={(e) => handleKeyDown(e, mod)}
-            className={`group bg-surface-card border rounded-lg p-2 flex flex-col justify-between transition-all select-none relative outline-none focus-visible:ring-1 focus-visible:ring-accent-cyan ${
+            className={`group bg-surface-card border rounded-lg p-2.5 flex flex-col justify-between h-[86px] transition-all select-none relative outline-none overflow-hidden focus-visible:ring-1 focus-visible:ring-accent-cyan ${
               isModActive
                 ? "border-accent-cyan/60 shadow-cyan-glow-sm bg-surface-card-hover"
                 : "border-border-subtle hover:border-border-default"
@@ -96,7 +96,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
             title={`${mod.name}: ${mod.description}`}
           >
             {/* Header: Icon + Title + Switch */}
-            <div className="flex items-center justify-between gap-1 mb-1">
+            <div className="flex items-center justify-between gap-1 mb-0.5">
               <div
                 className="flex items-center gap-1.5 min-w-0 cursor-pointer"
                 onClick={() => {
@@ -154,14 +154,14 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
             </div>
 
             {/* Description Subtitle */}
-            <div className="text-[9.5px] text-text-muted truncate mb-1.5 font-sans">
+            <div className="text-[9.5px] text-text-muted truncate mb-1 font-sans">
               {mod.isComingSoon ? "Pitch Shifter (-12..+12 st)" : mod.description}
             </div>
 
             {/* Bottom Slider & Percentage Readout */}
-            <div className="flex items-center gap-1.5 pt-0.5">
+            <div className="flex items-center gap-1.5 pt-0.5 min-w-0">
               {mod.isComingSoon ? (
-                <div className="flex-1 flex items-center justify-between text-[10px] font-mono text-text-muted/60 px-1 py-0.5 bg-surface-base/40 rounded border border-border-subtle/40">
+                <div className="flex-1 min-w-0 flex items-center justify-between text-[10px] font-mono text-text-muted/60 px-1 py-0.5 bg-surface-base/40 rounded border border-border-subtle/40">
                   <span>Phase 2</span>
                   <span>0 st</span>
                 </div>
@@ -183,10 +183,10 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
                     onChange={(e) =>
                       onAmountChange(mod.id, parseFloat(e.target.value))
                     }
-                    className="flex-1 h-1 bg-border-subtle rounded appearance-none cursor-pointer accent-accent-cyan disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="flex-1 min-w-0 h-1 bg-border-subtle rounded appearance-none cursor-pointer accent-accent-cyan disabled:opacity-30 disabled:cursor-not-allowed"
                   />
                   <span
-                    className={`text-[10px] font-mono w-7 text-right transition-colors ${
+                    className={`text-[10px] font-mono w-7 shrink-0 text-right transition-colors ${
                       isModActive ? "text-text-primary" : "text-text-muted"
                     }`}
                   >

@@ -14,8 +14,8 @@ fn test_app_config_default_values() {
     assert!((cfg.master_boost - 1.0).abs() < 1e-6);
     assert!(!cfg.is_muted);
     assert_eq!(cfg.active_output_device, None);
-    assert_eq!(cfg.window_width, 840);
-    assert_eq!(cfg.window_height, 560);
+    assert_eq!(cfg.window_width, 920);
+    assert_eq!(cfg.window_height, 600);
     assert_eq!(cfg.window_x, None);
     assert_eq!(cfg.window_y, None);
     assert!(cfg.surround_enabled);
@@ -134,8 +134,8 @@ fn test_partial_json_field_defaults() {
     assert!((loaded.master_volume - 1.25).abs() < 1e-6);
     assert!(loaded.is_muted);
     // Other fields must have defaults
-    assert_eq!(loaded.window_width, 840);
-    assert_eq!(loaded.window_height, 560);
+    assert_eq!(loaded.window_width, 920);
+    assert_eq!(loaded.window_height, 600);
     assert!(loaded.master_power);
     assert_eq!(loaded.active_preset_name, "Flat");
 

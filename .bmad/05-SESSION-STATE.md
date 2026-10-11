@@ -156,12 +156,24 @@
     - `src-ui/src/components/AppMixerDrawer.tsx` e `src-ui/src/App.tsx`: Botão de reset rápido para perfis customizados (ícone `RotateCcw`), nota de rodapé garantindo persistência automática, e handler `handleResetAppVolume` no `App.tsx`.
     - **Verificação Completa de Testes:** 14 testes em `storage_tests.rs`, 6 testes em `session_manager_tests.rs`, 11 testes em `src-tauri` (174 testes Cargo verdes no workspace total), e 11 testes em `AppMixer.test.tsx` (67 testes de UI verdes no `npm test` do `src-ui`). Build Vite completado em 1.79s sem erros.
     - Registro do ADR-030 em `.bmad/04-DECISION-LOG.md`, spec 5.3 marcada como `done`, e status de `epic-5` marcado como `done` em `sprint-status.yaml`.
+31. **Refinamento de CSS, Geometria de Janela e Correção de Física/Animação dos Controles:**
+    - **Geometria Mínima da Janela:** Aumento da resolução mínima de 780x520 para 880x580 e padrão de 840x560 para 920x600 (`tauri.conf.json`, `App.tsx`, `preset_store.rs`), eliminando compressão dos controles de cabeçalho e módulos.
+    - **Proporção e Sliders do Dynamic Effects Rack:** Ajustada altura das cartas de efeitos para um formato compacto de 86px (`h-[86px]`), evitando esticamento vertical de 220px (`flex-1`); adicionado `min-w-0` nos sliders e containers e `shrink-0` nas porcentagens, eliminando transbordo horizontal das trilhas dos sliders para os cards vizinhos. Faders do `EqualizerPreview` agora expandem dinamicamente no espaço flexível restante.
+    - **Física Polar e Animação do 3D Surround Dial:** Removido `transition-all duration-75` do path SVG do arco ciano (`SoundstageDial.tsx`), eliminando defasagem, lag e descolamento do arco em relação ao beacon branco em movimentos rápidos do mouse; corrigido limiar de snap polar da dead-zone inferior de 60° (ponto médio 330°), impedindo saltos abruptos para 100% ao mover próximo do 0%.
+32. **Profissionalização de Release, CI/CD GitHub Actions, Artefatos .EXE e Branding do README:**
+    - **Banner Oficial de Alta Fidelidade:** Arte gerada com iluminação cinematográfica, ondas ciano neon e HUD holográfico salva em `assets/banner.png`.
+    - **README Completo e Profissional:** Documentação técnica completa com badges dinâmicos, resumo de arquitetura sem drivers proprietários, tabela de atalhos globais de teclado, instruções de compilação passo a passo e tabela comparativa de artefatos de download (Instalador NSIS vs Executável Portátil).
+    - **Licenciamento Open-Source:** Inclusão formal de arquivos `LICENSE` (MIT) e `LICENSE-APACHE`.
+    - **Pipeline CI/CD GitHub Actions (`.github/workflows/`):**
+      - `release.yml`: Acionado no push de tags `v*.*.*` (ou manual via `workflow_dispatch`). Compila em runner `windows-latest`, executa a suíte de 174 testes Cargo + 67 testes UI, gera o instalador NSIS `OpenBoom_x.x.x_x64-setup.exe` e o executável standalone portátil `OpenBoom-vX.Y.Z-portable-x64.exe`, calcula checksums SHA-256 (`SHA256SUMS.txt`) e publica automaticamente no GitHub Releases com notas de versão geradas.
+      - `ci.yml`: Validação contínua em PRs e pushes para `main`.
+    - **Automação de Tag de Versão:** Script PowerShell `scripts/release.ps1` e comando `npm run release:tag` para validação de integridade e criação segura de tags anotadas.
 
 ## O que está em andamento agora
-* **TODOS OS 5 ÉPICOS DO OPENBOOM (EPICS 1 A 5) ESTÃO 100% CONCLUÍDOS E APROVADOS (`done`)!**
-* Total de 24 Histórias de Usuário implementadas, testadas e verificadas.
-* O comando `/goal execute bmad-build-auto para o epico 5 historia por historia até terminar` está 100% cumprido.
+* **PROJETO 100% PRONTO PARA LANÇAMENTO E DISTRIBUIÇÃO PÚBLICA!**
+* Compilação local de release validada: `target/release/open-boom.exe` (9.6 MB) e instalador `target/release/bundle/nsis/OpenBoom_0.1.0_x64-setup.exe` (2.34 MB).
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo. Todos os 174 testes Cargo do workspace e todos os 67 testes de UI do frontend estão passando com 100% de sucesso.
+
 

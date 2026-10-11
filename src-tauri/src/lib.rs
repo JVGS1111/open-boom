@@ -707,10 +707,10 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(conf_str).expect("parse tauri.conf.json");
         let window = &v["app"]["windows"][0];
 
-        assert_eq!(window["width"], 840, "Window width must be 840px");
-        assert_eq!(window["height"], 560, "Window height must be 560px");
-        assert_eq!(window["minWidth"], 780, "Window minWidth must be 780px");
-        assert_eq!(window["minHeight"], 520, "Window minHeight must be 520px");
+        assert_eq!(window["width"], 920, "Window width must be 920px");
+        assert_eq!(window["height"], 600, "Window height must be 600px");
+        assert_eq!(window["minWidth"], 880, "Window minWidth must be 880px");
+        assert_eq!(window["minHeight"], 580, "Window minHeight must be 580px");
         assert_eq!(window["decorations"], false, "Window must be frameless");
         assert_eq!(window["backgroundColor"], "#121316", "Background must be obsidian canvas token");
     }
