@@ -128,14 +128,20 @@
     - 96 testes verdes no workspace Cargo e build Vite concluído em 3.83s.
     - Registro de ADR-020 no `.bmad/04-DECISION-LOG.md` e tarefa T2.6 em `.bmad/03-TASK-BACKLOG.md`.
 
+20. **Registro da Investigação de Intensidade do Efeito 3D (ADR-021):**
+    - Identificada a causa acústica da sutileza percebida no 3D Spatializer: a convolução KEMAR HRTF pura (Epic 2) atua primariamente como crossfeed acústico natural (reproduzindo dois monitores a 30° em câmara anecóica), sem adicionar reverberação de sala ou alargamento de fase artificial.
+    - Confirmado através do relatório de engenharia reversa do Boom 3D (`BoomEngine.dll` / `Audio.dll`) que o efeito comercial dramático é produto combinado de:
+      - Convolução HRTF (Epic 2);
+      - Equalizador 31-bandas / AutoEq HyperX Cloud II (Epic 3);
+      - Ambience Reverb Schroeder/FDN (Epic 4, Story 4.1);
+      - Spatial Widener Haas/Mid-Side (Epic 4, Story 4.2);
+      - Harmonic Fidelity Exciter (Epic 4, Story 4.3).
+    - Aberta a tarefa `T2.7` no backlog para calibração de ganhos do upmix estéreo e transição wet/dry.
+    - Registro de ADR-021 em `.bmad/04-DECISION-LOG.md`.
+
 ## O que está em andamento agora
-* **Roteamento Inteligente Automático e Streaming Ativo:** Sistema 100% capaz de interceptar o áudio do Windows, processar através do pipeline DSP e entregar no HyperX sem eco e com retorno seguro à placa física.
-
-## Próximo Passo Imediato
-* Iniciar o desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).
-
-## Diretrizes Permanentes de Ferramentas
-* **Decompilator & REA MCP:** O agente tem acesso e DEVE consultar o repositório `c:\Users\joaov\Documents\GitHub\decompilator` e utilizar o MCP global `rea` sempre que precisar extrair detalhes internos, algoritmos de DSP, estruturas de drivers ou bibliotecas do Boom 3D original.
+* **Roteamento Inteligente e DSP em Tempo Real Operantes:** O áudio do Windows flui pelo pipeline do OpenBoom e toca no headset físico (`HyperX Cloud II Wireless`) com efeito audível.
+* **Planejamento & Próximo Passo Imediato:** Início do desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.

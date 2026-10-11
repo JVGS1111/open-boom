@@ -29,6 +29,7 @@
 - [X] **T2.4**: Motor de Convolução Binaural 7.1 KEMAR HRTF & Downfold Matrix (64 taps SSE2 SIMD, buffer circular duplo de 128 amostras, ITD 0.2-0.7ms, pinna notch 6 kHz, crossfade paramétrico e orçamento de desempenho < 25% - Story 2.1).
 - [X] **T2.5**: Reposicionamento Angular Espacial de Alto-Falantes Virtuais & Interpolação HRTF Contínua (arraste polar orbital, cálculo em tempo real de coeficientes HRTF KEMAR sem dropouts de áudio, display de coordenadas azimutais e reset para ITU-R BS.775 - Story 2.4).
 - [X] **T2.6**: Roteamento Inteligente Automático via COM IPolicyConfig & Dual-Mode DAC Bridge (chaveamento automático para Boom Audio no Master Power ON, retorno transparente ao HyperX no Master Power OFF/Exit, retry loop anti-jitter e filtragem de sinks virtuais na UI - ADR-020).
+- [ ] **T2.7**: Calibração da Matriz de Upmix Estéreo & Curva Perceptual do Dial 3D (Refinamento do ganho de ambiência lateral L-R e transição wet/dry para realce imediato de presença antes do Epic 4 - ADR-021).
 
 ### Sprint 3: Motor DSP & Efeitos de Som (Marco 3)
 - [ ] **T3.1**: Motor do Equalizador Multibanda (10 e 31 bandas).

@@ -235,3 +235,22 @@
   5. **Proteção de Retry no `AudioStreamPump`:** Implementado loop de retry de até 10 iterações com delay de 500µs contra variações transitórias de padding do WASAPI, eliminando descartes acidentais de buffers.
   6. **Isolamento de Testes Unitários:** `AppState::new()` desativa o chaveamento de sistema por padrão (`auto_route: false`), reservando o roteamento dinâmico para `AppState::new_runtime()` executado no entrypoint da aplicação.
 * **Consequência:** Eliminação definitiva de eco acústico, ativação imediata e audível de todos os efeitos de DSP no headset físico do usuário, abstração total da complexidade de drivers virtuais (idêntico ao comportamento comercial do Boom 3D) e suíte completa de testes (96 testes) verde no workspace.
+
+---
+
+## ADR-021: Diferenciação entre Convolução HRTF Acústica Pura (Epic 2) e Efeitos Espaciais Complementares (Epic 3 & Epic 4) na Assinatura Sonora 3D
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Com o pipeline de áudio ativo e o roteamento operando em tempo real no headset físico (`HyperX Cloud II Wireless`), o usuário observou que o efeito do botão 3D Surround é perceptível porém sutil ("fraquinho") em reprodução estéreo comum (YouTube/Spotify), questionando se isso é intencional ou se deve ser registrado para ajuste e cobertura pelos próximos épicos.
+* **Decisões & Justificativas Técnicas:**
+  1. **Natureza Acústica do HRTF Puro (Epic 2):** O algoritmo implementado no Epic 2 (`Spatializer3D`) executa convolução com tabelas KEMAR de 64 taps (ITD 0.2–0.7ms, ILD e notch de pinna a 6 kHz). Para um sinal estéreo convencional (2 canais), o motor simula o posicionamento de dois monitores frontais a $\pm 30^\circ$ em câmara anecóica. Em fones de ouvido, o HRTF puro atua primordialmente como *crossfeed binaural*, reduzindo a separação artificial extrema do estéreo tradicional e projetando o áudio para fora da cabeça ("out-of-head localization"). Por design acústico, ele não introduz cauda de reverberação artificial, coloração agressiva ou distorção de fase.
+  2. **Origem da Assinatura Dramática do Boom 3D Comercial (Evidências REA):** Conforme constatado na engenharia reversa de `BoomEngine.dll` e `Audio.dll` (`Effect` enum: `SurroundSound`, `Ambience`, `Fidelity`, `DRC`, `Spatial`), o efeito "3D expansivo e cinematográfico" do produto comercial é um resultado sinérgico de 4 componentes simultâneos:
+     - **HRTF Spatializer:** Posicionamento angular dos canais.
+     - **Ambience (`Effect::Ambience` - Epic 4, Story 4.1):** Reflexões iniciais e reverberação de sala (Schroeder / FDN Reverb), que conferem sensação física de tamanho do ambiente.
+     - **Spatial Widener (`Effect::Spatial` - Epic 4, Story 4.2):** Expansão estéreo via processamento Mid/Side e micro-delay de Haas, que projeta o som muito além da envergadura física dos fones.
+     - **Fidelity (`Effect::Fidelity` - Epic 4, Story 4.3):** Exciter harmônico e abertura de agudos superiores.
+     - **Equalização & AutoEq (Epic 3):** Curvas de calibração para o fone do usuário (compensando respostas não lineares e enfatizando a faixa de localização auricular de 3 kHz a 8 kHz).
+  3. **Plano de Registro e Calibração:**
+     - Confirmada a cobertura programada nos Epicos 3 e 4.
+     - Aberta a tarefa de melhoria `T2.7` no backlog para calibração de ganhos da matriz de upmix estéreo (reforço de canais laterais/surround no sinal $L-R$) e ajuste da curva de interpolação wet/dry do `SoundstageDial` para maximizar a presença perceptível mesmo em modo KEMAR puro.
+* **Consequência:** Alinhamento técnico completo entre arquitetura e percepção do usuário, mantendo a integridade da progressão dos épicos e registrando a oportunidade de tuning para a experiência do usuário.
