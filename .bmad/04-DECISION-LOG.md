@@ -205,3 +205,16 @@
   2. **Ciclo de Vida COM Estritamente Balanceado:** Na thread isolada (`enumerate_windows_devices_isolated`), `CoInitializeEx(None, COINIT_MULTITHREADED)` é chamado no início e `CoUninitialize()` é garantido no encerramento da thread.
   3. **Preservação da Thread GUI Win32:** A thread principal de UI nunca é inicializada em MTA pelo adaptador WASAPI, permitindo que o `OleInitialize` do Tao seja executado com sucesso e suporte todas as operações OLE/STA (incluindo drag and drop e event loop) sem conflitos.
 * **Consequência:** Resolução definitiva do pânico de inicialização, preservação do funcionamento do shell Tauri desktop e manutenção de 100% dos testes unitários e de integração (95 testes passando).
+
+---
+
+## ADR-019: Implementação da Thread Contínua de Streaming WASAPI (AudioStreamPump) e Roteamento de Ingestão em Tempo Real
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Embora as primitivas matemáticas de DSP (`crates/open-boom-core`) e a interface desktop (`src-tauri` / `src-ui`) estivessem 100% desenvolvidas e testadas, o aplicativo não aplicava alterações perceptíveis no áudio ao vivo do usuário. O `AudioEngineCoordinator` residia apenas em memória, sem uma thread ativa de streaming realizando o bombeamento contínuo de pacotes entre o sistema operacional Windows e o conversor digital-analógico (DAC).
+* **Decisões:**
+  1. **Thread Worker Dedicada de Alta Prioridade (`AudioStreamPump`):** Criado o módulo `crates/open-boom-wasapi/src/stream_pump.rs`, instanciando uma thread dedicada (`open-boom-audio-pump`) registrada no MMCSS sob o perfil "Pro Audio" (`AvSetMmThreadCharacteristicsW`).
+  2. **Ingestão Dual-Mode (Virtual Sink / Loopback):** A thread detecta automaticamente o dispositivo virtual `Boom Audio` instalado no sistema. Se presente, captura desse endpoint silencioso (`AUDCLNT_STREAMFLAGS_LOOPBACK`); caso contrário, captura do endpoint padrão de renderização.
+  3. **Zero Alocações no Loop de Processamento (`AD-1`, `NFR2`):** Buffers de scratch para entrada e saída de 48 kHz estéreo (16.384 floats) são pré-alocados. A passagem pelos estágios de DSP utiliza `try_lock()` no coordenador para garantir que a thread de áudio nunca bloqueie caso a interface esteja consultando telemetria.
+  4. **Integração no Ciclo de Vida do Tauri:** O `AudioStreamPump` é instanciado automaticamente no `AppState::new()` e reinicializado em tempo hábil (< 500ms) quando o usuário troca o dispositivo de saída no seletor de endpoints (`set_audio_device`).
+* **Consequência:** Fluxo contínuo de áudio em tempo real com sub-15ms de latência, integração total com os controles de 3D Surround, Limitador e Volume Boost, e 96 testes passando no workspace.

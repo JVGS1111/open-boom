@@ -3,7 +3,9 @@
 use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot, GRAPHIC_EQ_BANDS};
 use open_boom_storage::{AppConfig, PresetStore, StartupManager};
-use open_boom_wasapi::{AudioEngineCoordinator, LoopbackConfig, RenderConfig};
+use open_boom_wasapi::{
+    AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig, StreamPumpConfig,
+};
 use std::sync::{Arc, Mutex};
 use tauri::{
     image::Image,
@@ -21,6 +23,7 @@ pub struct AppState {
     pub coordinator: Arc<Mutex<AudioEngineCoordinator>>,
     pub store: PresetStore,
     pub startup: StartupManager,
+    pub pump: Arc<Mutex<Option<AudioStreamPump>>>,
 }
 
 impl Default for AppState {
@@ -44,12 +47,18 @@ impl AppState {
         )));
         let store = PresetStore::default();
         let startup = StartupManager::new();
+        let pump_instance = AudioStreamPump::start(
+            coordinator.clone(),
+            StreamPumpConfig::default(),
+        ).ok();
+        let pump = Arc::new(Mutex::new(pump_instance));
         Self {
             dispatcher,
             command_queue,
             coordinator,
             store,
             startup,
+            pump,
         }
     }
 
@@ -64,9 +73,13 @@ impl AppState {
         if let Ok(mut coord) = self.coordinator.lock() {
             coord.drain_commands();
             let mut snapshot = coord.telemetry_snapshot();
-            if !coord.is_running() {
-                snapshot.dsp_active = coord.processor().is_dsp_active();
-            }
+            let pump_running = self
+                .pump
+                .lock()
+                .ok()
+                .and_then(|p| p.as_ref().map(|x| x.is_running()))
+                .unwrap_or(false);
+            snapshot.dsp_active = (coord.is_running() || pump_running) && coord.processor().is_dsp_active();
             snapshot
         } else {
             TelemetrySnapshot::default()
@@ -93,13 +106,43 @@ fn get_audio_devices(state: State<'_, AppState>) -> Result<Vec<AudioDeviceInfo>,
 #[tauri::command]
 fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
     let mut coord = state.coordinator.lock().map_err(|e| e.to_string())?;
-    coord.switch_device(device_id).map_err(|e| e.to_string())
+    coord.switch_device(device_id.clone()).map_err(|e| e.to_string())?;
+    drop(coord);
+
+    if let Ok(mut pump_guard) = state.pump.lock() {
+        if let Some(mut existing) = pump_guard.take() {
+            existing.stop();
+        }
+        *pump_guard = AudioStreamPump::start(
+            state.coordinator.clone(),
+            StreamPumpConfig {
+                target_device_id: device_id,
+                ..Default::default()
+            },
+        ).ok();
+    }
+    Ok(())
 }
 
 #[tauri::command]
 fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
     let mut coord = state.coordinator.lock().map_err(|e| e.to_string())?;
-    coord.handle_device_lost().map_err(|e| e.to_string())
+    coord.handle_device_lost().map_err(|e| e.to_string())?;
+    drop(coord);
+
+    if let Ok(mut pump_guard) = state.pump.lock() {
+        if let Some(mut existing) = pump_guard.take() {
+            existing.stop();
+        }
+        *pump_guard = AudioStreamPump::start(
+            state.coordinator.clone(),
+            StreamPumpConfig {
+                target_device_id: None,
+                ..Default::default()
+            },
+        ).ok();
+    }
+    Ok(())
 }
 
 #[tauri::command]

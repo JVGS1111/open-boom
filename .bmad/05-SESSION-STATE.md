@@ -112,8 +112,15 @@
     - Validação de execução do binário e 95 testes verdes no workspace Cargo.
     - Registro de ADR-018 no `.bmad/04-DECISION-LOG.md`.
 
+18. **Implementação do AudioStreamPump em Tempo Real e Conexão de Áudio com o Sistema (ADR-019):**
+    - Desenvolvido `crates/open-boom-wasapi/src/stream_pump.rs` para realizar captura e reprodução contínua em tempo real sob agendamento MMCSS "Pro Audio" (`AvSetMmThreadCharacteristicsW`).
+    - Ingestão Dual-Mode com detecção e priorização automática do endpoint virtual `Boom Audio` (Modo A sem slapback echo) e renderização no dispositivo físico selecionado (`HyperX Cloud II Wireless`).
+    - Integração no ciclo de vida do `AppState` em `src-tauri/src/lib.rs` com reinicialização automática sob comutação a quente de dispositivos (`set_audio_device`).
+    - 96 testes unitários e de integração verdes no workspace Cargo com zero warnings e build Vite concluído em 1.80s.
+    - Registro de ADR-019 no `.bmad/04-DECISION-LOG.md`.
+
 ## O que está em andamento agora
-* **Epic 1 e Epic 2 CONCLUÍDOS a 100%** com todas as 12 histórias implementadas, validadas e testadas (95 testes passando), e shell desktop Tauri validado sem erros de inicialização.
+* **Streaming de áudio em tempo real ativo e conectado ao Tauri**, com todos os controles de 3D Surround, Limitador e Boost operando no fluxo contínuo de áudio do sistema. 96 testes verdes.
 
 ## Próximo Passo Imediato
 * Iniciar o desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).

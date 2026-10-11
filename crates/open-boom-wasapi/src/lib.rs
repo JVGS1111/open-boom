@@ -12,6 +12,7 @@ pub mod mmcss;
 pub mod render_client;
 pub mod resampler;
 pub mod session_manager;
+pub mod stream_pump;
 pub mod virtual_bridge;
 
 pub use coordinator::{AudioEngineCoordinator, DEFAULT_COMMAND_QUEUE_CAPACITY};
@@ -22,4 +23,5 @@ pub use mmcss::{CallbackBudgetTracker, MmcssGuard};
 pub use render_client::{RenderClient, RenderConfig};
 pub use resampler::{Resampler, MAX_RESAMPLER_CHANNELS};
 pub use session_manager::{ProcessAudioSession, SessionManager};
+pub use stream_pump::{AudioStreamPump, StreamPumpConfig};
 pub use virtual_bridge::{BridgeMode, VirtualAudioBridge, VirtualBridgeConfig};
