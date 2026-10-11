@@ -41,6 +41,12 @@ impl AudioStreamPump {
         let handle = std::thread::Builder::new()
             .name("open-boom-audio-pump".to_string())
             .spawn(move || {
+                if config.allow_synthetic {
+                    while is_running_clone.load(Ordering::Relaxed) {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    return;
+                }
                 Self::run_windows_pump(coordinator, config, is_running_clone);
             })
             .map_err(|e| {
@@ -106,23 +112,21 @@ impl AudioStreamPump {
         use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
         use crate::mmcss::MmcssGuard;
 
+        let com_init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        let _mmcss = MmcssGuard::register("Pro Audio");
+
         unsafe {
-            let com_init = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let _mmcss = MmcssGuard::register("Pro Audio");
+            let _ = (|| {
+                let enumerator_res: windows::core::Result<IMMDeviceEnumerator> =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL);
 
-            let enumerator_res: windows::core::Result<IMMDeviceEnumerator> =
-                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL);
-
-            let enumerator = match enumerator_res {
-                Ok(e) => e,
-                Err(err) => {
-                    eprintln!("AudioStreamPump: Failed to create MMDeviceEnumerator: {:?}", err);
-                    if com_init.is_ok() {
-                        CoUninitialize();
+                let enumerator = match enumerator_res {
+                    Ok(e) => e,
+                    Err(err) => {
+                        eprintln!("AudioStreamPump: Failed to create MMDeviceEnumerator: {:?}", err);
+                        return;
                     }
-                    return;
-                }
-            };
+                };
 
             // 1. Resolve Target Output Render Endpoint (Must be physical, never virtual sink)
             let render_device: IMMDevice = if let Some(ref target_id) = config.target_device_id {
@@ -162,9 +166,6 @@ impl AudioStreamPump {
 
             if render_init_res.is_err() {
                 CoTaskMemFree(Some(render_fmt_ptr as _));
-                if com_init.is_ok() {
-                    CoUninitialize();
-                }
                 return;
             }
 
@@ -172,9 +173,6 @@ impl AudioStreamPump {
                 Ok(s) => s,
                 Err(_) => {
                     CoTaskMemFree(Some(render_fmt_ptr as _));
-                    if com_init.is_ok() {
-                        CoUninitialize();
-                    }
                     return;
                 }
             };
@@ -220,9 +218,6 @@ impl AudioStreamPump {
                 Err(_) => {
                     let _ = render_client.Stop();
                     CoTaskMemFree(Some(render_fmt_ptr as _));
-                    if com_init.is_ok() {
-                        CoUninitialize();
-                    }
                     return;
                 }
             };
@@ -232,9 +227,6 @@ impl AudioStreamPump {
                 Err(_) => {
                     let _ = render_client.Stop();
                     CoTaskMemFree(Some(render_fmt_ptr as _));
-                    if com_init.is_ok() {
-                        CoUninitialize();
-                    }
                     return;
                 }
             };
@@ -252,9 +244,6 @@ impl AudioStreamPump {
                 let _ = render_client.Stop();
                 CoTaskMemFree(Some(render_fmt_ptr as _));
                 CoTaskMemFree(Some(capture_fmt_ptr as _));
-                if com_init.is_ok() {
-                    CoUninitialize();
-                }
                 return;
             }
 
@@ -264,9 +253,6 @@ impl AudioStreamPump {
                     let _ = render_client.Stop();
                     CoTaskMemFree(Some(render_fmt_ptr as _));
                     CoTaskMemFree(Some(capture_fmt_ptr as _));
-                    if com_init.is_ok() {
-                        CoUninitialize();
-                    }
                     return;
                 }
             };
@@ -349,7 +335,10 @@ impl AudioStreamPump {
             let _ = render_client.Stop();
             CoTaskMemFree(Some(render_fmt_ptr as _));
             CoTaskMemFree(Some(capture_fmt_ptr as _));
+        })();
+        }
 
+        unsafe {
             if com_init.is_ok() {
                 CoUninitialize();
             }
