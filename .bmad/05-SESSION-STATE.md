@@ -142,10 +142,16 @@
     - `src-tauri/src/lib.rs`: `SessionManager` integrado ao `AppState` de Tauri e comandos IPC `get_audio_sessions`, `set_app_volume` e `set_app_mute` expostos no `invoke_handler`.
     - `crates/open-boom-wasapi/tests/session_manager_tests.rs` e `src-tauri/src/lib.rs`: 5 testes unitários e teste de integração em `src-tauri` passando com sucesso (146 testes Cargo e 56 testes UI verdes).
     - Registro do ADR-028 em `.bmad/04-DECISION-LOG.md`, spec 5.1 marcada como `done` e `sprint-status.yaml` atualizado.
+29. **Implementação e Verificação Completa da Story 5.2 (`5-2-per-application-mixer-drawer-ui-individual-process-faders`):**
+    - `src-ui/src/components/AppMixerDrawer.tsx`: Componente de gaveta deslizante Fluent Dark com linhas `app-mixer-row` de 44–48px, badges temáticos por aplicativo (Spotify, Discord, navegadores, jogos, players), nomes amigáveis de executáveis, indicador verde pulsante de áudio ativo (`bg-meter-green animate-pulse`), sliders de 0% a 150% com snap duplo-clique 100% (0.0 dB) e botões de mute desacoplados.
+    - `src-ui/src/components/Titlebar.tsx`: Botão de abertura "App Volumes" no cabeçalho com ícone `Layers`, realce ativo ciano e atalho `Ctrl + Shift + M`.
+    - `src-ui/src/App.tsx`: Gerenciamento de estado de sessões, despacho via Tauri IPC (`set_app_volume`, `set_app_mute`), polling dinâmico a cada 1000ms quando a gaveta está visível e atalho global de teclado `Ctrl + Shift + M`.
+    - `src-ui/src/test/AppMixer.test.tsx` e `run.mjs`: 9 testes unitários de renderização, mapeamento perceptual de decibéis, faders e acessibilidade aprovados com 100% de sucesso (65 testes UI verdes no workspace).
+    - Registro do ADR-029 em `.bmad/04-DECISION-LOG.md`, spec 5.2 marcada como `done` e `sprint-status.yaml` atualizado.
 
 ## O que está em andamento agora
-* **Story 5.1 Concluída com Sucesso (`done`)!**
-* **Próximo no Backlog:** **Story 5.2: Per-Application Mixer Drawer UI & Individual Process Faders** (`5-2-per-application-mixer-drawer-ui-individual-process-faders`).
+* **Stories 5.1 e 5.2 Concluídas com Sucesso (`done`)!**
+* **Próximo no Backlog:** **Story 5.3: Persistent Application Volume Preferences & Automatic Session Recovery** (`5-3-persistent-application-volume-preferences-automatic-session`).
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 146 testes Cargo e 56 testes UI estão passando com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 146 testes Cargo e 65 testes UI estão passando com 100% de sucesso.

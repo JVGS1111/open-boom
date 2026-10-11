@@ -383,6 +383,21 @@
   5. **Comandos IPC Tauri:** Expostos os comandos `get_audio_sessions`, `set_app_volume` e `set_app_mute` registrados no `AppState` de Tauri.
 * **Consequência:** 5 testes unitários dedicados em `crates/open-boom-wasapi/tests/session_manager_tests.rs` e teste de integração em `src-tauri/src/lib.rs`, elevando o total do workspace para 146 testes Cargo verdes com zero avisos.
 
+---
+
+## ADR-029: Interface do Mixer por Aplicativo em Gaveta Deslizante Fluent & Faders com Boost 150% (Story 5.2)
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Story 5.2 (FR21, FR22, UX-DR9, EXPERIENCE.md §2). O usuário necessita visualizar e regular o volume e mudo de aplicações ativas individualmente (ex.: atenuar navegador ou elevar Discord/jogo) sem sair da interface do OpenBoom nem modificar o volume master global do Windows.
+* **Decisões:**
+  1. **Componente de Gaveta Deslizante (`AppMixerDrawer.tsx`):** Projetado como gaveta com animação de slide fluida (`translate-y-0` vs `translate-y-full`), backdrop blur e paleta Fluent Dark (`surface-base/95`, `border-default`). Acesso pelo cabeçalho ("App Volumes" com ícone `Layers`) e atalho global `Ctrl + Shift + M`.
+  2. **Estrutura das Linhas de Processo (`app-mixer-row`):** Linhas de altura 44–48px com badge/ícone temático por tipo de aplicação (Spotify/Music, Discord/Headphones, Navegadores/Globe, Games/Gamepad), nome amigável do executável com tooltip, PID em fonte Cascadia Code monospace, e ponto indicador verde pulsante (`bg-meter-green animate-pulse`) quando a sessão está produzindo áudio ativamente.
+  3. **Sliders de Volume Independentes de 0% a 150%:** Faders horizontais permitindo atenuação e boost de software até +3.5 dB (150%), com leitura dinâmica de porcentagem e dB perceptual (`volumeToDbString`), snap magnético instantâneo para 100% (0.0 dB) via duplo clique, e atenuação visual / bloqueio quando mutado.
+  4. **Controle de Muto Desacoplado:** Botão de alternância de mudo com ícone dinâmico (`Volume2` vs `VolumeX` em vermelho) e feedback imediato otimista, despachando `set_app_mute` via IPC assíncrono.
+  5. **Polling Otimizado e Tratamento de Estado Vazio:** Quando a gaveta está aberta, o frontend executa polling a cada 1000ms para descobrir novos processos e podar processos encerrados, exibindo mensagem ilustrada limpa quando nenhum fluxo de áudio está ativo.
+* **Consequência:** 9 testes unitários de renderização, decibéis, faders e acessibilidade em `src-ui/src/test/AppMixer.test.tsx`, elevando a suíte de testes de UI para 65 testes verdes e mantendo 146 testes Cargo no backend.
+
+
 
 
 

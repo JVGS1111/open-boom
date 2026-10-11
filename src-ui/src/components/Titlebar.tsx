@@ -1,5 +1,5 @@
 import React from "react";
-import { Sliders, Volume2, VolumeX, Minus, X, Settings } from "lucide-react";
+import { Sliders, Volume2, VolumeX, Minus, X, Settings, Layers } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MasterPowerSwitch } from "./MasterPowerSwitch";
 import { DeviceSelector, AudioDeviceInfo } from "./DeviceSelector";
@@ -15,6 +15,8 @@ interface TitlebarProps {
   activeDeviceId: string;
   onSelectDevice: (deviceId: string) => void;
   onOpenSettings?: () => void;
+  onToggleAppMixer?: () => void;
+  isAppMixerOpen?: boolean;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
@@ -28,6 +30,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   activeDeviceId,
   onSelectDevice,
   onOpenSettings,
+  onToggleAppMixer,
+  isAppMixerOpen,
 }) => {
   const handleMinimize = async () => {
     try {
@@ -152,6 +156,22 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 
       {/* Window Action Controls */}
       <div className="flex items-center gap-1">
+        {/* Per-Application Stream Mixer Drawer Launcher (UX-DR9, EXPERIENCE.md §2) */}
+        <button
+          type="button"
+          onClick={onToggleAppMixer}
+          className={`w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer ${
+            isAppMixerOpen
+              ? "text-accent-cyan bg-accent-cyan/15 border border-accent-cyan/40 shadow-cyan-glow-sm"
+              : "text-text-secondary hover:text-text-primary hover:bg-surface-card border border-transparent"
+          }`}
+          title="App Volumes (Ctrl + Shift + M)"
+          aria-label="Application Stream Mixer"
+          aria-expanded={isAppMixerOpen}
+        >
+          <Layers className="w-4 h-4" />
+        </button>
+
         <button
           type="button"
           onClick={onOpenSettings}

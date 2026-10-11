@@ -30,6 +30,11 @@ const testFiles = [
     entry: path.join(__dirname, "EffectsRack.test.tsx"),
     runnerName: "runEffectsRackTests",
   },
+  {
+    name: "Per-Application Mixer Drawer & Process Faders Test Suite",
+    entry: path.join(__dirname, "AppMixer.test.tsx"),
+    runnerName: "runAppMixerTests",
+  },
 ];
 
 async function main() {

@@ -13,6 +13,7 @@ import { SettingsModal } from "./components/SettingsModal";
 import { SoundstageConfiguratorModal } from "./components/SoundstageConfiguratorModal";
 import { EqualizerStudioDrawer } from "./components/EqualizerStudioDrawer";
 import { AutoEqPopover, AutoEqProfileSummary } from "./components/AutoEqPopover";
+import { AppMixerDrawer, ProcessAudioSession } from "./components/AppMixerDrawer";
 import {
   PresetSelectorPopover,
   EqPreset,
@@ -71,6 +72,32 @@ export const App: React.FC = () => {
   // AutoEq Headphone Profile Calibration State (Story 3.3 & 3.4, UX-DR8, FR15, AD-6)
   const [isAutoEqOpen, setIsAutoEqOpen] = useState(false);
   const [activeAutoEqProfile, setActiveAutoEqProfile] = useState<AutoEqProfileSummary | null>(null);
+
+  // Application Stream Mixer State (Story 5.2, UX-DR9, FR21, FR22)
+  const [isAppMixerOpen, setIsAppMixerOpen] = useState(false);
+  const [audioSessions, setAudioSessions] = useState<ProcessAudioSession[]>([
+    {
+      process_id: 1001,
+      name: "spotify.exe",
+      volume: 0.85,
+      is_muted: false,
+      is_active: true,
+    },
+    {
+      process_id: 1002,
+      name: "discord.exe",
+      volume: 0.70,
+      is_muted: false,
+      is_active: true,
+    },
+    {
+      process_id: 1003,
+      name: "chrome.exe",
+      volume: 1.00,
+      is_muted: false,
+      is_active: false,
+    },
+  ]);
 
   // Sweeteners Rack State (Epic 4, UX-DR6)
   const [effectModules, setEffectModules] = useState<EffectModule[]>([
@@ -873,6 +900,54 @@ export const App: React.FC = () => {
     setNotification("AutoEq profile cleared. EQ restored to flat.");
   };
 
+  // Per-Application Stream Mixer Handlers (Story 5.2, UX-DR9, FR21, FR22)
+  const fetchAudioSessions = async () => {
+    try {
+      const list = await invoke<ProcessAudioSession[]>("get_audio_sessions");
+      if (Array.isArray(list)) {
+        setAudioSessions(list);
+      }
+    } catch {
+      // Browser preview fallback maintains mock sessions
+    }
+  };
+
+  const handleAppVolumeChange = async (processId: number, newVol: number) => {
+    const clamped = Math.max(0, Math.min(1.5, newVol));
+    setAudioSessions((prev) =>
+      prev.map((s) => (s.process_id === processId ? { ...s, volume: clamped } : s))
+    );
+    try {
+      await invoke("set_app_volume", { processId, volume: clamped });
+    } catch {
+      // Keep optimistic update in UI
+    }
+  };
+
+  const handleAppToggleMute = async (processId: number, currentMuted: boolean) => {
+    const nextMuted = !currentMuted;
+    setAudioSessions((prev) =>
+      prev.map((s) => (s.process_id === processId ? { ...s, is_muted: nextMuted } : s))
+    );
+    try {
+      await invoke("set_app_mute", { processId, mute: nextMuted });
+    } catch {
+      // Keep optimistic update in UI
+    }
+  };
+
+  // Poll active audio sessions whenever mixer drawer is open
+  useEffect(() => {
+    if (!isAppMixerOpen) return;
+
+    fetchAudioSessions();
+    const interval = setInterval(() => {
+      fetchAudioSessions();
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isAppMixerOpen]);
+
   // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -918,6 +993,18 @@ export const App: React.FC = () => {
         e.preventDefault();
         if (e.repeat) return;
         setIsEqDrawerOpen((prev) => !prev);
+      }
+
+      // Ctrl + Shift + M: Toggle Application Stream Mixer Drawer (Story 5.2, UX-DR9)
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "m" || e.key === "M" || e.code === "KeyM")
+      ) {
+        if (isInputFocused) return;
+        e.preventDefault();
+        if (e.repeat) return;
+        setIsAppMixerOpen((prev) => !prev);
       }
     };
 
@@ -1031,6 +1118,8 @@ export const App: React.FC = () => {
         activeDeviceId={activeDeviceId}
         onSelectDevice={handleSelectDevice}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onToggleAppMixer={() => setIsAppMixerOpen((prev) => !prev)}
+        isAppMixerOpen={isAppMixerOpen}
       />
 
       {/* 2. Main Studio Content Area */}
@@ -1085,6 +1174,16 @@ export const App: React.FC = () => {
           preampOffsetDb={preampOffsetDb}
           activeAutoEqName={activeAutoEqProfile ? activeAutoEqProfile.name : undefined}
           onOpenAutoEq={() => setIsAutoEqOpen(true)}
+        />
+
+        {/* Application Stream Mixer Drawer (Story 5.2, UX-DR9) */}
+        <AppMixerDrawer
+          isOpen={isAppMixerOpen}
+          onClose={() => setIsAppMixerOpen(false)}
+          sessions={audioSessions}
+          onVolumeChange={handleAppVolumeChange}
+          onToggleMute={handleAppToggleMute}
+          onRefresh={fetchAudioSessions}
         />
       </main>
 

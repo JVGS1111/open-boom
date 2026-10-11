@@ -72,6 +72,6 @@ development_status:
 
   epic-5: in-progress
   5-1-windows-core-audio-session-manager-dedicated-com-mta-thread: done
-  5-2-per-application-mixer-drawer-ui-individual-process-faders: backlog
+  5-2-per-application-mixer-drawer-ui-individual-process-faders: done
   5-3-persistent-application-volume-preferences-automatic-session: backlog
   epic-5-retrospective: optional
