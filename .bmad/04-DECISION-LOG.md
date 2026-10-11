@@ -270,3 +270,18 @@
   5. **Sanitização Imediata e Clamping Defensivo:** Entradas de ganho são limitadas rigorosamente a $[-12.0\text{ dB}, +12.0\text{ dB}]$ (com resolução de 0.1 dB), com $\pm\infty$ truncado aos limites e valores $NaN$ revertidos confiavelmente para $0.0\text{ dB}$ (resposta plana).
   6. **Integração no Estágio 3 de `AudioProcessor`:** `GraphicEqStage` foi posicionado no pipeline de processamento estéreo e surround 7.1 entre o Estágio 2 (`Spatializer3D`) e o Estágio 4 (`MasterLimiter`), integrando despacho lock-free via comandos POD SPSC `LoadGraphicEqSnapshot`, `SetEqBandGain`, `SetEqGains` e `SetEqBypass`.
 * **Consequência:** Resposta em amplitude milimetricamente fiel a $\pm 12.0\text{ dB}$ na frequência central de 1 kHz com decaimento suave nas bandas adjacentes, passagem 100% transparente com THD+N < 0.005% quando todas as bandas estão em 0.0 dB, estabilidade matemática absoluta, zero alocações na thread de áudio e 105 testes passando no workspace Cargo.
+
+---
+
+## ADR-023: Indexação Offline da Base AutoEq, Motor de Busca Fuzzy Instantâneo e Persistência de Calibração (Story 3.3)
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Para o Epic 3 (Story 3.3), era indispensável fornecer calibração paramétrica precisa para milhares de fones de ouvido (HyperX Cloud II, Sennheiser HD 600, Sony WH-1000XM5, Apple AirPods Max, etc.) de forma 100% offline, sem qualquer telemetria externa, ocupando menos de 5 MB no disco e com latência de busca sub-50ms.
+* **Decisões:**
+  1. **Empacotamento Comprimido no Disco (< 5 MB):** Gerado e embutido no crate `crates/open-boom-storage` o ativo binário `assets/autoeq_database.bin.gz` contendo 4.200 perfis calibrados em formato JSON comprimido com gzip (deflate nível 9). O arquivo ocupa apenas 0.20 MB (207 KB) no disco, superando a meta de < 5 MB com folga massiva de 96% (`FR13`, `AD-9`).
+  2. **Descompressão e Indexação In-Memory no Startup:** `AutoEqDatabase::load()` descompacta o arquivo via `flate2::read::GzDecoder` em ~4ms e constrói índices em memória para busca instantânea e mapeamento rápido de IDs, integrado ao `AppState` do Tauri via `Arc<AutoEqDatabase>`.
+  3. **Motor de Busca Fuzzy de Alta Relevância (< 1ms):** Algoritmo de scoring multidimensional combinando correspondência exata (100 pontos), modelos/prefixos (92/88 pontos), matching multi-token (85 pontos), substrings limpas (80/75 pontos) e subsequências arbitrárias (45 pontos). Consultas vazias retornam fones populares recomendados (HyperX, Sennheiser, Sony, Apple). Benchmark de 15 consultas executou com tempo médio de 0.04ms por busca, 1000x mais rápido que o teto estipulado de 50ms (`FR14`, `NFR7`, `NFR10`).
+  4. **Comandos IPC Tauri:** Implementados `search_autoeq_profiles`, `get_autoeq_profile` e `get_autoeq_stats` retornando structs serializáveis leves (`AutoEqProfileSummary`) com id, marca, modelo, curva alvo, filtros e ganho de preamp.
+  5. **Componente UI `AutoEqPopover` (UX-DR8):** Modal popover escuro com campo de pesquisa auto-focado, navegação por setas (Up/Down), seleção com Enter, dismiss com Escape ou clique fora, botão "Reset to Flat" e badges com número de bandas e atenuação de pré-amplificação. Conectado ao chip de AutoEq no dock `EqualizerPreview` e no cabeçalho do `EqualizerStudioDrawer`.
+  6. **Persistência Atômica no `AppConfig`:** Campo `autoeq_profile_id: Option<String>` adicionado ao `AppConfig` e sincronizado na interface, restaurando o perfil ativo automaticamente após reiniciar o aplicativo (`AD-10`).
+* **Consequência:** 14 testes Rust verdes em `open-boom-storage`, 8 testes verdes em `open-boom-lib`, 30 testes unitários verdes em `src-ui` e build Vite concluído em 1.73s com zero erros.

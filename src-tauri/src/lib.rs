@@ -2,7 +2,10 @@
 
 use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot, GRAPHIC_EQ_BANDS};
-use open_boom_storage::{AppConfig, PresetStore, StartupManager};
+use open_boom_storage::{
+    AppConfig, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, PresetStore,
+    StartupManager,
+};
 use open_boom_wasapi::{
     AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig,
     StreamPumpConfig,
@@ -24,6 +27,7 @@ pub struct AppState {
     pub coordinator: Arc<Mutex<AudioEngineCoordinator>>,
     pub store: PresetStore,
     pub startup: StartupManager,
+    pub autoeq_db: Arc<AutoEqDatabase>,
     pub pump: Arc<Mutex<Option<AudioStreamPump>>>,
     pub active_physical_device_id: Arc<Mutex<Option<String>>>,
     pub virtual_device_id: Arc<Mutex<Option<String>>>,
@@ -89,12 +93,15 @@ impl AppState {
             }
         }
 
+        let autoeq_db = Arc::new(AutoEqDatabase::default());
+
         Self {
             dispatcher,
             command_queue,
             coordinator,
             store,
             startup,
+            autoeq_db,
             pump,
             active_physical_device_id: Arc::new(Mutex::new(physical_id)),
             virtual_device_id: Arc::new(Mutex::new(virtual_id)),
@@ -319,6 +326,27 @@ fn set_launch_on_startup(enabled: bool, state: State<'_, AppState>) -> Result<()
     }
 }
 
+#[tauri::command]
+fn search_autoeq_profiles(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AutoEqProfileSummary>, String> {
+    Ok(state.autoeq_db.search(&query))
+}
+
+#[tauri::command]
+fn get_autoeq_profile(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<AutoEqProfile>, String> {
+    Ok(state.autoeq_db.get_profile(&id).cloned())
+}
+
+#[tauri::command]
+fn get_autoeq_stats(state: State<'_, AppState>) -> Result<AutoEqStats, String> {
+    Ok(state.autoeq_db.stats())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new_runtime();
@@ -489,6 +517,9 @@ pub fn run() {
             save_app_config,
             get_launch_on_startup,
             set_launch_on_startup,
+            search_autoeq_profiles,
+            get_autoeq_profile,
+            get_autoeq_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -730,6 +761,33 @@ mod tests {
         assert!(!state.startup.is_enabled().expect("disabled"));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_autoeq_commands_integration() {
+        let state = AppState::new();
+
+        // 1. Stats command
+        let stats = state.autoeq_db.stats();
+        assert!(stats.total_profiles >= 4000);
+        assert!(stats.total_brands >= 30);
+
+        // 2. Empty search -> top recommendations
+        let popular = state.autoeq_db.search("");
+        assert!(!popular.is_empty());
+        assert!(popular.iter().any(|p| p.brand == "HyperX"));
+
+        // 3. Search query
+        let query_res = state.autoeq_db.search("HyperX Cloud II");
+        assert!(!query_res.is_empty());
+        let top = &query_res[0];
+        assert_eq!(top.brand, "HyperX");
+        assert_eq!(top.score, 100);
+
+        // 4. Get profile details
+        let profile = state.autoeq_db.get_profile(&top.id).expect("profile exists");
+        assert_eq!(profile.name, "HyperX Cloud II");
+        assert!(!profile.filters.is_empty());
     }
 }
 

@@ -12,6 +12,7 @@ import { AudioDeviceInfo } from "./components/DeviceSelector";
 import { SettingsModal } from "./components/SettingsModal";
 import { SoundstageConfiguratorModal } from "./components/SoundstageConfiguratorModal";
 import { EqualizerStudioDrawer } from "./components/EqualizerStudioDrawer";
+import { AutoEqPopover, AutoEqProfileSummary } from "./components/AutoEqPopover";
 
 export const App: React.FC = () => {
   // Master Engine State
@@ -44,6 +45,10 @@ export const App: React.FC = () => {
   const [preampOffsetDb] = useState(-3.0);
   const [isEqDrawerOpen, setIsEqDrawerOpen] = useState(false);
   const [eqMode, setEqMode] = useState<"10" | "31">("10");
+
+  // AutoEq Headphone Profile Calibration State (Story 3.3, UX-DR8)
+  const [isAutoEqOpen, setIsAutoEqOpen] = useState(false);
+  const [activeAutoEqProfile, setActiveAutoEqProfile] = useState<AutoEqProfileSummary | null>(null);
 
   // Sweeteners Rack State
   const [effectModules, setEffectModules] = useState<EffectModule[]>([
@@ -137,9 +142,38 @@ export const App: React.FC = () => {
           speaker_azimuths_deg?: number[];
           bypass_active: boolean;
           launch_on_startup: boolean;
+          autoeq_profile_id?: string | null;
         }>("load_app_config");
 
         if (config) {
+          if (config.autoeq_profile_id) {
+            try {
+              const p = await invoke<{
+                id: string;
+                brand: string;
+                model: string;
+                name: string;
+                target_curve: string;
+                preamp_gain_db: number;
+                filters: unknown[];
+              } | null>("get_autoeq_profile", { id: config.autoeq_profile_id });
+              if (p) {
+                setActiveAutoEqProfile({
+                  id: p.id,
+                  brand: p.brand,
+                  model: p.model,
+                  name: p.name,
+                  target_curve: p.target_curve,
+                  preamp_gain_db: p.preamp_gain_db,
+                  filter_count: p.filters.length,
+                  score: 100,
+                });
+              }
+            } catch {
+              // Graceful fallback
+            }
+          }
+
           setMasterPower(config.master_power);
           dispatchCommand({ SetMasterPower: config.master_power });
 
@@ -326,6 +360,7 @@ export const App: React.FC = () => {
         speaker_azimuths_deg: speakerAzimuthsDeg,
         bypass_active: bypassActive,
         launch_on_startup: launchOnStartup,
+        autoeq_profile_id: activeAutoEqProfile?.id ?? null,
       };
 
       try {
@@ -354,6 +389,7 @@ export const App: React.FC = () => {
     bypassActive,
     launchOnStartup,
     eqGains,
+    activeAutoEqProfile,
   ]);
 
   const handleTogglePower = () => {
@@ -544,6 +580,17 @@ export const App: React.FC = () => {
     });
   };
 
+  // AutoEq Profile Selection Handlers (Story 3.3, UX-DR8)
+  const handleSelectAutoEqProfile = (profile: AutoEqProfileSummary) => {
+    setActiveAutoEqProfile(profile);
+    setIsAutoEqOpen(false);
+  };
+
+  const handleClearAutoEqProfile = () => {
+    setActiveAutoEqProfile(null);
+    setIsAutoEqOpen(false);
+  };
+
   // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -661,6 +708,15 @@ export const App: React.FC = () => {
         onResetAll={handleResetAllSpeakers}
       />
 
+      {/* AutoEq Headphone Profile Search Popover (Story 3.3, UX-DR8) */}
+      <AutoEqPopover
+        isOpen={isAutoEqOpen}
+        onClose={() => setIsAutoEqOpen(false)}
+        activeProfileId={activeAutoEqProfile?.id}
+        onSelectProfile={handleSelectAutoEqProfile}
+        onClearProfile={handleClearAutoEqProfile}
+      />
+
       {/* Fallback Notification Banner */}
       <NotificationBanner
         message={notification}
@@ -702,6 +758,8 @@ export const App: React.FC = () => {
               bands={eqGains}
               preampOffsetDb={preampOffsetDb}
               onExpand={() => setIsEqDrawerOpen(true)}
+              activeAutoEqName={activeAutoEqProfile ? activeAutoEqProfile.name : undefined}
+              onOpenAutoEq={() => setIsAutoEqOpen(true)}
             />
           </div>
           <div className="flex-1">
@@ -724,6 +782,8 @@ export const App: React.FC = () => {
           onResetAll={handleResetEqGains}
           activePreset={activeEqPreset}
           preampOffsetDb={preampOffsetDb}
+          activeAutoEqName={activeAutoEqProfile ? activeAutoEqProfile.name : undefined}
+          onOpenAutoEq={() => setIsAutoEqOpen(true)}
         />
       </main>
 

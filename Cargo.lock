@@ -2109,6 +2109,7 @@ dependencies = [
 name = "open-boom-storage"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "open-boom-core",
  "serde",
  "serde_json",

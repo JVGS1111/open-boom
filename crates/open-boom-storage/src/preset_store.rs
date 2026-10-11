@@ -27,6 +27,8 @@ pub struct AppConfig {
     pub speaker_azimuths_deg: [f32; SURROUND_7_1_CHANNELS],
     pub bypass_active: bool,
     pub launch_on_startup: bool,
+    #[serde(default)]
+    pub autoeq_profile_id: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -49,6 +51,7 @@ impl Default for AppConfig {
             speaker_azimuths_deg: ITU_R_7_1_DEFAULT_AZIMUTHS,
             bypass_active: false,
             launch_on_startup: false,
+            autoeq_profile_id: None,
         }
     }
 }

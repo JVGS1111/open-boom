@@ -18,6 +18,7 @@ fn test_app_config_default_values() {
     assert!(cfg.surround_enabled);
     assert!(!cfg.bypass_active);
     assert!(!cfg.launch_on_startup);
+    assert_eq!(cfg.autoeq_profile_id, None);
 }
 
 #[test]
@@ -41,6 +42,7 @@ fn test_atomic_config_save_and_load() {
     custom_cfg.window_y = Some(200);
     custom_cfg.bypass_active = true;
     custom_cfg.launch_on_startup = true;
+    custom_cfg.autoeq_profile_id = Some("hyperx-cloud-ii-oratory1990".to_string());
 
     store.save_config(&custom_cfg).expect("save config");
 
@@ -53,6 +55,7 @@ fn test_atomic_config_save_and_load() {
     // Reload and assert equality
     let reloaded = store.load_config().expect("reload config");
     assert_eq!(reloaded, custom_cfg);
+    assert_eq!(reloaded.autoeq_profile_id, Some("hyperx-cloud-ii-oratory1990".to_string()));
 
     // Cleanup
     let _ = fs::remove_dir_all(&temp_dir);

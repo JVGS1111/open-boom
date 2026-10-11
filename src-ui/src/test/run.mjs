@@ -4,59 +4,78 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const testFile = path.join(__dirname, "EqualizerStudioDrawer.test.tsx");
-const tempOut = path.join(__dirname, ".test-bundle.mjs");
+const testFiles = [
+  {
+    name: "EqualizerStudioDrawer & Spline Curve Test Suite",
+    entry: path.join(__dirname, "EqualizerStudioDrawer.test.tsx"),
+    runnerName: "runEqualizerStudioDrawerTests",
+  },
+  {
+    name: "AutoEqPopover & Offline Headphone Search Test Suite",
+    entry: path.join(__dirname, "AutoEqPopover.test.tsx"),
+    runnerName: "runAutoEqPopoverTests",
+  },
+];
 
 async function main() {
-  try {
-    await esbuild.build({
-      entryPoints: [testFile],
-      outfile: tempOut,
-      bundle: true,
-      format: "esm",
-      platform: "node",
-      external: [
-        "react",
-        "react-dom",
-        "react-dom/server",
-        "lucide-react",
-        "@tauri-apps/api",
-        "@tauri-apps/api/*",
-      ],
-    });
+  let totalPassed = 0;
+  let totalFailed = 0;
 
-    const mod = await import(`file://${tempOut.replace(/\\/g, "/")}`);
-    const results = mod.runEqualizerStudioDrawerTests();
+  for (const suite of testFiles) {
+    const tempOut = path.join(__dirname, `.test-${path.basename(suite.entry, ".tsx")}.mjs`);
+    try {
+      await esbuild.build({
+        entryPoints: [suite.entry],
+        outfile: tempOut,
+        bundle: true,
+        format: "esm",
+        platform: "node",
+        external: [
+          "react",
+          "react-dom",
+          "react-dom/server",
+          "lucide-react",
+          "@tauri-apps/api",
+          "@tauri-apps/api/*",
+        ],
+      });
 
-    console.log("\n=======================================================");
-    console.log(" EqualizerStudioDrawer & Spline Curve Test Suite");
-    console.log("=======================================================\n");
+      const mod = await import(`file://${tempOut.replace(/\\/g, "/")}`);
+      const results = mod[suite.runnerName]();
 
-    let passed = 0;
-    let failed = 0;
+      console.log("\n=======================================================");
+      console.log(` ${suite.name}`);
+      console.log("=======================================================\n");
 
-    results.forEach((r) => {
-      if (r.passed) {
-        console.log(`  ✓ ${r.name}`);
-        passed++;
-      } else {
-        console.error(`  ✗ ${r.name}`);
-        console.error(`    Error: ${r.error}`);
-        failed++;
+      let suitePassed = 0;
+      let suiteFailed = 0;
+
+      results.forEach((r) => {
+        if (r.passed) {
+          console.log(`  ✓ ${r.name}`);
+          suitePassed++;
+          totalPassed++;
+        } else {
+          console.error(`  ✗ ${r.name}`);
+          console.error(`    Error: ${r.error}`);
+          suiteFailed++;
+          totalFailed++;
+        }
+      });
+
+      console.log("\n-------------------------------------------------------");
+      console.log(` Suite Summary: ${suitePassed} passed, ${suiteFailed} failed (${results.length} total)`);
+      console.log("=======================================================\n");
+    } finally {
+      if (fs.existsSync(tempOut)) {
+        fs.unlinkSync(tempOut);
       }
-    });
-
-    console.log("\n-------------------------------------------------------");
-    console.log(` Summary: ${passed} passed, ${failed} failed (${results.length} total)`);
-    console.log("=======================================================\n");
-
-    if (failed > 0) {
-      process.exit(1);
     }
-  } finally {
-    if (fs.existsSync(tempOut)) {
-      fs.unlinkSync(tempOut);
-    }
+  }
+
+  console.log(`\n>>> OVERALL TEST RESULTS: ${totalPassed} passed, ${totalFailed} failed <<<\n`);
+  if (totalFailed > 0) {
+    process.exit(1);
   }
 }
 

@@ -6,6 +6,8 @@ export interface EqualizerPreviewProps {
   bands: number[];
   preampOffsetDb: number;
   onExpand?: () => void;
+  activeAutoEqName?: string;
+  onOpenAutoEq?: () => void;
 }
 
 export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
@@ -13,6 +15,8 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
   bands,
   preampOffsetDb,
   onExpand,
+  activeAutoEqName,
+  onOpenAutoEq,
 }) => {
   return (
     <div className="bg-surface-card border border-border-subtle rounded-lg p-3.5 flex flex-col justify-between h-full relative">
@@ -79,10 +83,20 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
       </div>
 
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-subtle/60 text-[10px] text-text-muted">
-        <div className="flex items-center gap-1">
-          <Activity className="w-3 h-3 text-accent-cyan" />
-          <span>AutoEq: Harman Over-Ear Target</span>
-        </div>
+        <button
+          type="button"
+          onClick={onOpenAutoEq}
+          className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-surface-base text-text-muted hover:text-accent-cyan border border-transparent hover:border-accent-blue/30 transition-all cursor-pointer group"
+          title="Search 4,000+ AutoEq Headphone Profiles"
+        >
+          <Activity className="w-3 h-3 text-accent-cyan group-hover:scale-110 transition-transform" />
+          <span>
+            AutoEq:{" "}
+            <strong className="font-semibold text-text-primary group-hover:text-accent-cyan">
+              {activeAutoEqName || "Select Headphone"}
+            </strong>
+          </span>
+        </button>
         <span className="font-mono">31 BANDS / DF-II</span>
       </div>
     </div>

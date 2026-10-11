@@ -57,8 +57,8 @@ development_status:
   epic-3: in-progress
   3-1-31-band-biquad-filter-engine-direct-form-ii-transposed-topol: done
   3-2-dual-mode-equalizer-studio-drawer-10-band-vs-31-band-spline: done
-  3-3-offline-autoeq-headphone-database-indexing-instant-fuzzy-sea: backlog
-  3-4-decoupled-parametric-autoeq-stage-auto-gain-preamp-compensat: backlog
+  3-3-offline-autoeq-headphone-database-indexing-instant-fuzzy-sea: done
+  3-4-decoupled-parametric-autoeq-stage-auto-gain-preamp-compensat: ready-for-dev
   3-5-genre-factory-presets-custom-preset-persistence: backlog
   epic-3-retrospective: optional
 

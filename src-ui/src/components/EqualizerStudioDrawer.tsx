@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { SlidersHorizontal, RotateCcw, X, Check, Activity } from "lucide-react";
+import { SlidersHorizontal, RotateCcw, X, Check, Activity, Headphones } from "lucide-react";
 
 export const ISO_31_FREQUENCIES: number[] = [
   20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
@@ -535,6 +535,8 @@ export interface EqualizerStudioDrawerProps {
   onResetAll: () => void;
   activePreset?: string;
   preampOffsetDb?: number;
+  activeAutoEqName?: string;
+  onOpenAutoEq?: () => void;
 }
 
 export const EqualizerStudioDrawer: React.FC<EqualizerStudioDrawerProps> = ({
@@ -547,6 +549,8 @@ export const EqualizerStudioDrawer: React.FC<EqualizerStudioDrawerProps> = ({
   onResetAll,
   activePreset = "Harman Acoustic",
   preampOffsetDb = 0.0,
+  activeAutoEqName,
+  onOpenAutoEq,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -629,6 +633,15 @@ export const EqualizerStudioDrawer: React.FC<EqualizerStudioDrawerProps> = ({
               <span className="text-[10px] font-mono text-accent-cyan bg-surface-base px-2 py-0.5 rounded border border-border-subtle">
                 {activePreset}
               </span>
+              <button
+                type="button"
+                onClick={onOpenAutoEq}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-accent-blue/15 hover:bg-accent-blue/25 text-accent-cyan hover:text-white border border-accent-blue/30 transition-all cursor-pointer group"
+                title="Search and select calibrated AutoEq headphone profile"
+              >
+                <Headphones className="w-3 h-3 text-accent-cyan group-hover:scale-110 transition-transform" />
+                <span>AutoEq: {activeAutoEqName || "Select Headphone"}</span>
+              </button>
               {preampOffsetDb !== 0.0 && (
                 <span className="text-[10px] font-mono text-text-muted">
                   Preamp: {preampOffsetDb.toFixed(1)} dB
