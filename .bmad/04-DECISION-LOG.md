@@ -397,6 +397,29 @@
   5. **Polling Otimizado e Tratamento de Estado Vazio:** Quando a gaveta está aberta, o frontend executa polling a cada 1000ms para descobrir novos processos e podar processos encerrados, exibindo mensagem ilustrada limpa quando nenhum fluxo de áudio está ativo.
 * **Consequência:** 9 testes unitários de renderização, decibéis, faders e acessibilidade em `src-ui/src/test/AppMixer.test.tsx`, elevando a suíte de testes de UI para 65 testes verdes e mantendo 146 testes Cargo no backend.
 
+---
+
+## ADR-030: Persistência Atômica de Perfis de Volume por Aplicativo e Restauração Automática de Sessões (Story 5.3)
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Story 5.3 (FR23, UJ-4, AD-10). Quando os aplicativos são fechados ou reiniciados (ou após reinicializações do Windows), o Windows Core Audio perde ou redefine os níveis personalizados de volume de sessão. O usuário espera que o equilíbrio ajustado entre Spotify, Discord, navegadores e jogos seja memorizado e restaurado de maneira transparente e automática sempre que os processos voltarem a reproduzir áudio.
+* **Decisões:**
+  1. **Modelo de Dados e Armazenamento Atômico (`crates/open-boom-storage`):**
+     - Estrutura `AppVolumeProfile { process_name, volume, is_muted }` com serialização `serde`.
+     - Persistência em `%APPDATA%\OpenBoom\app_volumes.json` utilizando arquivos temporários de staging (`app_volumes.<pid>.<seq>.tmp`) e substituição atômica via `fs::rename` (`MoveFileExW` no Windows), garantindo que quedas repentinas de energia ou encerramentos abruptos jamais corrompam as preferências (`AD-10`).
+     - Normalização insensível a maiúsculas/minúsculas para identificação inequívoca de executáveis (ex.: `Spotify.exe` e `spotify.exe`).
+     - Recuperação graciosa contra arquivos corrompidos ou inexistentes no disco, retornando mapa vazio sem panics ou interrupção do sistema.
+  2. **Cache e Gancho de Restauração no SessionManager (`crates/open-boom-wasapi`):**
+     - O `SessionManager` mantém um registro de perfis persistidos (`stored_profiles`) e um conjunto de PIDs restaurados (`restored_pids`).
+     - Durante a enumeração (`enumerate_sessions`), qualquer nova sessão que coincida com um perfil memorizado tem seu volume e mudo restaurados automaticamente na thread MTA via `ISimpleAudioVolume::SetMasterVolume` e `SetMute`.
+     - Ciclo de vida de processos: PIDs finalizados são podados automaticamente de `restored_pids`, garantindo que, quando o aplicativo for reaberto e iniciar novo fluxo de áudio (seja com novo PID ou PID reciclado), suas preferências sejam reaplicadas imediatamente (`FR23`, `UJ-4`).
+     - Mutações via `set_process_volume` e `set_process_mute` atualizam o cache de perfis e sincronizam atomicamente no disco.
+  3. **Comandos IPC Tauri e Integração de Frontend:**
+     - Comandos `get_app_volume_profiles` e `reset_app_volume_profile` expostos via Tauri IPC.
+     - `AppMixerDrawer` exibe botão de restauração/reset rápido para 100% em aplicações com customizações ativas e nota informativa no rodapé.
+* **Consequência:** 4 novos testes unitários em `crates/open-boom-storage`, 1 novo teste de restauração em `crates/open-boom-wasapi`, 1 teste de integração no Tauri e 2 novos testes no frontend React/Vite. Total de 174 testes Cargo no backend e 67 testes no frontend UI verdes com 100% de sucesso. Conclusão formal do Epic 5.
+
+
 
 
 

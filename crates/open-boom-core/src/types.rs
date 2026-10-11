@@ -286,6 +286,25 @@ impl ProcessAudioSession {
     }
 }
 
+/// Persisted volume preference profile for a specific application executable.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct AppVolumeProfile {
+    pub process_name: String,
+    pub volume: f32,
+    pub is_muted: bool,
+}
+
+impl AppVolumeProfile {
+    pub fn new(process_name: impl Into<String>, volume: f32, is_muted: bool) -> Self {
+        Self {
+            process_name: process_name.into(),
+            volume: volume.clamp(0.0, 1.5),
+            is_muted,
+        }
+    }
+}
+
 /// Engine errors conforming to the tagged Result algebra.
 #[derive(Debug, Error)]
 pub enum EngineError {

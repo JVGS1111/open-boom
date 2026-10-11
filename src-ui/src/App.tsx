@@ -936,6 +936,24 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleResetAppVolume = async (processName: string, processId: number) => {
+    try {
+      await invoke("reset_app_volume_profile", { processName });
+    } catch {
+      // Ignored in browser preview fallback
+    }
+    await handleAppVolumeChange(processId, 1.0);
+    setAudioSessions((prev) =>
+      prev.map((s) => (s.process_id === processId ? { ...s, is_muted: false } : s))
+    );
+    try {
+      await invoke("set_app_mute", { processId, mute: false });
+    } catch {
+      // Ignored in browser preview fallback
+    }
+    setNotification(`Reset ${processName} volume to default 100% (0.0 dB)`);
+  };
+
   // Poll active audio sessions whenever mixer drawer is open
   useEffect(() => {
     if (!isAppMixerOpen) return;
@@ -1183,6 +1201,7 @@ export const App: React.FC = () => {
           sessions={audioSessions}
           onVolumeChange={handleAppVolumeChange}
           onToggleMute={handleAppToggleMute}
+          onResetProfile={handleResetAppVolume}
           onRefresh={fetchAudioSessions}
         />
       </main>

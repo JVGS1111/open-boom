@@ -1,7 +1,11 @@
 //! Atomic JSON preset and configuration persistence in %APPDATA%/OpenBoom/.
 
-use open_boom_core::types::{GRAPHIC_EQ_BANDS, ITU_R_7_1_DEFAULT_AZIMUTHS, SURROUND_7_1_CHANNELS};
+use open_boom_core::types::{
+    GRAPHIC_EQ_BANDS, ITU_R_7_1_DEFAULT_AZIMUTHS, SURROUND_7_1_CHANNELS,
+};
+pub use open_boom_core::types::AppVolumeProfile;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -746,6 +750,133 @@ impl PresetStore {
                 );
                 Ok(AppConfig::default())
             }
+        }
+    }
+
+    /// Target path for per-application volume preferences: `%APPDATA%\OpenBoom\app_volumes.json`.
+    pub fn app_volumes_path(&self) -> PathBuf {
+        self.base_dir.join("app_volumes.json")
+    }
+
+    /// Loads per-application volume profiles from `%APPDATA%\OpenBoom\app_volumes.json`.
+    /// Returns a map keyed by lowercase executable names for case-insensitive lookup.
+    /// Recovers gracefully with an empty map if file is missing or corrupted (AD-10).
+    pub fn load_app_volumes(&self) -> io::Result<HashMap<String, AppVolumeProfile>> {
+        let target_path = self.app_volumes_path();
+        if !target_path.exists() {
+            return Ok(HashMap::new());
+        }
+
+        let content = match fs::read_to_string(&target_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to read OpenBoom app_volumes.json at {:?}: {}. Using empty profiles.",
+                    target_path, e
+                );
+                return Ok(HashMap::new());
+            }
+        };
+
+        match serde_json::from_str::<HashMap<String, AppVolumeProfile>>(&content) {
+            Ok(map) => {
+                let mut normalized = HashMap::with_capacity(map.len());
+                for (k, v) in map {
+                    normalized.insert(k.to_lowercase(), v);
+                }
+                Ok(normalized)
+            }
+            Err(_) => {
+                // Fallback attempt: if stored as an array of profiles
+                if let Ok(list) = serde_json::from_str::<Vec<AppVolumeProfile>>(&content) {
+                    let mut map = HashMap::with_capacity(list.len());
+                    for item in list {
+                        map.insert(item.process_name.to_lowercase(), item);
+                    }
+                    Ok(map)
+                } else {
+                    eprintln!(
+                        "Warning: Failed to parse OpenBoom app_volumes.json ({:?}). Falling back to empty profiles.",
+                        target_path
+                    );
+                    Ok(HashMap::new())
+                }
+            }
+        }
+    }
+
+    /// Loads per-application volume profiles as a list sorted by process name.
+    pub fn load_app_volume_list(&self) -> io::Result<Vec<AppVolumeProfile>> {
+        let map = self.load_app_volumes()?;
+        let mut list: Vec<AppVolumeProfile> = map.into_values().collect();
+        list.sort_by(|a, b| a.process_name.to_lowercase().cmp(&b.process_name.to_lowercase()));
+        Ok(list)
+    }
+
+    /// Atomically persists per-application volume profiles to `%APPDATA%\OpenBoom\app_volumes.json`
+    /// using a temporary staging file and `fs::rename` (MoveFileExW on Windows) (FR23, AD-10).
+    pub fn save_app_volumes(&self, profiles: &HashMap<String, AppVolumeProfile>) -> io::Result<()> {
+        fs::create_dir_all(&self.base_dir)?;
+        let target_path = self.app_volumes_path();
+        let seq = TMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let tmp_path = self
+            .base_dir
+            .join(format!("app_volumes.{}.{}.tmp", std::process::id(), seq));
+
+        let json = serde_json::to_string_pretty(profiles)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        if let Err(e) = fs::write(&tmp_path, json) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+
+        if let Err(e) = fs::rename(&tmp_path, &target_path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    /// Saves or updates a single application volume profile in `%APPDATA%\OpenBoom\app_volumes.json`.
+    pub fn save_app_volume_profile(&self, profile: &AppVolumeProfile) -> io::Result<()> {
+        let trimmed_name = profile.process_name.trim();
+        if trimmed_name.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Process name cannot be empty",
+            ));
+        }
+
+        let mut profiles = self.load_app_volumes()?;
+        profiles.insert(
+            trimmed_name.to_lowercase(),
+            AppVolumeProfile {
+                process_name: trimmed_name.to_string(),
+                volume: profile.volume.clamp(0.0, 1.5),
+                is_muted: profile.is_muted,
+            },
+        );
+        self.save_app_volumes(&profiles)
+    }
+
+    /// Retrieves the volume profile for a specific application executable if stored.
+    pub fn get_app_volume_profile(&self, process_name: &str) -> io::Result<Option<AppVolumeProfile>> {
+        let trimmed = process_name.trim().to_lowercase();
+        let profiles = self.load_app_volumes()?;
+        Ok(profiles.get(&trimmed).cloned())
+    }
+
+    /// Deletes a remembered volume profile for an application. Returns true if profile was present.
+    pub fn delete_app_volume_profile(&self, process_name: &str) -> io::Result<bool> {
+        let trimmed = process_name.trim().to_lowercase();
+        let mut profiles = self.load_app_volumes()?;
+        if profiles.remove(&trimmed).is_some() {
+            self.save_app_volumes(&profiles)?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 }

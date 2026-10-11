@@ -5,8 +5,8 @@ use open_boom_core::types::{
     AudioCommand, AudioDeviceInfo, ProcessAudioSession, TelemetrySnapshot, GRAPHIC_EQ_BANDS,
 };
 use open_boom_storage::{
-    AppConfig, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, EqPreset,
-    PresetStore, StartupManager,
+    AppConfig, AppVolumeProfile, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats,
+    EqPreset, PresetStore, StartupManager,
 };
 use open_boom_wasapi::{
     AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig,
@@ -98,7 +98,11 @@ impl AppState {
         }
 
         let autoeq_db = Arc::new(AutoEqDatabase::default());
-        let session_manager = Arc::new(Mutex::new(SessionManager::with_synthetic_fallback(true)));
+        let mut session_mgr_instance = SessionManager::with_synthetic_fallback(true);
+        if let Ok(profiles) = store.load_app_volumes() {
+            session_mgr_instance.register_stored_profiles(profiles);
+        }
+        let session_manager = Arc::new(Mutex::new(session_mgr_instance));
 
         Self {
             dispatcher,
@@ -475,13 +479,46 @@ fn get_audio_sessions(state: State<'_, AppState>) -> Result<Vec<ProcessAudioSess
 #[tauri::command]
 fn set_app_volume(process_id: u32, volume: f32, state: State<'_, AppState>) -> Result<(), String> {
     let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
-    mgr.set_process_volume(process_id, volume).map_err(|e| e.to_string())
+    mgr.set_process_volume(process_id, volume).map_err(|e| e.to_string())?;
+    if let Some(name) = mgr.get_process_name(process_id) {
+        if let Some(profile) = mgr.get_stored_profile(&name).cloned() {
+            drop(mgr);
+            let _ = state.store.save_app_volume_profile(&profile);
+            return Ok(());
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
 fn set_app_mute(process_id: u32, mute: bool, state: State<'_, AppState>) -> Result<(), String> {
     let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
-    mgr.set_process_mute(process_id, mute).map_err(|e| e.to_string())
+    mgr.set_process_mute(process_id, mute).map_err(|e| e.to_string())?;
+    if let Some(name) = mgr.get_process_name(process_id) {
+        if let Some(profile) = mgr.get_stored_profile(&name).cloned() {
+            drop(mgr);
+            let _ = state.store.save_app_volume_profile(&profile);
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_app_volume_profiles(state: State<'_, AppState>) -> Result<Vec<AppVolumeProfile>, String> {
+    state.store.load_app_volume_list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reset_app_volume_profile(process_name: String, state: State<'_, AppState>) -> Result<bool, String> {
+    let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    let removed_from_mgr = mgr.remove_stored_profile(&process_name);
+    drop(mgr);
+    let removed_from_store = state
+        .store
+        .delete_app_volume_profile(&process_name)
+        .map_err(|e| e.to_string())?;
+    Ok(removed_from_mgr || removed_from_store)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -652,6 +689,8 @@ pub fn run() {
             get_audio_sessions,
             set_app_volume,
             set_app_mute,
+            get_app_volume_profiles,
+            reset_app_volume_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -1002,6 +1041,35 @@ mod tests {
         let updated2 = mgr.enumerate_sessions().expect("enumerate sessions");
         let session2 = updated2.iter().find(|s| s.process_id == pid).unwrap();
         assert!(session2.is_muted);
+    }
+
+    #[test]
+    fn test_app_volume_persistence_integration() {
+        let temp_dir = std::env::temp_dir().join(format!("tauri_appvol_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let store = PresetStore::new(&temp_dir);
+        let startup = StartupManager::mock();
+        let state = AppState::with_store_and_startup(store, startup);
+
+        // Save a profile
+        state
+            .store
+            .save_app_volume_profile(&AppVolumeProfile::new("spotify.exe", 0.58, false))
+            .expect("save profile");
+
+        // Verify loaded in list
+        let profiles = state.store.load_app_volume_list().expect("load profiles");
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].process_name, "spotify.exe");
+        assert!((profiles[0].volume - 0.58).abs() < 1e-4);
+
+        // Check deletion
+        let deleted = state.store.delete_app_volume_profile("spotify.exe").expect("delete profile");
+        assert!(deleted);
+        assert!(state.store.load_app_volume_list().unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

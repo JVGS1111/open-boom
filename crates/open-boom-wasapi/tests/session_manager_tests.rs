@@ -1,6 +1,6 @@
 //! Tests for SessionManager and Windows Core Audio session coordination.
 
-use open_boom_wasapi::{ProcessAudioSession, SessionManager};
+use open_boom_wasapi::{AppVolumeProfile, ProcessAudioSession, SessionManager};
 
 #[test]
 fn test_session_manager_synthetic_enumeration() {
@@ -118,3 +118,59 @@ fn test_session_manager_thread_lifecycle_and_shutdown() {
     // Dropping manager should trigger thread join and cleanly terminate without panicking
     drop(manager);
 }
+
+#[test]
+fn test_session_manager_automatic_profile_recovery() {
+    let mut manager = SessionManager::with_forced_synthetic(true);
+
+    // Register a pre-existing profile for spotify.exe (42% volume, muted)
+    manager.set_stored_profile(AppVolumeProfile::new("spotify.exe", 0.42, true));
+
+    // When enumerate_sessions is called, spotify session (PID 1001) must automatically
+    // be restored to 0.42 and is_muted: true (FR23, UJ-4)
+    let sessions = manager.enumerate_sessions().expect("enumerate sessions");
+    let spotify = sessions.iter().find(|s| s.process_id == 1001).unwrap();
+    assert!((spotify.volume - 0.42).abs() < 1e-4);
+    assert!(spotify.is_muted);
+
+    // User updates volume to 0.68 via set_process_volume
+    manager
+        .set_process_volume(1001, 0.68)
+        .expect("update spotify volume");
+    let stored = manager
+        .get_stored_profile("spotify.exe")
+        .expect("stored profile exists");
+    assert!((stored.volume - 0.68).abs() < 1e-4);
+    assert!(stored.is_muted);
+
+    // Simulate Spotify process exiting
+    manager.remove_synthetic_session(1001);
+    let sessions_after_exit = manager.enumerate_sessions().expect("enumerate after exit");
+    assert!(!sessions_after_exit.iter().any(|s| s.name == "spotify.exe"));
+
+    // Simulate Spotify restarting later with a brand-new PID (3050) and Windows default state (1.0 volume, unmuted)
+    manager.add_synthetic_session(ProcessAudioSession::new(3050, "Spotify.exe", 1.0, false, true));
+
+    // On next enumeration, the new session is matched by executable name (case-insensitive)
+    // and automatically restored to 0.68 volume and is_muted: true!
+    let sessions_reopened = manager.enumerate_sessions().expect("enumerate after restart");
+    let restored_spotify = sessions_reopened
+        .iter()
+        .find(|s| s.process_id == 3050)
+        .expect("new spotify session present");
+    assert_eq!(restored_spotify.name, "Spotify.exe");
+    assert!(
+        (restored_spotify.volume - 0.68).abs() < 1e-4,
+        "Volume must be restored to 0.68"
+    );
+    assert!(restored_spotify.is_muted, "Mute state must be restored");
+
+    // Profile query with uppercase name
+    let upper_query = manager.get_stored_profile("SPOTIFY.EXE");
+    assert!(upper_query.is_some());
+
+    // Profile deletion
+    assert!(manager.remove_stored_profile("spotify.exe"));
+    assert!(manager.get_stored_profile("spotify.exe").is_none());
+}
+

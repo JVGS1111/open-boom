@@ -1,7 +1,7 @@
 //! Unit and integration tests for OpenBoom atomic storage, EQ presets, and startup management.
 
 use open_boom_core::types::GRAPHIC_EQ_BANDS;
-use open_boom_storage::{AppConfig, PresetStore, StartupManager};
+use open_boom_storage::{AppConfig, AppVolumeProfile, PresetStore, StartupManager};
 use std::collections::HashSet;
 use std::fs;
 use std::io;
@@ -423,3 +423,172 @@ fn test_corrupt_preset_json_and_gain_clamping_resilience() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_app_volume_persistence_atomic_save_and_load() {
+    let temp_dir = std::env::temp_dir().join(format!("open_boom_appvol_test_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    let store = PresetStore::new(&temp_dir);
+
+    // Initial load when file does not exist -> empty map and list
+    let map = store.load_app_volumes().expect("load initial empty map");
+    assert!(map.is_empty());
+    let list = store.load_app_volume_list().expect("load initial empty list");
+    assert!(list.is_empty());
+
+    // Save individual profiles
+    store
+        .save_app_volume_profile(&AppVolumeProfile::new("Spotify.exe", 0.75, false))
+        .expect("save spotify profile");
+    store
+        .save_app_volume_profile(&AppVolumeProfile::new("discord.exe", 0.60, true))
+        .expect("save discord profile");
+    store
+        .save_app_volume_profile(&AppVolumeProfile::new("Chrome.exe", 1.80, false)) // Should clamp to 1.50
+        .expect("save chrome profile");
+
+    // Verify file exists
+    assert!(store.app_volumes_path().exists());
+
+    // Verify no temporary files left behind
+    for entry in fs::read_dir(&temp_dir).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        assert!(
+            !name.ends_with(".tmp"),
+            "Temporary staging file must be renamed away: {}",
+            name
+        );
+    }
+
+    // Verify case-insensitive lookup
+    let spotify = store
+        .get_app_volume_profile("spotify.exe")
+        .expect("get spotify")
+        .expect("found spotify");
+    assert_eq!(spotify.process_name, "Spotify.exe");
+    assert!((spotify.volume - 0.75).abs() < 1e-6);
+    assert!(!spotify.is_muted);
+
+    let spotify_upper = store
+        .get_app_volume_profile("SPOTIFY.EXE")
+        .expect("get SPOTIFY.EXE")
+        .expect("found case-insensitive");
+    assert_eq!(spotify_upper.process_name, "Spotify.exe");
+
+    let chrome = store
+        .get_app_volume_profile("chrome.exe")
+        .expect("get chrome")
+        .expect("found chrome");
+    assert!((chrome.volume - 1.50).abs() < 1e-6, "Volume should clamp to 1.5");
+
+    let discord = store
+        .get_app_volume_profile("Discord.exe")
+        .expect("get discord")
+        .expect("found discord");
+    assert!(discord.is_muted);
+
+    // Verify sorted list
+    let list = store.load_app_volume_list().expect("load list");
+    assert_eq!(list.len(), 3);
+    assert_eq!(list[0].process_name, "Chrome.exe");
+    assert_eq!(list[1].process_name, "discord.exe");
+    assert_eq!(list[2].process_name, "Spotify.exe");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_app_volume_update_and_delete() {
+    let temp_dir = std::env::temp_dir().join(format!("open_boom_appvol_update_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    let store = PresetStore::new(&temp_dir);
+
+    store
+        .save_app_volume_profile(&AppVolumeProfile::new("game.exe", 1.0, false))
+        .expect("save game");
+
+    // Update volume and mute
+    store
+        .save_app_volume_profile(&AppVolumeProfile::new("GAME.EXE", 0.4, true))
+        .expect("update game");
+
+    let updated = store
+        .get_app_volume_profile("game.exe")
+        .expect("query game")
+        .expect("game exists");
+    assert!((updated.volume - 0.4).abs() < 1e-6);
+    assert!(updated.is_muted);
+
+    // Delete profile
+    let deleted = store.delete_app_volume_profile("Game.exe").expect("delete game");
+    assert!(deleted);
+
+    let query_after = store.get_app_volume_profile("game.exe").expect("query after delete");
+    assert_eq!(query_after, None);
+
+    let delete_again = store.delete_app_volume_profile("game.exe").expect("delete again");
+    assert!(!delete_again);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_app_volume_corrupt_file_recovery() {
+    let temp_dir = std::env::temp_dir().join(format!("open_boom_appvol_corrupt_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let store = PresetStore::new(&temp_dir);
+
+    // Write completely invalid corrupt JSON to app_volumes.json
+    fs::write(store.app_volumes_path(), b"INVALID CORRUPTED JSON {{{(((").unwrap();
+
+    // Loading should not crash; must recover gracefully to empty map
+    let loaded = store.load_app_volumes().expect("load corrupt file");
+    assert!(loaded.is_empty());
+
+    // Subsequent save should safely overwrite corrupt file atomically
+    store
+        .save_app_volume_profile(&AppVolumeProfile::new("recovered.exe", 0.9, false))
+        .expect("save after corruption");
+
+    let profile = store
+        .get_app_volume_profile("recovered.exe")
+        .expect("get recovered")
+        .expect("profile exists");
+    assert!((profile.volume - 0.9).abs() < 1e-6);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_app_volume_array_fallback_format() {
+    let temp_dir = std::env::temp_dir().join(format!("open_boom_appvol_array_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let store = PresetStore::new(&temp_dir);
+
+    // Write JSON formatted as an array instead of a map
+    let json_array = r#"[
+        {"process_name": "player.exe", "volume": 1.2, "is_muted": false},
+        {"process_name": "voice.exe", "volume": 0.8, "is_muted": true}
+    ]"#;
+    fs::write(store.app_volumes_path(), json_array.as_bytes()).unwrap();
+
+    let profiles = store.load_app_volumes().expect("parse array format");
+    assert_eq!(profiles.len(), 2);
+
+    let player = profiles.get("player.exe").expect("player exists");
+    assert!((player.volume - 1.2).abs() < 1e-6);
+    assert!(!player.is_muted);
+
+    let voice = profiles.get("voice.exe").expect("voice exists");
+    assert!((voice.volume - 0.8).abs() < 1e-6);
+    assert!(voice.is_muted);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+

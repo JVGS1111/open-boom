@@ -22,6 +22,6 @@ pub use loopback_capture::{LoopbackCapture, LoopbackConfig, LoopbackMode};
 pub use mmcss::{CallbackBudgetTracker, MmcssGuard};
 pub use render_client::{RenderClient, RenderConfig};
 pub use resampler::{Resampler, MAX_RESAMPLER_CHANNELS};
-pub use session_manager::{ProcessAudioSession, SessionManager};
+pub use session_manager::{AppVolumeProfile, ProcessAudioSession, SessionManager};
 pub use stream_pump::{AudioStreamPump, StreamPumpConfig};
 pub use virtual_bridge::{BridgeMode, VirtualAudioBridge, VirtualBridgeConfig};

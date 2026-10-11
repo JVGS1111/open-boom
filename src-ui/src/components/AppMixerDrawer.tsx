@@ -11,6 +11,7 @@ import {
   Headphones,
   Gamepad2,
   Tv,
+  RotateCcw,
 } from "lucide-react";
 
 export interface ProcessAudioSession {
@@ -27,6 +28,7 @@ export interface AppMixerDrawerProps {
   sessions: ProcessAudioSession[];
   onVolumeChange: (processId: number, volume: number) => void;
   onToggleMute: (processId: number, currentMuted: boolean) => void;
+  onResetProfile?: (processName: string, processId: number) => void;
   onRefresh?: () => void;
 }
 
@@ -74,6 +76,7 @@ export const AppMixerDrawer: React.FC<AppMixerDrawerProps> = ({
   sessions,
   onVolumeChange,
   onToggleMute,
+  onResetProfile,
   onRefresh,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -241,24 +244,39 @@ export const AppMixerDrawer: React.FC<AppMixerDrawerProps> = ({
                   </span>
                 </div>
 
-                {/* Right: Mute Toggle Button */}
-                <button
-                  type="button"
-                  onClick={() => onToggleMute(session.process_id, session.is_muted)}
-                  title={session.is_muted ? `Unmute ${label}` : `Mute ${label}`}
-                  aria-label={session.is_muted ? `Unmute ${label}` : `Mute ${label}`}
-                  className={`w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer shrink-0 border ${
-                    session.is_muted
-                      ? "bg-meter-red/15 border-meter-red/40 text-meter-red"
-                      : "bg-surface-base hover:bg-surface-elevated border-border-subtle text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  {session.is_muted ? (
-                    <VolumeX className="w-3.5 h-3.5" />
-                  ) : (
-                    <Volume2 className="w-3.5 h-3.5" />
+                {/* Right: Actions (Reset Custom Profile & Mute Toggle Button) */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onResetProfile && (Math.abs(session.volume - 1.0) > 0.005 || session.is_muted) && (
+                    <button
+                      type="button"
+                      data-testid={`reset-app-profile-${session.process_id}`}
+                      onClick={() => onResetProfile(session.name, session.process_id)}
+                      title={`Reset custom volume preference for ${label} to 100% (0.0 dB)`}
+                      aria-label={`Reset volume for ${label}`}
+                      className="w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer border bg-surface-base hover:bg-surface-elevated border-border-subtle text-text-muted hover:text-accent-cyan"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
                   )}
-                </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onToggleMute(session.process_id, session.is_muted)}
+                    title={session.is_muted ? `Unmute ${label}` : `Mute ${label}`}
+                    aria-label={session.is_muted ? `Unmute ${label}` : `Mute ${label}`}
+                    className={`w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer border ${
+                      session.is_muted
+                        ? "bg-meter-red/15 border-meter-red/40 text-meter-red"
+                        : "bg-surface-base hover:bg-surface-elevated border-border-subtle text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    {session.is_muted ? (
+                      <VolumeX className="w-3.5 h-3.5" />
+                    ) : (
+                      <Volume2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
             );
           })
@@ -273,6 +291,8 @@ export const AppMixerDrawer: React.FC<AppMixerDrawerProps> = ({
           </span>
           <span>•</span>
           <span>Double-click slider to reset 100% (0.0 dB)</span>
+          <span>•</span>
+          <span className="text-accent-cyan/80">Auto-persisted to app_volumes.json (FR23)</span>
         </div>
         <div>
           <span>Core Audio MTA Isolated • Zero Audio Duplication</span>

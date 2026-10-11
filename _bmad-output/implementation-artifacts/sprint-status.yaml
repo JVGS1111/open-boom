@@ -70,8 +70,8 @@ development_status:
   4-5-spatial-stereo-expander-crossfeed-matrix: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-windows-core-audio-session-manager-dedicated-com-mta-thread: done
   5-2-per-application-mixer-drawer-ui-individual-process-faders: done
-  5-3-persistent-application-volume-preferences-automatic-session: backlog
+  5-3-persistent-application-volume-preferences-automatic-session: done
   epic-5-retrospective: optional

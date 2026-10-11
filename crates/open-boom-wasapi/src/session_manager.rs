@@ -1,7 +1,8 @@
 //! Per-process audio session mixer running on a dedicated COM MTA worker thread.
 
 use open_boom_core::types::{EngineError, EngineResult};
-pub use open_boom_core::types::ProcessAudioSession;
+pub use open_boom_core::types::{AppVolumeProfile, ProcessAudioSession};
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
@@ -47,6 +48,8 @@ pub struct SessionManager {
     allow_synthetic_fallback: bool,
     force_synthetic: bool,
     synthetic_sessions: Vec<ProcessAudioSession>,
+    stored_profiles: HashMap<String, AppVolumeProfile>,
+    restored_pids: HashSet<u32>,
 }
 
 impl Default for SessionManager {
@@ -92,6 +95,8 @@ impl SessionManager {
 
     fn create_internal(allow_synthetic_fallback: bool, force_synthetic: bool) -> Self {
         let synthetic_sessions = Self::default_synthetic_sessions();
+        let stored_profiles = HashMap::new();
+        let restored_pids = HashSet::new();
 
         #[cfg(windows)]
         {
@@ -102,6 +107,8 @@ impl SessionManager {
                     allow_synthetic_fallback,
                     force_synthetic: true,
                     synthetic_sessions,
+                    stored_profiles,
+                    restored_pids,
                 };
             }
 
@@ -119,6 +126,8 @@ impl SessionManager {
                     allow_synthetic_fallback,
                     force_synthetic: false,
                     synthetic_sessions,
+                    stored_profiles,
+                    restored_pids,
                 },
                 Err(_) => Self {
                     sender: None,
@@ -126,6 +135,8 @@ impl SessionManager {
                     allow_synthetic_fallback,
                     force_synthetic: true,
                     synthetic_sessions,
+                    stored_profiles,
+                    restored_pids,
                 },
             }
         }
@@ -138,12 +149,21 @@ impl SessionManager {
                 allow_synthetic_fallback,
                 force_synthetic: true,
                 synthetic_sessions,
+                stored_profiles,
+                restored_pids,
             }
         }
     }
 
     /// Enumerates all active Windows Core Audio sessions.
+    /// Automatically applies remembered volume and mute profiles to newly appearing sessions (FR23, UJ-4).
     pub fn enumerate_sessions(&mut self) -> EngineResult<Vec<ProcessAudioSession>> {
+        let mut sessions = self.raw_enumerate_sessions()?;
+        self.apply_stored_profiles(&mut sessions);
+        Ok(sessions)
+    }
+
+    fn raw_enumerate_sessions(&mut self) -> EngineResult<Vec<ProcessAudioSession>> {
         if self.force_synthetic {
             return Ok(self.synthetic_sessions.clone());
         }
@@ -180,8 +200,7 @@ impl SessionManager {
         }
     }
 
-    /// Sets the master volume for a specific process audio session (0.0 to 1.5).
-    pub fn set_process_volume(&mut self, process_id: u32, volume: f32) -> EngineResult<()> {
+    fn dispatch_set_volume(&mut self, process_id: u32, volume: f32) -> EngineResult<()> {
         let clamped_vol = volume.clamp(0.0, 1.5);
 
         if self.force_synthetic {
@@ -241,8 +260,7 @@ impl SessionManager {
         }
     }
 
-    /// Sets the mute state for a specific process audio session.
-    pub fn set_process_mute(&mut self, process_id: u32, mute: bool) -> EngineResult<()> {
+    fn dispatch_set_mute(&mut self, process_id: u32, mute: bool) -> EngineResult<()> {
         if self.force_synthetic {
             if let Some(session) = self.synthetic_sessions.iter_mut().find(|s| s.process_id == process_id) {
                 session.is_muted = mute;
@@ -297,6 +315,143 @@ impl SessionManager {
             Err(EngineError::DeviceInitialization(
                 "Audio session worker is not active".to_string(),
             ))
+        }
+    }
+
+    /// Sets the master volume for a specific process audio session (0.0 to 1.5).
+    /// Updates remembered profile cache for automatic session recovery.
+    pub fn set_process_volume(&mut self, process_id: u32, volume: f32) -> EngineResult<()> {
+        let clamped_vol = volume.clamp(0.0, 1.5);
+        self.dispatch_set_volume(process_id, clamped_vol)?;
+
+        // Update stored profile cache
+        if let Some(name) = self.get_process_name(process_id) {
+            let key = name.trim().to_lowercase();
+            let is_muted = self.get_process_mute(process_id).unwrap_or(false);
+            self.stored_profiles.insert(
+                key,
+                AppVolumeProfile::new(name, clamped_vol, is_muted),
+            );
+        }
+        self.restored_pids.insert(process_id);
+        Ok(())
+    }
+
+    /// Sets the mute state for a specific process audio session.
+    /// Updates remembered profile cache for automatic session recovery.
+    pub fn set_process_mute(&mut self, process_id: u32, mute: bool) -> EngineResult<()> {
+        self.dispatch_set_mute(process_id, mute)?;
+
+        // Update stored profile cache
+        if let Some(name) = self.get_process_name(process_id) {
+            let key = name.trim().to_lowercase();
+            let volume = self.get_process_volume(process_id).unwrap_or(1.0);
+            self.stored_profiles.insert(
+                key,
+                AppVolumeProfile::new(name, volume, mute),
+            );
+        }
+        self.restored_pids.insert(process_id);
+        Ok(())
+    }
+
+    /// Resolves the process name for a given process ID.
+    pub fn get_process_name(&self, process_id: u32) -> Option<String> {
+        if let Some(session) = self.synthetic_sessions.iter().find(|s| s.process_id == process_id) {
+            return Some(session.name.clone());
+        }
+        #[cfg(windows)]
+        {
+            if process_id == 0 {
+                return Some("System Sounds".to_string());
+            }
+            let name = Self::query_process_name(process_id);
+            if !name.starts_with("Process (") {
+                return Some(name);
+            }
+        }
+        None
+    }
+
+    /// Queries the current volume level of a process session if cached.
+    pub fn get_process_volume(&self, process_id: u32) -> Option<f32> {
+        if let Some(session) = self.synthetic_sessions.iter().find(|s| s.process_id == process_id) {
+            return Some(session.volume);
+        }
+        if let Some(name) = self.get_process_name(process_id) {
+            if let Some(profile) = self.stored_profiles.get(&name.to_lowercase()) {
+                return Some(profile.volume);
+            }
+        }
+        None
+    }
+
+    /// Queries the current mute state of a process session if cached.
+    pub fn get_process_mute(&self, process_id: u32) -> Option<bool> {
+        if let Some(session) = self.synthetic_sessions.iter().find(|s| s.process_id == process_id) {
+            return Some(session.is_muted);
+        }
+        if let Some(name) = self.get_process_name(process_id) {
+            if let Some(profile) = self.stored_profiles.get(&name.to_lowercase()) {
+                return Some(profile.is_muted);
+            }
+        }
+        None
+    }
+
+    /// Registers or updates stored volume profiles (e.g. loaded from disk).
+    pub fn register_stored_profiles<I>(&mut self, profiles: I)
+    where
+        I: IntoIterator<Item = (String, AppVolumeProfile)>,
+    {
+        for (k, v) in profiles {
+            self.stored_profiles.insert(k.to_lowercase(), v);
+        }
+    }
+
+    /// Sets or updates a single stored application volume profile.
+    pub fn set_stored_profile(&mut self, profile: AppVolumeProfile) {
+        self.stored_profiles
+            .insert(profile.process_name.to_lowercase(), profile);
+    }
+
+    /// Retrieves a stored profile by application executable name.
+    pub fn get_stored_profile(&self, process_name: &str) -> Option<&AppVolumeProfile> {
+        self.stored_profiles.get(&process_name.trim().to_lowercase())
+    }
+
+    /// Removes a remembered application volume profile.
+    pub fn remove_stored_profile(&mut self, process_name: &str) -> bool {
+        self.stored_profiles.remove(&process_name.trim().to_lowercase()).is_some()
+    }
+
+    /// Returns all remembered profiles.
+    pub fn get_stored_profiles(&self) -> Vec<AppVolumeProfile> {
+        let mut list: Vec<AppVolumeProfile> = self.stored_profiles.values().cloned().collect();
+        list.sort_by(|a, b| a.process_name.to_lowercase().cmp(&b.process_name.to_lowercase()));
+        list
+    }
+
+    /// Applies remembered profiles to newly appearing process sessions (FR23, UJ-4).
+    fn apply_stored_profiles(&mut self, sessions: &mut [ProcessAudioSession]) {
+        let current_pids: HashSet<u32> = sessions.iter().map(|s| s.process_id).collect();
+        // Prune terminated process IDs so if they restart later, they get restored
+        self.restored_pids.retain(|pid| current_pids.contains(pid));
+
+        for session in sessions.iter_mut() {
+            if self.restored_pids.contains(&session.process_id) {
+                continue;
+            }
+
+            let key = session.name.trim().to_lowercase();
+            if let Some(profile) = self.stored_profiles.get(&key).cloned() {
+                let _ = self.dispatch_set_volume(session.process_id, profile.volume);
+                let _ = self.dispatch_set_mute(session.process_id, profile.is_muted);
+
+                session.volume = profile.volume;
+                session.is_muted = profile.is_muted;
+            }
+            self.restored_pids.insert(session.process_id);
         }
     }
 

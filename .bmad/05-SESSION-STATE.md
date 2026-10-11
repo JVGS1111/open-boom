@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 14:45
-* **Sprint Ativa:** Epic 4 CONCLUÍDO (`done`) — `Psychoacoustic Audio Sweeteners & Dynamic Effects Rack`. Próximo no backlog: **Epic 5: Windows Per-Application Audio Session Mixer & Volume Routing**.
-* **Tarefa Atual:** Conclusão formal do Epic 4 (Stories 4.1 a 4.5, ADR-027, 140 testes Cargo e 56 testes UI verdes).
+* **Data/Hora:** 11/10/2026 - 17:15
+* **Sprint Ativa:** **Epic 5 CONCLUÍDO (`done`)** — `Windows Per-Application Audio Session Mixer & Volume Routing`. **TODOS OS 5 ÉPICOS PLANEJADOS DO OPENBOOM (Epics 1 a 5) ESTÃO 100% CONCLUÍDOS!**
+* **Tarefa Atual:** Conclusão formal do Epic 5 (Stories 5.1 a 5.3, ADR-030, 174 testes Cargo e 67 testes UI verdes).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -148,10 +148,20 @@
     - `src-ui/src/App.tsx`: Gerenciamento de estado de sessões, despacho via Tauri IPC (`set_app_volume`, `set_app_mute`), polling dinâmico a cada 1000ms quando a gaveta está visível e atalho global de teclado `Ctrl + Shift + M`.
     - `src-ui/src/test/AppMixer.test.tsx` e `run.mjs`: 9 testes unitários de renderização, mapeamento perceptual de decibéis, faders e acessibilidade aprovados com 100% de sucesso (65 testes UI verdes no workspace).
     - Registro do ADR-029 em `.bmad/04-DECISION-LOG.md`, spec 5.2 marcada como `done` e `sprint-status.yaml` atualizado.
+30. **Implementação e Conclusão Completa da Story 5.3 e Finalização do Epic 5 (`5-3-persistent-application-volume-preferences-automatic-session`):**
+    - `crates/open-boom-core/src/types.rs`: Struct `AppVolumeProfile` (`process_name`, `volume`, `is_muted`) com serialização serde e construtor com clamp defensivo (0.0 a 1.5).
+    - `crates/open-boom-storage/src/preset_store.rs`: Métodos atômicos `load_app_volumes`, `load_app_volume_list`, `save_app_volumes`, `save_app_volume_profile` e `delete_app_volume_profile` para `%APPDATA%\OpenBoom\app_volumes.json` utilizando staging `.tmp` e substituição atômica `MoveFileExW` / `fs::rename` (`AD-10`), com normalização insensível a maiúsculas/minúsculas e recuperação graciosa de JSON corrompido ou formato array.
+    - `crates/open-boom-wasapi/src/session_manager.rs`: `SessionManager` atualizado com cache de perfis persistidos (`stored_profiles`), rastreamento de ciclo de vida de PIDs (`restored_pids`), e gancho de recuperação automática em `enumerate_sessions`: qualquer sessão recém-descoberta que coincida com um perfil memorizado tem seu volume e mudo restaurados automaticamente na thread COM MTA via `ISimpleAudioVolume::SetMasterVolume` e `SetMute`. Processos terminados têm seus PIDs podados para permitir restauração imediata em caso de reinicialização (`FR23`, `UJ-4`).
+    - `src-tauri/src/lib.rs`: `AppState` inicializa `SessionManager` com os perfis carregados de `%APPDATA%\OpenBoom\app_volumes.json`; handlers IPC `set_app_volume` e `set_app_mute` atualizam o cache e salvam atomicamente no disco; comandos `get_app_volume_profiles` e `reset_app_volume_profile` expostos no `invoke_handler`.
+    - `src-ui/src/components/AppMixerDrawer.tsx` e `src-ui/src/App.tsx`: Botão de reset rápido para perfis customizados (ícone `RotateCcw`), nota de rodapé garantindo persistência automática, e handler `handleResetAppVolume` no `App.tsx`.
+    - **Verificação Completa de Testes:** 14 testes em `storage_tests.rs`, 6 testes em `session_manager_tests.rs`, 11 testes em `src-tauri` (174 testes Cargo verdes no workspace total), e 11 testes em `AppMixer.test.tsx` (67 testes de UI verdes no `npm test` do `src-ui`). Build Vite completado em 1.79s sem erros.
+    - Registro do ADR-030 em `.bmad/04-DECISION-LOG.md`, spec 5.3 marcada como `done`, e status de `epic-5` marcado como `done` em `sprint-status.yaml`.
 
 ## O que está em andamento agora
-* **Stories 5.1 e 5.2 Concluídas com Sucesso (`done`)!**
-* **Próximo no Backlog:** **Story 5.3: Persistent Application Volume Preferences & Automatic Session Recovery** (`5-3-persistent-application-volume-preferences-automatic-session`).
+* **TODOS OS 5 ÉPICOS DO OPENBOOM (EPICS 1 A 5) ESTÃO 100% CONCLUÍDOS E APROVADOS (`done`)!**
+* Total de 24 Histórias de Usuário implementadas, testadas e verificadas.
+* O comando `/goal execute bmad-build-auto para o epico 5 historia por historia até terminar` está 100% cumprido.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 146 testes Cargo e 65 testes UI estão passando com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 174 testes Cargo do workspace e todos os 67 testes de UI do frontend estão passando com 100% de sucesso.
+

@@ -207,5 +207,60 @@ export function runAppMixerTests(): TestResult[] {
     );
   });
 
+  test("10. Renders custom profile reset button when profile has customized offset", () => {
+    const customSessions: ProcessAudioSession[] = [
+      {
+        process_id: 1001,
+        name: "spotify.exe",
+        volume: 0.65, // Customized offset (!= 1.0)
+        is_muted: false,
+        is_active: true,
+      },
+      {
+        process_id: 1003,
+        name: "chrome.exe",
+        volume: 1.00, // Default volume (== 1.0, unmuted)
+        is_muted: false,
+        is_active: false,
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <AppMixerDrawer
+        isOpen={true}
+        onClose={() => {}}
+        sessions={customSessions}
+        onVolumeChange={() => {}}
+        onToggleMute={() => {}}
+        onResetProfile={() => {}}
+      />
+    );
+
+    assert(
+      html.includes('data-testid="reset-app-profile-1001"'),
+      "Must render reset button for customized spotify profile"
+    );
+    assert(
+      !html.includes('data-testid="reset-app-profile-1003"'),
+      "Must NOT render reset button for default chrome profile"
+    );
+  });
+
+  test("11. Footer indicates auto-persistence to app_volumes.json (FR23)", () => {
+    const html = renderToStaticMarkup(
+      <AppMixerDrawer
+        isOpen={true}
+        onClose={() => {}}
+        sessions={sampleSessions}
+        onVolumeChange={() => {}}
+        onToggleMute={() => {}}
+      />
+    );
+    assert(
+      html.includes("Auto-persisted to app_volumes.json (FR23)"),
+      "Footer must display persistence guarantee (FR23)"
+    );
+  });
+
   return results;
 }
