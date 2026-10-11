@@ -100,7 +100,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   };
 
   return (
-    <footer className="h-9 bg-surface-base border-t border-border-subtle flex items-center justify-between px-4 select-none shrink-0 text-xs">
+    <footer className="h-8 bg-surface-base border-t border-border-subtle flex items-center justify-between px-3.5 select-none shrink-0 text-xs">
       {/* Engine Status & Latency Badge */}
       <div className="flex items-center gap-3">
         {bypassActive ? (

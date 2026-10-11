@@ -73,7 +73,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       className="h-[54px] bg-surface-base border-b border-border-subtle flex items-center justify-between px-4 select-none shrink-0"
     >
       {/* Brand Section */}
-      <div className="flex items-center gap-3 pointer-events-none" data-tauri-drag-region>
+      <div className="flex items-center gap-2.5 shrink-0 pointer-events-none" data-tauri-drag-region>
         <div className="w-7 h-7 rounded-lg bg-surface-card border border-border-default flex items-center justify-center text-accent-cyan shadow-cyan-glow-sm">
           <Sliders className="w-4 h-4" />
         </div>
@@ -88,9 +88,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       </div>
 
       {/* Center Controls: Master Power, Device, Volume */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 shrink-0">
         {/* Master Power Pill Switch (48px x 26px, UX-DR2, FR27) */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <MasterPowerSwitch
             enabled={masterPower}
             onToggle={onTogglePower}
@@ -102,19 +102,21 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           </span>
         </div>
 
-        <div className="h-4 w-px bg-border-subtle" />
+        <div className="h-4 w-px bg-border-subtle shrink-0" />
 
         {/* Dynamic Output Endpoint Selector Popover (FR1, EXPERIENCE.md §4.3) */}
-        <DeviceSelector
-          devices={devices}
-          activeDeviceId={activeDeviceId}
-          onSelectDevice={onSelectDevice}
-        />
+        <div className="shrink-0">
+          <DeviceSelector
+            devices={devices}
+            activeDeviceId={activeDeviceId}
+            onSelectDevice={onSelectDevice}
+          />
+        </div>
 
-        <div className="h-4 w-px bg-border-subtle" />
+        <div className="h-4 w-px bg-border-subtle shrink-0" />
 
         {/* Master Volume & Boost Slider (0%–150%, UX-DR3) */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={onToggleMute}
@@ -142,12 +144,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             aria-valuemax={1.5}
             aria-valuenow={isMuted ? 0 : volume}
             aria-valuetext={getDbString()}
-            className="w-24 h-1.5 bg-border-subtle rounded-lg appearance-none cursor-pointer accent-accent-cyan"
+            className="w-20 lg:w-24 h-1.5 bg-border-subtle rounded-lg appearance-none cursor-pointer accent-accent-cyan shrink-0"
           />
           <span
             onDoubleClick={() => onVolumeChange(1.0)}
             title="Double-click to reset to 0.0 dB"
-            className="text-[11px] font-mono text-text-secondary w-14 text-right cursor-pointer select-none hover:text-text-primary transition-colors"
+            className="text-[11px] font-mono text-text-secondary w-14 text-right cursor-pointer select-none hover:text-text-primary transition-colors shrink-0"
           >
             {getDbString()}
           </span>
@@ -155,7 +157,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       </div>
 
       {/* Window Action Controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         {/* Per-Application Stream Mixer Drawer Launcher (UX-DR9, EXPERIENCE.md §2) */}
         <button
           type="button"

@@ -225,7 +225,18 @@ impl SessionManager {
                 .is_ok()
             {
                 match resp_rx.recv() {
-                    Ok(res) => return res,
+                    Ok(Ok(())) => return Ok(()),
+                    Ok(Err(err)) => {
+                        if self.allow_synthetic_fallback {
+                            if let Some(session) =
+                                self.synthetic_sessions.iter_mut().find(|s| s.process_id == process_id)
+                            {
+                                session.volume = clamped_vol;
+                                return Ok(());
+                            }
+                        }
+                        return Err(err);
+                    }
                     Err(_) => {
                         if self.allow_synthetic_fallback {
                             if let Some(session) =
@@ -283,7 +294,18 @@ impl SessionManager {
                 .is_ok()
             {
                 match resp_rx.recv() {
-                    Ok(res) => return res,
+                    Ok(Ok(())) => return Ok(()),
+                    Ok(Err(err)) => {
+                        if self.allow_synthetic_fallback {
+                            if let Some(session) =
+                                self.synthetic_sessions.iter_mut().find(|s| s.process_id == process_id)
+                            {
+                                session.is_muted = mute;
+                                return Ok(());
+                            }
+                        }
+                        return Err(err);
+                    }
                     Err(_) => {
                         if self.allow_synthetic_fallback {
                             if let Some(session) =

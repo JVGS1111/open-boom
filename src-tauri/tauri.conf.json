@@ -14,9 +14,9 @@
       {
         "label": "main",
         "title": "OpenBoom",
-        "width": 920,
-        "height": 600,
-        "minWidth": 880,
+        "width": 1000,
+        "height": 620,
+        "minWidth": 960,
         "minHeight": 580,
         "resizable": true,
         "decorations": false,

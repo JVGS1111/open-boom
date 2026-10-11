@@ -466,8 +466,8 @@ export const App: React.FC = () => {
         master_boost: boost,
         is_muted: isMuted,
         active_output_device: activeDeviceId === "default" ? null : activeDeviceId,
-        window_width: 920,
-        window_height: 600,
+        window_width: 1000,
+        window_height: 620,
         window_x: windowX,
         window_y: windowY,
         graphic_eq_gains_db: eqGains,
@@ -1072,7 +1072,7 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full h-full min-w-[880px] min-h-[580px] bg-background flex flex-col justify-between overflow-hidden border border-border-subtle shadow-2xl relative">
+    <div className="w-full h-full min-w-[960px] min-h-[580px] bg-background flex flex-col overflow-hidden border border-border-subtle relative select-none">
       {/* Settings Modal (Story 1.7, FR29) */}
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -1141,9 +1141,9 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Main Studio Content Area */}
-      <main className="flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden relative">
+      <main className="flex-1 p-3 flex gap-3 overflow-hidden relative min-h-0">
         {/* Left soundstage panel: 3D Surround Dial */}
-        <section className="col-span-5 bg-surface-base/60 border border-border-subtle rounded-xl flex items-center justify-center p-2 relative overflow-hidden">
+        <section className="w-[280px] shrink-0 bg-surface-base/60 border border-border-subtle rounded-xl flex items-center justify-center p-2 relative overflow-hidden">
           <SoundstageDial
             enabled={masterPower && surroundEnabled && !bypassActive}
             intensity={surroundIntensity}
@@ -1154,7 +1154,7 @@ export const App: React.FC = () => {
         </section>
 
         {/* Right rack panel: Dual EQ & Effects Rack */}
-        <section className="col-span-7 flex flex-col gap-2.5 overflow-hidden">
+        <section className="flex-1 min-w-0 flex flex-col gap-2.5 overflow-hidden">
           <div className="flex-1 min-h-0">
             <EqualizerPreview
               activePreset={activeEqPreset}
