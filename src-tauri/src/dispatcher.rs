@@ -36,4 +36,23 @@ impl UiDispatcher {
     pub fn send(&self, cmd: AudioCommand) -> Result<(), std::sync::mpsc::SendError<AudioCommand>> {
         self.sender.send(cmd)
     }
+
+    #[allow(clippy::result_large_err)]
+    pub fn apply_autoeq_profile(
+        &self,
+        filters: [open_boom_core::types::ParametricFilterPod; open_boom_core::types::MAX_PARAMETRIC_FILTERS],
+        filter_count: usize,
+        preamp_offset_db: f32,
+    ) -> Result<(), std::sync::mpsc::SendError<AudioCommand>> {
+        self.send(AudioCommand::SetAutoEqProfile {
+            filters,
+            filter_count,
+            preamp_offset_db,
+        })
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn clear_autoeq_profile(&self) -> Result<(), std::sync::mpsc::SendError<AudioCommand>> {
+        self.send(AudioCommand::SetAutoEqBypass { bypassed: true })
+    }
 }

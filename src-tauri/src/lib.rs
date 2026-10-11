@@ -347,6 +347,69 @@ fn get_autoeq_stats(state: State<'_, AppState>) -> Result<AutoEqStats, String> {
     Ok(state.autoeq_db.stats())
 }
 
+#[tauri::command]
+fn apply_autoeq_profile(
+    profile_id: String,
+    preamp_offset_db: Option<f32>,
+    state: State<'_, AppState>,
+) -> Result<f32, String> {
+    let profile = state
+        .autoeq_db
+        .get_profile(&profile_id)
+        .ok_or_else(|| format!("AutoEq profile with id '{}' not found", profile_id))?;
+
+    let max_positive_gain = profile
+        .filters
+        .iter()
+        .map(|f| if f.gain_db.is_nan() { 0.0 } else { f.gain_db })
+        .fold(0.0f32, f32::max);
+
+    let auto_offset_db = if max_positive_gain > 0.0 {
+        -max_positive_gain
+    } else {
+        0.0
+    };
+
+    let offset = if let Some(user_offset) = preamp_offset_db {
+        if user_offset.is_finite() && user_offset < auto_offset_db {
+            user_offset
+        } else {
+            auto_offset_db
+        }
+    } else {
+        auto_offset_db
+    };
+
+    let mut pod_filters = [open_boom_core::types::ParametricFilterPod::default(); open_boom_core::types::MAX_PARAMETRIC_FILTERS];
+    let count = profile.filters.len().min(open_boom_core::types::MAX_PARAMETRIC_FILTERS);
+
+    for i in 0..count {
+        let f = &profile.filters[i];
+        let filter_type = match f.filter_type.to_lowercase().as_str() {
+            "lowshelf" | "low_shelf" | "ls" => open_boom_core::types::ParametricFilterType::LowShelf,
+            "highshelf" | "high_shelf" | "hs" => open_boom_core::types::ParametricFilterType::HighShelf,
+            _ => open_boom_core::types::ParametricFilterType::Peaking,
+        };
+        pod_filters[i] = open_boom_core::types::ParametricFilterPod {
+            filter_type,
+            frequency_hz: f.frequency_hz,
+            q: f.q,
+            gain_db: f.gain_db,
+        };
+    }
+
+    state.dispatcher.apply_autoeq_profile(pod_filters, count, offset).map_err(|e| e.to_string())?;
+
+    Ok(offset)
+}
+
+#[tauri::command]
+fn clear_autoeq_profile(state: State<'_, AppState>) -> Result<(), String> {
+    state.dispatcher.clear_autoeq_profile().map_err(|e| e.to_string())?;
+    let empty_filters = [open_boom_core::types::ParametricFilterPod::default(); open_boom_core::types::MAX_PARAMETRIC_FILTERS];
+    state.dispatcher.apply_autoeq_profile(empty_filters, 0, 0.0).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new_runtime();
@@ -520,6 +583,8 @@ pub fn run() {
             search_autoeq_profiles,
             get_autoeq_profile,
             get_autoeq_stats,
+            apply_autoeq_profile,
+            clear_autoeq_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -695,6 +760,27 @@ mod tests {
             AudioCommand::LoadGraphicEqSnapshot {
                 gains_db: [0.0; 31],
                 preamp_offset_db: -3.0
+            }
+        );
+
+        // 10. SetAutoEqBypass
+        let cmd10: AudioCommand = serde_json::from_str(r#"{"SetAutoEqBypass": {"bypassed": true}}"#).unwrap();
+        assert_eq!(cmd10, AudioCommand::SetAutoEqBypass { bypassed: true });
+
+        // 11. SetAutoEqProfile
+        let filters = [open_boom_core::types::ParametricFilterPod::default(); open_boom_core::types::MAX_PARAMETRIC_FILTERS];
+        let filters_json = serde_json::to_string(&filters).unwrap();
+        let autoeq_json = format!(
+            r#"{{"SetAutoEqProfile": {{"filters": {}, "filter_count": 1, "preamp_offset_db": -5.2}}}}"#,
+            filters_json
+        );
+        let cmd11: AudioCommand = serde_json::from_str(&autoeq_json).unwrap();
+        assert_eq!(
+            cmd11,
+            AudioCommand::SetAutoEqProfile {
+                filters,
+                filter_count: 1,
+                preamp_offset_db: -5.2,
             }
         );
     }

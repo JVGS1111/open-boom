@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 11:05
+* **Data/Hora:** 11/10/2026 - 12:10
 * **Sprint Ativa:** Epic 3: Studio Equalization & AutoEq Headphone Calibration
-* **Tarefa Atual:** Story 3.3 (`Offline AutoEq Headphone Database Indexing & Instant Fuzzy Search`) CONCLUÍDA! 30 testes de UI verdes, 14 testes de storage verdes, 8 testes de tauri verdes, build Vite compilando em 1.73s!
+* **Tarefa Atual:** Story 3.4 (`Decoupled Parametric AutoEq Stage & Auto-Gain Preamp Compensation`) CONCLUÍDA! 116 testes Cargo verdes (incluindo 11 testes de filtros paramétricos), 39 testes de UI verdes, build Vite compilando em 1.76s! Próxima: Story 3.5 (`Genre Factory Presets & Custom Preset Persistence`).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -174,8 +174,24 @@
     - Registro de ADR-023 no `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.3 (`status: done`).
 
+24. **Implementação e Verificação Completa da Story 3.4 (`3-4-decoupled-parametric-autoeq-stage-auto-gain-preamp-compensat`):**
+    - `crates/open-boom-core/src/dsp/biquad.rs`: Fórmulas do RBJ Audio EQ Cookbook implementadas para `low_shelf` e `high_shelf`, normalização canônica por $a_0$, verificação estrita de estabilidade pelo critério de Schur-Cohn / Jury ($|z| < 1.0$), e expansão de ganho para $[-36.0\text{ dB}, +36.0\text{ dB}]$ acomodando calibrações de fones com cortes profundos (`FR12`).
+    - `crates/open-boom-core/src/dsp/parametric_stage.rs`: Novo estágio `ParametricStage` comportando até 12 biquads em cascata por canal na topologia Direct Form II Transposed com atrasos de estado ($s_1, s_2$), suavização sub-buffer em blocos de 32 amostras (~0.67ms a 48 kHz) eliminando zipper noise, e comutação instantânea de bypass.
+    - `crates/open-boom-core/src/types.rs`: Definição de `ParametricFilterType`, struct POD plana `ParametricFilterPod`, comandos lock-free SPSC `AudioCommand::SetAutoEqProfile { filters, filter_count, preamp_offset_db }` e `AudioCommand::SetAutoEqBypass { bypassed }`, e campos de telemetria `autoeq_preamp_db` e `autoeq_active` no `TelemetrySnapshot` (`AD-1`, `NFR1`, `NFR2`).
+    - `crates/open-boom-core/src/dsp/pipeline.rs`: Integração do `ParametricStage` como Estágio 3A no `AudioProcessor`, posicionado estritamente *antes* do `GraphicEqStage` (Estágio 3B) para fluxos estéreo e surround 7.1. O estágio desacoplado neutraliza a curva do fone sem sobrescrever ou modificar os faders de 31 bandas do usuário (`AD-6`).
+    - Compensação Automática de Pré-Amp Anti-Clipping: Cálculo de atenuação negativa $A_{\text{preamp}} = -\max(0, \max_i(G_i))$ aplicado na entrada do estágio antes da cascata de biquads, assegurando que reforços positivos (ex: +6.5 dB) nunca atinjam clipping digital em estágios intermediários antes do `MasterLimiter`.
+    - `crates/open-boom-core/tests/autoeq_parametric_tests.rs`: Suíte com 11 testes cobrindo fórmulas de shelf, estabilidade sob ganhos extremos (+36 dB / -36 dB), THD+N < 0.005%, cálculo de pré-amp, ordenação em cascata e headroom intermediário anti-clipping sob múltiplos reforços simultâneos (+6.5 dB AutoEq e +6 dB EQ gráfico).
+    - `src-tauri/src/dispatcher.rs` e `src-tauri/src/lib.rs`: Comandos IPC Tauri `apply_autoeq_profile` e `clear_autoeq_profile` com conversão de tipos e testes unitários com serde.
+    - `src-ui/src/App.tsx`: Cálculo dinâmico de `calculateAutoEqPreampOffset`, gerenciamento de estado `preampOffsetDb`, despacho IPC via Tauri ao selecionar perfil ou clicar em reset, e exibição dos badges de pré-amplificação em `EqualizerPreview.tsx` e `EqualizerStudioDrawer.tsx`.
+    - `src-ui/src/test/AutoEqParametric.test.tsx` e `run.mjs`: 9 testes de UI cobrindo offset de pré-amplificação, badges numéricos, preservação de curvas 31 bandas do usuário e despacho IPC.
+    - Total de 116 testes Cargo no workspace passando, 39 testes de UI passando e compilação Vite concluída em 1.76s com zero erros.
+    - Registro de ADR-024 no `.bmad/04-DECISION-LOG.md`.
+    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.4 (`status: done`).
+
 ## O que está em andamento agora
-* **Story 3.4 Pronta para Desenvolvimento:** Decoupled Parametric AutoEq Stage & Auto-Gain Preamp Compensation.
+* **Story 3.5 no Backlog:** Genre Factory Presets & Custom Preset Persistence.
+  - Implementação de presets de fábrica por gênero (Acoustic, Bass Booster, Classical, Electronic, Hip Hop, Jazz, Pop, Rock, Vocal Booster, etc.).
+  - Persistência e gerenciamento de presets personalizados criados pelo usuário em `%APPDATA%\OpenBoom\presets.json`.
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.

@@ -81,6 +81,38 @@ pub const ITU_R_7_1_DEFAULT_AZIMUTHS: [f32; SURROUND_7_1_CHANNELS] = [
     90.0,    // Surround Right
 ];
 
+/// Filter type for parametric biquad filters.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ParametricFilterType {
+    Peaking = 0,
+    LowShelf = 1,
+    HighShelf = 2,
+}
+
+/// Plain Old Data representation of a parametric biquad filter.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ParametricFilterPod {
+    pub filter_type: ParametricFilterType,
+    pub frequency_hz: f32,
+    pub q: f32,
+    pub gain_db: f32,
+}
+
+impl Default for ParametricFilterPod {
+    fn default() -> Self {
+        Self {
+            filter_type: ParametricFilterType::Peaking,
+            frequency_hz: 1000.0,
+            q: 0.7071,
+            gain_db: 0.0,
+        }
+    }
+}
+
 /// Flat, lock-free Plain Old Data (POD) commands transferred across the SPSC boundary.
 /// Memory layout is fixed and contains zero heap pointers or dynamically sized types.
 #[repr(C)]
@@ -123,6 +155,16 @@ pub enum AudioCommand {
     SetEqBypass {
         bypassed: bool,
     },
+    /// Atomic parametric AutoEq profile snapshot and auto-gain preamp attenuation offset.
+    SetAutoEqProfile {
+        filters: [ParametricFilterPod; MAX_PARAMETRIC_FILTERS],
+        filter_count: usize,
+        preamp_offset_db: f32,
+    },
+    /// Enable or disable bypass for the parametric AutoEq stage.
+    SetAutoEqBypass {
+        bypassed: bool,
+    },
     /// Configure one of the audio sweetener modules.
     SetSweetener {
         module_id: u8, // 0 = Ambience, 1 = Fidelity, 2 = Night Mode, 3 = Spatial Widener
@@ -163,6 +205,10 @@ pub struct TelemetrySnapshot {
     pub surround_intensity: f32,
     /// Whether 3D Surround spatializer is currently active.
     pub surround_enabled: bool,
+    /// AutoEq preamp attenuation offset in decibels (<= 0.0 dB).
+    pub autoeq_preamp_db: f32,
+    /// Whether AutoEq parametric stage is currently active.
+    pub autoeq_active: bool,
 }
 
 impl Default for TelemetrySnapshot {
@@ -180,6 +226,8 @@ impl Default for TelemetrySnapshot {
             using_virtual_bridge: false,
             surround_intensity: 0.5,
             surround_enabled: false,
+            autoeq_preamp_db: 0.0,
+            autoeq_active: false,
         }
     }
 }

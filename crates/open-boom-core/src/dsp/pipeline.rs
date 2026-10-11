@@ -5,6 +5,7 @@
 
 use crate::dsp::graphic_eq_stage::GraphicEqStage;
 use crate::dsp::limiter::MasterLimiter;
+use crate::dsp::parametric_stage::ParametricStage;
 use crate::dsp::spatializer_3d::Spatializer3D;
 use crate::ring_buffer::SpscQueue;
 use crate::types::{AudioCommand, TelemetrySnapshot, SURROUND_7_1_CHANNELS};
@@ -18,6 +19,7 @@ pub struct AudioProcessor {
     is_bypassed: bool,
     crossfade_pos: f32,
     pub spatializer: Spatializer3D,
+    pub parametric_eq: ParametricStage,
     pub graphic_eq: GraphicEqStage,
     limiter: MasterLimiter,
     peak_l: f32,
@@ -41,6 +43,7 @@ impl AudioProcessor {
             is_bypassed: false,
             crossfade_pos: 0.0,
             spatializer: Spatializer3D::new(),
+            parametric_eq: ParametricStage::new(),
             graphic_eq: GraphicEqStage::new(),
             limiter: MasterLimiter::new(),
             peak_l: 0.0,
@@ -98,6 +101,7 @@ impl AudioProcessor {
 
     /// Sets the operational sample rate and updates all internal DSP stages.
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        self.parametric_eq.set_sample_rate(sample_rate as f32);
         self.graphic_eq.set_sample_rate(sample_rate as f32);
     }
 
@@ -145,6 +149,7 @@ impl AudioProcessor {
             AudioCommand::ResetFilters => {
                 self.limiter.reset();
                 self.spatializer.reset();
+                self.parametric_eq.reset();
                 self.graphic_eq.reset();
             }
             AudioCommand::SetSurround3D { enabled, intensity } => {
@@ -177,6 +182,18 @@ impl AudioProcessor {
             }
             AudioCommand::SetEqBypass { bypassed } => {
                 self.graphic_eq.set_bypass(bypassed);
+            }
+            AudioCommand::SetAutoEqProfile {
+                filters,
+                filter_count,
+                preamp_offset_db,
+            } => {
+                let count = filter_count.min(crate::types::MAX_PARAMETRIC_FILTERS);
+                self.parametric_eq.load_profile(&filters[..count], preamp_offset_db);
+                self.parametric_eq.set_enabled(true);
+            }
+            AudioCommand::SetAutoEqBypass { bypassed } => {
+                self.parametric_eq.set_bypass(bypassed);
             }
             AudioCommand::SetSweetener { .. } => {
                 // Prepared for Story 4.1
@@ -240,8 +257,11 @@ impl AudioProcessor {
                 (dry_l, dry_r)
             };
 
-            // Stage 3: 31-Band ISO Graphic Equalizer Bank
-            let (eq_l, eq_r) = self.graphic_eq.process_stereo(spat_l, spat_r);
+            // Stage 3A: Dedicated Parametric AutoEq Correction Stage (AD-6)
+            let (autoeq_l, autoeq_r) = self.parametric_eq.process_stereo(spat_l, spat_r);
+
+            // Stage 3B: 31-Band ISO Graphic Equalizer Bank
+            let (eq_l, eq_r) = self.graphic_eq.process_stereo(autoeq_l, autoeq_r);
 
             let proc_l = eq_l * gain;
             let proc_r = eq_r * gain;
@@ -290,7 +310,8 @@ impl AudioProcessor {
             } else {
                 dry_val
             };
-            let eq_val = self.graphic_eq.process_mono_left(spat_val);
+            let autoeq_val = self.parametric_eq.process_mono_left(spat_val);
+            let eq_val = self.graphic_eq.process_mono_left(autoeq_val);
             let proc_val = eq_val * gain;
             let alpha = self.crossfade_pos;
             let mix_val = if alpha <= 0.0 {
@@ -325,7 +346,8 @@ impl AudioProcessor {
             return (0.0, 0.0);
         }
         let (spat_l, spat_r) = self.spatializer.process_frame(channels);
-        let (eq_l, eq_r) = self.graphic_eq.process_stereo(spat_l, spat_r);
+        let (autoeq_l, autoeq_r) = self.parametric_eq.process_stereo(spat_l, spat_r);
+        let (eq_l, eq_r) = self.graphic_eq.process_stereo(autoeq_l, autoeq_r);
         let gain = self.master_volume * self.master_boost;
         let proc_l = eq_l * gain;
         let proc_r = eq_r * gain;
@@ -373,6 +395,12 @@ impl AudioProcessor {
             using_virtual_bridge: false,
             surround_intensity: self.spatializer.target_intensity,
             surround_enabled: self.spatializer.enabled,
+            autoeq_preamp_db: if self.parametric_eq.is_enabled() {
+                self.parametric_eq.preamp_offset_db
+            } else {
+                0.0
+            },
+            autoeq_active: self.parametric_eq.is_enabled() && self.parametric_eq.active_count > 0,
         }
     }
 
@@ -398,5 +426,24 @@ impl AudioProcessor {
     #[inline]
     pub fn load_graphic_eq_snapshot(&mut self, gains_db: [f32; crate::types::GRAPHIC_EQ_BANDS], preamp_offset_db: f32) {
         self.graphic_eq.load_snapshot(gains_db, preamp_offset_db);
+    }
+
+    /// Load parametric AutoEq profile and auto preamp offset.
+    #[inline]
+    pub fn load_autoeq_profile(&mut self, filters: &[crate::types::ParametricFilterPod], preamp_offset_db: f32) {
+        self.parametric_eq.load_profile(filters, preamp_offset_db);
+        self.parametric_eq.set_enabled(true);
+    }
+
+    /// Set whether the parametric AutoEq stage is bypassed.
+    #[inline]
+    pub fn set_autoeq_bypass(&mut self, bypassed: bool) {
+        self.parametric_eq.set_bypass(bypassed);
+    }
+
+    /// Returns whether the parametric AutoEq stage is bypassed.
+    #[inline]
+    pub fn is_autoeq_bypassed(&self) -> bool {
+        self.parametric_eq.is_bypassed()
     }
 }

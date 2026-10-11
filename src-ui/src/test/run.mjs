@@ -15,6 +15,11 @@ const testFiles = [
     entry: path.join(__dirname, "AutoEqPopover.test.tsx"),
     runnerName: "runAutoEqPopoverTests",
   },
+  {
+    name: "AutoEq Parametric Stage & Preamp Auto-Gain Test Suite",
+    entry: path.join(__dirname, "AutoEqParametric.test.tsx"),
+    runnerName: "runAutoEqParametricTests",
+  },
 ];
 
 async function main() {

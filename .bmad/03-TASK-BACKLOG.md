@@ -41,5 +41,5 @@
 
 ### Sprint 4: AutoEq & Presets (Marco 4)
 - [X] **T4.1**: Parser e indexador dos dados AutoEq (4.200 perfis, filtros paramétricos biquad e compensação automática de preamp - Story 3.3).
-- [ ] **T4.2**: Integração dos perfis de fone diretamente na cadeia de equalização paramétrica desacoplada (Story 3.4).
+- [X] **T4.2**: Integração dos perfis de fone diretamente na cadeia de equalização paramétrica desacoplada (Estágio ParametricStage de até 12 biquads Peaking/LowShelf/HighShelf com RBJ cookbook e Schur-Cohn, atenuação automática de preamp anti-clipping, cascata antes do EQ gráfico 31 bandas sem sobrescrever curvas do usuário, comandos SPSC lock-free e IPC Tauri - Story 3.4).
 - [ ] **T4.3**: Gerenciamento de presets de gênero de fábrica e presets customizados do usuário (Story 3.5).

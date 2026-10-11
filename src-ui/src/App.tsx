@@ -14,6 +14,23 @@ import { SoundstageConfiguratorModal } from "./components/SoundstageConfigurator
 import { EqualizerStudioDrawer } from "./components/EqualizerStudioDrawer";
 import { AutoEqPopover, AutoEqProfileSummary } from "./components/AutoEqPopover";
 
+/**
+ * Calculates automatic negative preamp attenuation offset from positive filter gains:
+ * A_preamp = -max(0, max_i(G_i)) in dB (FR15, AD-6).
+ */
+export function calculateAutoEqPreampOffset(
+  filters: { gain_db?: number }[]
+): number {
+  let maxPositiveGain = 0;
+  for (const f of filters) {
+    const g = typeof f.gain_db === "number" && !isNaN(f.gain_db) ? f.gain_db : 0;
+    if (g > maxPositiveGain) {
+      maxPositiveGain = g;
+    }
+  }
+  return maxPositiveGain > 0 ? -Math.round(maxPositiveGain * 10) / 10 : 0.0;
+}
+
 export const App: React.FC = () => {
   // Master Engine State
   const [masterPower, setMasterPower] = useState(true);
@@ -42,11 +59,11 @@ export const App: React.FC = () => {
     1.5, 1.0, 0.5, 0.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 2.0, 1.5, 1.0, 0.5,
     0.0, -0.5,
   ]);
-  const [preampOffsetDb] = useState(-3.0);
+  const [preampOffsetDb, setPreampOffsetDb] = useState(0.0);
   const [isEqDrawerOpen, setIsEqDrawerOpen] = useState(false);
   const [eqMode, setEqMode] = useState<"10" | "31">("10");
 
-  // AutoEq Headphone Profile Calibration State (Story 3.3, UX-DR8)
+  // AutoEq Headphone Profile Calibration State (Story 3.3 & 3.4, UX-DR8, FR15, AD-6)
   const [isAutoEqOpen, setIsAutoEqOpen] = useState(false);
   const [activeAutoEqProfile, setActiveAutoEqProfile] = useState<AutoEqProfileSummary | null>(null);
 
@@ -155,7 +172,7 @@ export const App: React.FC = () => {
                 name: string;
                 target_curve: string;
                 preamp_gain_db: number;
-                filters: unknown[];
+                filters: { filter_type: string; frequency_hz: number; q: number; gain_db: number }[];
               } | null>("get_autoeq_profile", { id: config.autoeq_profile_id });
               if (p) {
                 setActiveAutoEqProfile({
@@ -168,6 +185,16 @@ export const App: React.FC = () => {
                   filter_count: p.filters.length,
                   score: 100,
                 });
+                const restoredOffset = calculateAutoEqPreampOffset(p.filters);
+                setPreampOffsetDb(restoredOffset);
+                try {
+                  await invoke("apply_autoeq_profile", {
+                    profileId: p.id,
+                    preampOffsetDb: restoredOffset,
+                  });
+                } catch {
+                  // Graceful fallback
+                }
               }
             } catch {
               // Graceful fallback
@@ -239,7 +266,7 @@ export const App: React.FC = () => {
             dispatchCommand({
               LoadGraphicEqSnapshot: {
                 gains_db: config.graphic_eq_gains_db,
-                preamp_offset_db: preampOffsetDb,
+                preamp_offset_db: 0.0,
               },
             });
           }
@@ -575,20 +602,58 @@ export const App: React.FC = () => {
     dispatchCommand({
       LoadGraphicEqSnapshot: {
         gains_db: zeroGains,
-        preamp_offset_db: preampOffsetDb,
+        preamp_offset_db: 0.0,
       },
     });
   };
 
-  // AutoEq Profile Selection Handlers (Story 3.3, UX-DR8)
-  const handleSelectAutoEqProfile = (profile: AutoEqProfileSummary) => {
+  // AutoEq Profile Selection Handlers (Story 3.3 & 3.4, UX-DR8, FR15, AD-6)
+  const handleSelectAutoEqProfile = async (profile: AutoEqProfileSummary) => {
     setActiveAutoEqProfile(profile);
     setIsAutoEqOpen(false);
+
+    let offset = 0.0;
+    try {
+      const fullProfile = await invoke<{
+        id: string;
+        brand: string;
+        model: string;
+        name: string;
+        target_curve: string;
+        preamp_gain_db: number;
+        filters: { filter_type: string; frequency_hz: number; q: number; gain_db: number }[];
+      } | null>("get_autoeq_profile", { id: profile.id });
+
+      if (fullProfile) {
+        offset = calculateAutoEqPreampOffset(fullProfile.filters);
+        await invoke("apply_autoeq_profile", {
+          profileId: profile.id,
+          preampOffsetDb: offset,
+        });
+      }
+    } catch {
+      // In browser preview fallback, compute from summary if available
+      offset = typeof profile.preamp_gain_db === "number" && profile.preamp_gain_db < 0
+        ? profile.preamp_gain_db
+        : 0.0;
+    }
+
+    setPreampOffsetDb(offset);
+    setNotification(`AutoEq profile applied: ${profile.name} (${offset.toFixed(1)} dB preamp)`);
   };
 
-  const handleClearAutoEqProfile = () => {
+  const handleClearAutoEqProfile = async () => {
     setActiveAutoEqProfile(null);
     setIsAutoEqOpen(false);
+    setPreampOffsetDb(0.0);
+
+    try {
+      await invoke("clear_autoeq_profile");
+    } catch {
+      // Browser preview fallback
+    }
+
+    setNotification("AutoEq profile cleared. EQ restored to flat.");
   };
 
   // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)

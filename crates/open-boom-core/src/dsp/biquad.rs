@@ -60,7 +60,7 @@ impl BiquadCoefficients {
         let safe_gain = if gain_db.is_nan() {
             0.0
         } else {
-            gain_db.clamp(-12.0, 12.0)
+            gain_db.clamp(-36.0, 36.0)
         };
 
         let max_freq = safe_sr * 0.499;
@@ -97,12 +97,180 @@ impl BiquadCoefficients {
         let a2 = 1.0 - alpha / a_linear;
 
         let inv_a0 = 1.0 / a0;
-        Self {
+        let coeffs = Self {
             b0: b0 * inv_a0,
             b1: b1 * inv_a0,
             b2: b2 * inv_a0,
             a1: a1 * inv_a0,
             a2: a2 * inv_a0,
+        };
+
+        if coeffs.is_stable() {
+            coeffs
+        } else {
+            Self::identity()
+        }
+    }
+
+    /// Computes low-shelf EQ biquad coefficients according to Robert Bristow-Johnson
+    /// Audio EQ Cookbook formulas.
+    ///
+    /// - $A = 10^{\text{gain\_db} / 40}$
+    /// - $\omega_0 = 2\pi f_0 / f_s$
+    /// - $\alpha = \sin(\omega_0) / (2 Q)$
+    /// - $2\sqrt{A}\alpha = 2 \sqrt{A} \alpha$
+    /// - $b_0 = A ((A+1) - (A-1)\cos(\omega_0) + 2\sqrt{A}\alpha)$
+    /// - $b_1 = 2A ((A-1) - (A+1)\cos(\omega_0))$
+    /// - $b_2 = A ((A+1) - (A-1)\cos(\omega_0) - 2\sqrt{A}\alpha)$
+    /// - $a_0 = (A+1) + (A-1)\cos(\omega_0) + 2\sqrt{A}\alpha$
+    /// - $a_1 = -2 ((A-1) + (A+1)\cos(\omega_0))$
+    /// - $a_2 = (A+1) + (A-1)\cos(\omega_0) - 2\sqrt{A}\alpha$
+    ///
+    /// Normalized with $a_0 = 1.0$.
+    pub fn low_shelf(sample_rate: f32, freq: f32, q: f32, gain_db: f32) -> Self {
+        let safe_sr = if sample_rate.is_finite() && sample_rate >= 8000.0 && sample_rate <= 384_000.0 {
+            sample_rate
+        } else {
+            48_000.0
+        };
+
+        let safe_q = if q.is_finite() && q > 0.05 {
+            q
+        } else {
+            0.7071
+        };
+
+        let safe_gain = if gain_db.is_nan() {
+            0.0
+        } else {
+            gain_db.clamp(-36.0, 36.0)
+        };
+
+        let max_freq = safe_sr * 0.499;
+        let safe_freq = if freq.is_finite() {
+            freq.clamp(1.0, max_freq)
+        } else {
+            105.0f32.min(max_freq)
+        };
+
+        if safe_gain.abs() < 1e-6 {
+            return Self::identity();
+        }
+
+        let a_linear = 10.0f32.powf(safe_gain / 40.0);
+        let w0 = 2.0 * PI * safe_freq / safe_sr;
+        let (sin_w0, cos_w0) = w0.sin_cos();
+        let alpha = sin_w0 / (2.0 * safe_q);
+        let two_sqrt_a_alpha = 2.0 * a_linear.sqrt() * alpha;
+
+        let a_plus_1 = a_linear + 1.0;
+        let a_minus_1 = a_linear - 1.0;
+
+        let b0 = a_linear * (a_plus_1 - a_minus_1 * cos_w0 + two_sqrt_a_alpha);
+        let b1 = 2.0 * a_linear * (a_minus_1 - a_plus_1 * cos_w0);
+        let b2 = a_linear * (a_plus_1 - a_minus_1 * cos_w0 - two_sqrt_a_alpha);
+        let a0 = a_plus_1 + a_minus_1 * cos_w0 + two_sqrt_a_alpha;
+        let a1 = -2.0 * (a_minus_1 + a_plus_1 * cos_w0);
+        let a2 = a_plus_1 + a_minus_1 * cos_w0 - two_sqrt_a_alpha;
+
+        if a0.abs() < 1e-12 {
+            return Self::identity();
+        }
+
+        let inv_a0 = 1.0 / a0;
+        let coeffs = Self {
+            b0: b0 * inv_a0,
+            b1: b1 * inv_a0,
+            b2: b2 * inv_a0,
+            a1: a1 * inv_a0,
+            a2: a2 * inv_a0,
+        };
+
+        if coeffs.is_stable() {
+            coeffs
+        } else {
+            Self::identity()
+        }
+    }
+
+    /// Computes high-shelf EQ biquad coefficients according to Robert Bristow-Johnson
+    /// Audio EQ Cookbook formulas.
+    ///
+    /// - $A = 10^{\text{gain\_db} / 40}$
+    /// - $\omega_0 = 2\pi f_0 / f_s$
+    /// - $\alpha = \sin(\omega_0) / (2 Q)$
+    /// - $2\sqrt{A}\alpha = 2 \sqrt{A} \alpha$
+    /// - $b_0 = A ((A+1) + (A-1)\cos(\omega_0) + 2\sqrt{A}\alpha)$
+    /// - $b_1 = -2A ((A-1) + (A+1)\cos(\omega_0))$
+    /// - $b_2 = A ((A+1) + (A-1)\cos(\omega_0) - 2\sqrt{A}\alpha)$
+    /// - $a_0 = (A+1) - (A-1)\cos(\omega_0) + 2\sqrt{A}\alpha$
+    /// - $a_1 = 2 ((A-1) - (A+1)\cos(\omega_0))$
+    /// - $a_2 = (A+1) - (A-1)\cos(\omega_0) - 2\sqrt{A}\alpha$
+    ///
+    /// Normalized with $a_0 = 1.0$.
+    pub fn high_shelf(sample_rate: f32, freq: f32, q: f32, gain_db: f32) -> Self {
+        let safe_sr = if sample_rate.is_finite() && sample_rate >= 8000.0 && sample_rate <= 384_000.0 {
+            sample_rate
+        } else {
+            48_000.0
+        };
+
+        let safe_q = if q.is_finite() && q > 0.05 {
+            q
+        } else {
+            0.7071
+        };
+
+        let safe_gain = if gain_db.is_nan() {
+            0.0
+        } else {
+            gain_db.clamp(-36.0, 36.0)
+        };
+
+        let max_freq = safe_sr * 0.499;
+        let safe_freq = if freq.is_finite() {
+            freq.clamp(1.0, max_freq)
+        } else {
+            10_000.0f32.min(max_freq)
+        };
+
+        if safe_gain.abs() < 1e-6 {
+            return Self::identity();
+        }
+
+        let a_linear = 10.0f32.powf(safe_gain / 40.0);
+        let w0 = 2.0 * PI * safe_freq / safe_sr;
+        let (sin_w0, cos_w0) = w0.sin_cos();
+        let alpha = sin_w0 / (2.0 * safe_q);
+        let two_sqrt_a_alpha = 2.0 * a_linear.sqrt() * alpha;
+
+        let a_plus_1 = a_linear + 1.0;
+        let a_minus_1 = a_linear - 1.0;
+
+        let b0 = a_linear * (a_plus_1 + a_minus_1 * cos_w0 + two_sqrt_a_alpha);
+        let b1 = -2.0 * a_linear * (a_minus_1 + a_plus_1 * cos_w0);
+        let b2 = a_linear * (a_plus_1 + a_minus_1 * cos_w0 - two_sqrt_a_alpha);
+        let a0 = a_plus_1 - a_minus_1 * cos_w0 + two_sqrt_a_alpha;
+        let a1 = 2.0 * (a_minus_1 - a_plus_1 * cos_w0);
+        let a2 = a_plus_1 - a_minus_1 * cos_w0 - two_sqrt_a_alpha;
+
+        if a0.abs() < 1e-12 {
+            return Self::identity();
+        }
+
+        let inv_a0 = 1.0 / a0;
+        let coeffs = Self {
+            b0: b0 * inv_a0,
+            b1: b1 * inv_a0,
+            b2: b2 * inv_a0,
+            a1: a1 * inv_a0,
+            a2: a2 * inv_a0,
+        };
+
+        if coeffs.is_stable() {
+            coeffs
+        } else {
+            Self::identity()
         }
     }
 
@@ -192,6 +360,16 @@ impl Biquad {
     /// Creates a new peaking EQ biquad filter.
     pub fn peaking_eq(sample_rate: f32, freq: f32, q: f32, gain_db: f32) -> Self {
         Self::new(BiquadCoefficients::peaking_eq(sample_rate, freq, q, gain_db))
+    }
+
+    /// Creates a new low-shelf EQ biquad filter.
+    pub fn low_shelf(sample_rate: f32, freq: f32, q: f32, gain_db: f32) -> Self {
+        Self::new(BiquadCoefficients::low_shelf(sample_rate, freq, q, gain_db))
+    }
+
+    /// Creates a new high-shelf EQ biquad filter.
+    pub fn high_shelf(sample_rate: f32, freq: f32, q: f32, gain_db: f32) -> Self {
+        Self::new(BiquadCoefficients::high_shelf(sample_rate, freq, q, gain_db))
     }
 
     /// Returns the internal DF-II Transposed state delay line values (s1, s2).
