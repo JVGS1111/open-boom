@@ -38,7 +38,9 @@ jobs:
             src-tauri
 
       - name: Install npm dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm --prefix src-ui ci
 
       - name: Run Cargo workspace tests
         run: cargo test --workspace --locked
