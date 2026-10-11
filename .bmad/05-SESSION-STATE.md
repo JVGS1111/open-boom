@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 09:55
+* **Data/Hora:** 11/10/2026 - 10:28
 * **Sprint Ativa:** Epic 3: Studio Equalization & AutoEq Headphone Calibration
-* **Tarefa Atual:** Story 3.1 (`31-Band Biquad Filter Engine & Direct Form II Transposed Topology`) CONCLUÍDA! Todos os 105 testes do workspace passando, zero warnings, release Tauri compilando com sucesso!
+* **Tarefa Atual:** Story 3.2 (`Dual-Mode Equalizer Studio Drawer (10-Band vs 31-Band) & Spline Curve Visualizer`) CONCLUÍDA! 17 testes de UI verdes, 104 testes Rust verdes, build Vite compilando em 3.32s!
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -149,9 +149,19 @@
     - Registro de ADR-022 em `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.1 (`status: done`).
 
+22. **Implementação e Verificação Completa da Story 3.2 (`3-2-dual-mode-equalizer-studio-drawer-10-band-vs-31-band-spline`):**
+    - `src-ui/src/components/EqualizerStudioDrawer.tsx`: Componente gaveta de estúdio com aceleração por hardware CSS (`translate-y`, `opacity`, `will-change`), toggle de modo segmented entre 10-Band (oitavas casuais: 31.5, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz) e 31-Band (1/3-oitava ISO padrão: 20 Hz a 20 kHz) preservando integralmente os valores da curva 31-band (`FR12`).
+    - Faders táteis verticais com curso de 180px, poço rebaixado, linha guia 0 dB, preenchimento dinâmico ciano/azul, badge flutuante Cascadia Code durante arrasto (`+2.4 dB`), detent magnético suave em $\pm 0.3\text{ dB}$ para $0.0\text{ dB}$, precisão 5x mais fina segurando `Shift` (sensibilidade normalizada para passos de 0.1 dB), reset instantâneo por duplo clique em $0.0\text{ dB}$, navegação por teclado e conformidade com limites operacionais $[-12.0\text{ dB}, +12.0\text{ dB}]$ (`UX-DR7`, `EXPERIENCE.md §6.2`).
+    - Visualizador interativo de curva spline de Bezier cúbica (Catmull-Rom para Bezier) desenhado em `<canvas>` com interpolação contínua $C^1$, escala logarítmica de frequência (20 Hz a 20 kHz), linhas de grade horizontal (-12, -6, 0 dB ciano, +6, +12 dB), preenchimento gradiente ciano e neon glow ciano (`FR10`).
+    - `src-ui/src/components/EqualizerPreview.tsx`: Atualizado com botão clicável "Expand EQ", atalho visual `Ctrl + Shift + E` e trigger no dock de faders.
+    - `src-ui/src/App.tsx`: Gestão de estado `isEqDrawerOpen`, `eqMode`, atalho global `Ctrl + Shift + E` (ignorado se input focado), tecla `Escape` para fechar, conexão dos faders aos comandos SPSC `SetEqBandGain` e `LoadGraphicEqSnapshot`, e persistência atômica no `AppConfig`.
+    - `src-ui/src/test/EqualizerStudioDrawer.test.tsx` e `run.mjs`: Suíte de 20 testes unitários e de componente cobrindo todas as linhas da matriz de I/O, mapeamento logarítmico, detent magnético, 5x sensibilidade Shift, spline Bezier, acessibilidade WAI-ARIA e isolamento de índices.
+    - 20 testes de UI passando, 104 testes de backend Rust passando e build Vite concluído em 3.32s com 0 erros.
+    - Revisão em 4 camadas concluída (Blind Hunter, Edge Case Hunter, Verification Gap, Intent Alignment) com todas as melhorias aplicadas.
+
 ## O que está em andamento agora
-* **Story 3.1 Concluída:** O motor de equalização gráfica de 31 bandas está operante e integrado ao pipeline de áudio.
-* **Próximo Passo Imediato:** Início do desenvolvimento da **Story 3.2: Dual-Mode Equalizer Studio Drawer (10-Band vs 31-Band) & Spline Curve Visualizer** na interface React/TypeScript.
+* **Story 3.2 Concluída e Aprovada:** Equalizer Studio Drawer e Visualizador Spline implementados, revisados e verificados.
+* **Próximo Passo Imediato:** Início do desenvolvimento da **Story 3.3: Offline AutoEq Headphone Database Indexing & Instant Fuzzy Search** em `crates/open-boom-storage`.
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.

@@ -11,6 +11,7 @@ import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
 import { SettingsModal } from "./components/SettingsModal";
 import { SoundstageConfiguratorModal } from "./components/SoundstageConfiguratorModal";
+import { EqualizerStudioDrawer } from "./components/EqualizerStudioDrawer";
 
 export const App: React.FC = () => {
   // Master Engine State
@@ -33,14 +34,16 @@ export const App: React.FC = () => {
   const [surroundEnabled, setSurroundEnabled] = useState(true);
   const [surroundIntensity, setSurroundIntensity] = useState(0.72);
 
-  // Equalizer State (31 Bands)
+  // Equalizer State (31 Bands) & Studio Drawer (Story 3.1 & 3.2, FR9, FR12, UX-DR7)
   const [activeEqPreset, setActiveEqPreset] = useState("Harman Acoustic");
-  const [eqGains] = useState<number[]>([
+  const [eqGains, setEqGains] = useState<number[]>([
     2.5, 3.0, 2.0, 1.5, 0.5, 0.0, -0.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0,
     1.5, 1.0, 0.5, 0.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 2.0, 1.5, 1.0, 0.5,
     0.0, -0.5,
   ]);
   const [preampOffsetDb] = useState(-3.0);
+  const [isEqDrawerOpen, setIsEqDrawerOpen] = useState(false);
+  const [eqMode, setEqMode] = useState<"10" | "31">("10");
 
   // Sweeteners Rack State
   const [effectModules, setEffectModules] = useState<EffectModule[]>([
@@ -194,6 +197,16 @@ export const App: React.FC = () => {
             setSpeakerAzimuthsDeg(config.speaker_azimuths_deg);
             config.speaker_azimuths_deg.forEach((az, idx) => {
               dispatchCommand({ SetSpeakerAzimuth: { channel: idx, azimuth_deg: az } });
+            });
+          }
+
+          if (config.graphic_eq_gains_db && config.graphic_eq_gains_db.length === 31) {
+            setEqGains(config.graphic_eq_gains_db);
+            dispatchCommand({
+              LoadGraphicEqSnapshot: {
+                gains_db: config.graphic_eq_gains_db,
+                preamp_offset_db: preampOffsetDb,
+              },
             });
           }
 
@@ -507,15 +520,47 @@ export const App: React.FC = () => {
     }
   };
 
+  // Equalizer Studio Handlers (Story 3.2, FR9, FR12, UX-DR7)
+  const handleEqBandGainChange = (bandIndex: number, gainDb: number) => {
+    const clampedGain = Math.max(-12.0, Math.min(12.0, Math.round(gainDb * 10) / 10));
+    setEqGains((prev) => {
+      const next = [...prev];
+      next[bandIndex] = clampedGain;
+      return next;
+    });
+    dispatchCommand({
+      SetEqBandGain: { band_idx: bandIndex, gain_db: clampedGain },
+    });
+  };
+
+  const handleResetEqGains = () => {
+    const zeroGains = new Array(31).fill(0.0);
+    setEqGains(zeroGains);
+    dispatchCommand({
+      LoadGraphicEqSnapshot: {
+        gains_db: zeroGains,
+        preamp_offset_db: preampOffsetDb,
+      },
+    });
+  };
+
   // Global Keyboard Shortcuts (EXPERIENCE.md §6.3)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore global hotkeys if an editable input is focused
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      const isInputFocused =
+        activeTag === "input" ||
+        activeTag === "textarea" ||
+        (document.activeElement as HTMLElement)?.isContentEditable;
+
       // Ctrl + Shift + B: Toggle Master DSP Bypass (A/B Test)
       if (
         (e.ctrlKey || e.metaKey) &&
         e.shiftKey &&
         (e.key === "b" || e.key === "B" || e.code === "KeyB")
       ) {
+        if (isInputFocused) return;
         e.preventDefault();
         if (e.repeat) return;
         if (!masterPower) return;
@@ -528,9 +573,22 @@ export const App: React.FC = () => {
         e.shiftKey &&
         (e.key === "s" || e.key === "S" || e.code === "KeyS")
       ) {
+        if (isInputFocused) return;
         e.preventDefault();
         if (e.repeat) return;
         setIsConfiguratorOpen((prev) => !prev);
+      }
+
+      // Ctrl + Shift + E: Toggle Equalizer Studio Drawer (Story 3.2, UX-DR7)
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "e" || e.key === "E" || e.code === "KeyE")
+      ) {
+        if (isInputFocused) return;
+        e.preventDefault();
+        if (e.repeat) return;
+        setIsEqDrawerOpen((prev) => !prev);
       }
     };
 
@@ -624,7 +682,7 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Main Studio Content Area */}
-      <main className="flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden">
+      <main className="flex-1 p-3 grid grid-cols-12 gap-3 overflow-hidden relative">
         {/* Left soundstage panel: 3D Surround Dial */}
         <section className="col-span-5 bg-surface-base/60 border border-border-subtle rounded-xl flex items-center justify-center p-2 relative overflow-hidden">
           <SoundstageDial
@@ -643,6 +701,7 @@ export const App: React.FC = () => {
               activePreset={activeEqPreset}
               bands={eqGains}
               preampOffsetDb={preampOffsetDb}
+              onExpand={() => setIsEqDrawerOpen(true)}
             />
           </div>
           <div className="flex-1">
@@ -653,6 +712,19 @@ export const App: React.FC = () => {
             />
           </div>
         </section>
+
+        {/* Equalizer Studio Drawer (Story 3.2, UX-DR7) */}
+        <EqualizerStudioDrawer
+          isOpen={isEqDrawerOpen}
+          onClose={() => setIsEqDrawerOpen(false)}
+          mode={eqMode}
+          onModeChange={setEqMode}
+          gains={eqGains}
+          onGainChange={handleEqBandGainChange}
+          onResetAll={handleResetEqGains}
+          activePreset={activeEqPreset}
+          preampOffsetDb={preampOffsetDb}
+        />
       </main>
 
       {/* 3. Bottom Status & Telemetry Dock */}
