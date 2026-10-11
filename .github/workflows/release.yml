@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag version for this release (e.g. v0.1.0)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/open-boom-core
+            crates/open-boom-wasapi
+            crates/open-boom-storage
+            src-tauri
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run Cargo workspace tests
+        run: cargo test --workspace --locked
+
+      - name: Run UI frontend tests
+        run: npm run test
+
+      - name: Build Tauri Application & NSIS Installer
+        run: npx tauri build --bundles nsis
+
+      - name: Package Release Assets & Compute Checksums
+        shell: pwsh
+        run: |
+          $dest = "release-assets"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          
+          $tag = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -notlike "v*") {
+            $tag = "${{ github.event.inputs.tag_name }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = "v0.1.0"
+          }
+
+          # 1. Installer Setup EXE
+          $setup = Get-ChildItem -Path "target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if ($setup) {
+            Write-Host "Found NSIS installer: $($setup.FullName)"
+            Copy-Item $setup.FullName -Destination "$dest/$($setup.Name)"
+          } else {
+            Write-Warning "NSIS installer was not found in target/release/bundle/nsis/"
+          }
+
+          # 2. Standalone Portable EXE
+          $standalone = "target/release/open-boom.exe"
+          if (Test-Path $standalone) {
+            $portableName = "OpenBoom-$tag-portable-x64.exe"
+            Write-Host "Found standalone binary: $standalone -> $portableName"
+            Copy-Item $standalone -Destination "$dest/$portableName"
+          }
+
+          # 3. Generate SHA256SUMS.txt
+          Get-ChildItem -Path $dest -File | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -FilePath "$dest/SHA256SUMS.txt" -Append -Encoding ascii
+          }
+
+          Write-Host "Generated Release Assets:"
+          Get-ChildItem -Path $dest
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
