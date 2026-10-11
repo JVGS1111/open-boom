@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from "react";
-import { Settings, X, HardDrive, CheckCircle2, ShieldCheck, Monitor } from "lucide-react";
+import { Settings, X, HardDrive, CheckCircle2, ShieldCheck, Monitor, AlertTriangle } from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   launchOnStartup: boolean;
   onToggleStartup: () => void;
+  bufferGuardEnabled?: boolean;
+  onToggleBufferGuard?: () => void;
   storagePath?: string;
 }
 
@@ -14,6 +16,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   launchOnStartup,
   onToggleStartup,
+  bufferGuardEnabled = true,
+  onToggleBufferGuard,
   storagePath = "%APPDATA%\\OpenBoom\\config.json",
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -114,7 +118,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Section 2: Storage Architecture & Atomic Invariants (AD-10) */}
+        {/* Section 2: Audio Buffer Stability & Acoustic Guard */}
+        <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-0.5 pr-3">
+              <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-accent-cyan" />
+                Audio Buffer Stability Guard
+              </span>
+              <span className="text-[11px] text-text-muted leading-tight">
+                Buffer estendido de segurança WASAPI (25ms) e retenção dinâmica de pico (5ms hold) no limitador master, eliminando estalos e cortes em sub-graves pesados.
+              </span>
+            </div>
+
+            {/* Switch Toggle */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={bufferGuardEnabled}
+              aria-label="Audio Buffer Stability Guard"
+              onClick={onToggleBufferGuard}
+              className={`w-11 h-6 shrink-0 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer relative ${
+                bufferGuardEnabled
+                  ? "bg-accent-cyan shadow-cyan-glow-sm"
+                  : "bg-surface-elevated border border-border-subtle"
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white transition-transform duration-200 ease-in-out shadow-md ${
+                  bufferGuardEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Conditional Alert Banner */}
+          {!bufferGuardEnabled ? (
+            <div className="bg-status-offline/10 border border-status-offline/40 rounded-md p-2.5 flex items-start gap-2 text-status-offline animate-in fade-in duration-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-status-offline animate-pulse" />
+              <div className="text-[11px] leading-tight">
+                <span className="font-semibold block text-red-400 mb-0.5">
+                  Aviso de Risco Acústico & Fadiga Mecânica
+                </span>
+                Proteção desativada (Modo de baixa latência agressivo 10ms). Músicas com sub-graves densos e transientes pesados (Rock, Synthwave, Kick 808) podem sofrer micro-cortes do Windows e estalos secos ("tiros") por falta de folga de buffer.
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] text-accent-cyan font-mono bg-accent-cyan/10 border border-accent-cyan/20 px-2 py-1 rounded">
+              <CheckCircle2 className="w-3 h-3 text-status-online" />
+              <span>Proteção Ativa: Zero Estalos & Transientes Suaves</span>
+            </div>
+          )}
+        </div>
+
+        {/* Section 3: Storage Architecture & Atomic Invariants (AD-10) */}
         <div className="flex flex-col gap-2 bg-surface-base/50 border border-border-subtle rounded-lg p-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">

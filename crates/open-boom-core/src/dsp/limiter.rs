@@ -12,6 +12,9 @@ pub struct MasterLimiter {
     gain_reduction_db: f32,
     attack_coeff: f32,
     release_coeff: f32,
+    hold_samples: usize,
+    hold_counter: usize,
+    buffer_guard_enabled: bool,
 }
 
 impl Default for MasterLimiter {
@@ -35,6 +38,11 @@ impl MasterLimiter {
             // and ~50ms transparent release envelope
             attack_coeff: (-1.0f32 / (0.0002f32 * 48000.0f32)).exp(),
             release_coeff: (-1.0f32 / (0.050f32 * 48000.0f32)).exp(),
+            // 5ms peak-hold buffer guard (240 samples at 48 kHz) to prevent
+            // sub-bass (40-60 Hz) intermodulation pumping across zero-crossings
+            hold_samples: 240,
+            hold_counter: 0,
+            buffer_guard_enabled: true,
         }
     }
 
@@ -82,9 +90,13 @@ impl MasterLimiter {
             1.0
         };
 
-        // Smooth gain reduction envelope
+        // Smooth gain reduction envelope with peak-hold guard against sub-bass zero-crossing flutter
         if target_gain < self.envelope {
             self.envelope = self.attack_coeff * self.envelope + (1.0 - self.attack_coeff) * target_gain;
+            self.hold_counter = self.hold_samples;
+        } else if self.buffer_guard_enabled && self.hold_counter > 0 {
+            self.hold_counter -= 1;
+            // Retain compressed envelope across zero-crossings
         } else {
             self.envelope = self.release_coeff * self.envelope + (1.0 - self.release_coeff) * target_gain;
         }
@@ -112,6 +124,21 @@ impl MasterLimiter {
         (safe_l, safe_r)
     }
 
+    /// Sets whether the anti-pumping peak-hold buffer guard is enabled.
+    #[inline]
+    pub fn set_buffer_guard(&mut self, enabled: bool) {
+        self.buffer_guard_enabled = enabled;
+        if !enabled {
+            self.hold_counter = 0;
+        }
+    }
+
+    /// Returns whether the anti-pumping peak-hold buffer guard is enabled.
+    #[inline]
+    pub fn is_buffer_guard_enabled(&self) -> bool {
+        self.buffer_guard_enabled
+    }
+
     /// Returns current gain reduction in dB (e.g. 0.0 or negative).
     #[inline]
     pub fn gain_reduction_db(&self) -> f32 {
@@ -124,6 +151,7 @@ impl MasterLimiter {
         self.delay_line_r.fill(0.0);
         self.write_idx = 0;
         self.envelope = 1.0;
+        self.hold_counter = 0;
         self.gain_reduction_db = 0.0;
     }
 }
@@ -181,5 +209,38 @@ mod tests {
             assert!(out_l.abs() < 1.0, "0% digital clipping guarantee violated");
             assert!(out_r.abs() < 1.0, "0% digital clipping guarantee violated");
         }
+    }
+
+    #[test]
+    fn test_limiter_peak_hold_buffer_guard() {
+        let mut limiter = MasterLimiter::new();
+        assert!(limiter.is_buffer_guard_enabled());
+
+        // Process a peak burst (40 samples to allow 0.2ms attack to converge)
+        for _ in 0..40 {
+            limiter.process_stereo(4.0, 4.0);
+        }
+        let env_after_peak = limiter.envelope();
+        assert!(env_after_peak < 0.35, "Envelope should converge under 0.35, got {}", env_after_peak);
+
+        // Advance 100 samples of silence (well within the 240 samples = 5ms hold window)
+        for _ in 0..100 {
+            limiter.process_stereo(0.0, 0.0);
+        }
+
+        // With buffer guard enabled, envelope must be held steady during zero-crossings
+        assert!(
+            (limiter.envelope() - env_after_peak).abs() < 0.05,
+            "Envelope must hold across zero-crossings when buffer guard is enabled"
+        );
+
+        // Disable buffer guard and test immediate release
+        limiter.set_buffer_guard(false);
+        assert!(!limiter.is_buffer_guard_enabled());
+        for _ in 0..100 {
+            limiter.process_stereo(0.0, 0.0);
+        }
+        // Without hold, envelope recovers towards 1.0
+        assert!(limiter.envelope() > env_after_peak + 0.01);
     }
 }

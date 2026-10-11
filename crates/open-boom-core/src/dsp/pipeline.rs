@@ -238,6 +238,9 @@ impl AudioProcessor {
                 }
                 _ => {}
             },
+            AudioCommand::SetBufferGuard(enabled) => {
+                self.limiter.set_buffer_guard(enabled);
+            }
         }
     }
 
@@ -499,5 +502,17 @@ impl AudioProcessor {
     #[inline]
     pub fn is_autoeq_bypassed(&self) -> bool {
         self.parametric_eq.is_bypassed()
+    }
+
+    /// Sets whether the anti-pumping peak-hold buffer guard is enabled on the master limiter.
+    #[inline]
+    pub fn set_buffer_guard(&mut self, enabled: bool) {
+        self.limiter.set_buffer_guard(enabled);
+    }
+
+    /// Returns whether the anti-pumping peak-hold buffer guard is enabled.
+    #[inline]
+    pub fn is_buffer_guard_enabled(&self) -> bool {
+        self.limiter.is_buffer_guard_enabled()
     }
 }

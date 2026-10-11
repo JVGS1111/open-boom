@@ -276,12 +276,22 @@ impl AudioEngineCoordinator {
         Ok(())
     }
 
-    /// Stops both audio streams cleanly.
+    /// Stops both capture and render clients, and marks engine as not running.
     pub fn stop(&mut self) -> EngineResult<()> {
         let _ = self.bridge.stop();
-        let _ = self.capture.stop();
-        let _ = self.render.stop();
+        let cap_res = self.capture.stop();
+        let ren_res = self.render.stop();
         self.is_running = false;
-        Ok(())
+        cap_res.and(ren_res)
+    }
+
+    /// Sets whether the anti-pumping peak-hold buffer guard is enabled on the internal DSP limiter.
+    pub fn set_buffer_guard(&mut self, enabled: bool) {
+        self.processor.set_buffer_guard(enabled);
+    }
+
+    /// Returns whether the anti-pumping peak-hold buffer guard is enabled.
+    pub fn is_buffer_guard_enabled(&self) -> bool {
+        self.processor.is_buffer_guard_enabled()
     }
 }

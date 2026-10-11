@@ -66,7 +66,13 @@ impl AppState {
             command_queue.clone(),
         )));
         let store = PresetStore::default();
+        let app_config = store.load_config().unwrap_or_default();
+        let buffer_guard = app_config.buffer_guard_enabled;
         let startup = StartupManager::new();
+
+        if let Ok(mut coord) = coordinator.lock() {
+            coord.set_buffer_guard(buffer_guard);
+        }
 
         let device_mgr = AudioDeviceManager::new();
         let physical_default = device_mgr.get_physical_default_device().ok().flatten();
@@ -80,6 +86,7 @@ impl AppState {
                 target_device_id: physical_id.clone(),
                 capture_device_id: virtual_id.clone(),
                 allow_synthetic: !auto_route,
+                buffer_guard_enabled: buffer_guard,
             },
         ).ok();
         let pump = Arc::new(Mutex::new(pump_instance));
@@ -239,6 +246,8 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
 
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
 
+    let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
+
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
             existing.stop();
@@ -249,6 +258,7 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
                 target_device_id: device_id.clone(),
                 capture_device_id: virtual_id,
                 allow_synthetic: !state.auto_route,
+                buffer_guard_enabled: buffer_guard,
             },
         ).ok();
     }
@@ -279,6 +289,7 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
+    let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
 
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
@@ -290,9 +301,47 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
                 target_device_id: fallback_id,
                 capture_device_id: virtual_id,
                 allow_synthetic: !state.auto_route,
+                buffer_guard_enabled: buffer_guard,
             },
         ).ok();
     }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_buffer_guard(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    // 1. Dispatch lock-free command to DSP limiter
+    state.dispatcher.send(AudioCommand::SetBufferGuard(enabled)).map_err(|e| e.to_string())?;
+
+    // 2. Direct update on coordinator processor if accessible
+    if let Ok(mut coord) = state.coordinator.lock() {
+        coord.set_buffer_guard(enabled);
+    }
+
+    // 3. Persist in AppConfig
+    let mut config = state.store.load_config().unwrap_or_default();
+    config.buffer_guard_enabled = enabled;
+    let _ = state.store.save_config(&config);
+
+    // 4. Hot-restart pump with new buffer size
+    let physical_id = state.active_physical_device_id.lock().ok().and_then(|g| g.clone());
+    let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
+
+    if let Ok(mut pump_guard) = state.pump.lock() {
+        if let Some(mut existing) = pump_guard.take() {
+            existing.stop();
+        }
+        *pump_guard = AudioStreamPump::start(
+            state.coordinator.clone(),
+            StreamPumpConfig {
+                target_device_id: physical_id,
+                capture_device_id: virtual_id,
+                allow_synthetic: !state.auto_route,
+                buffer_guard_enabled: enabled,
+            },
+        ).ok();
+    }
+
     Ok(())
 }
 
@@ -691,6 +740,7 @@ pub fn run() {
             set_app_mute,
             get_app_volume_profiles,
             reset_app_volume_profile,
+            set_buffer_guard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");

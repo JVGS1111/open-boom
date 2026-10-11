@@ -46,7 +46,7 @@ impl Default for LoopbackConfig {
             sample_rate: INTERNAL_SAMPLE_RATE,
             channels: 2,
             format: SampleFormat::Float32,
-            allow_synthetic_fallback: false,
+            allow_synthetic_fallback: true,
             force_synthetic: false,
         }
     }

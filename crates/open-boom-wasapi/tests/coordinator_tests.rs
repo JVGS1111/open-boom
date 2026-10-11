@@ -11,8 +11,14 @@ use open_boom_wasapi::{
 fn test_coordinator_with_spsc_command_queue_power_toggle() {
     let queue = SpscQueue::<AudioCommand, DEFAULT_COMMAND_QUEUE_CAPACITY>::new();
     let mut coordinator = AudioEngineCoordinator::with_command_queue(
-        LoopbackConfig::default(),
-        RenderConfig::default(),
+        LoopbackConfig {
+            allow_synthetic_fallback: true,
+            ..Default::default()
+        },
+        RenderConfig {
+            allow_synthetic_fallback: true,
+            ..Default::default()
+        },
         queue.clone(),
     );
 

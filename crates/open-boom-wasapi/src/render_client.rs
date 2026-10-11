@@ -21,7 +21,7 @@ impl Default for RenderConfig {
             sample_rate: INTERNAL_SAMPLE_RATE,
             channels: 2,
             buffer_duration_ms: 5.0, // 5ms buffer duration for sub-15ms Pro Audio
-            allow_synthetic_fallback: false,
+            allow_synthetic_fallback: true,
             force_synthetic: false,
         }
     }

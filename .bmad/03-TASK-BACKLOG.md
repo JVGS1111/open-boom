@@ -25,11 +25,11 @@
 ### Sprint 2: Motor de Áudio & Dispositivos (Marco 2)
 - [X] **T2.1**: Módulo de descoberta de dispositivos de saída e entrada (MMDeviceAPI enumeration, dynamic switching < 500ms, fallback recovery e popover selector - Story 1.4).
 - [X] **T2.2**: Pipeline de captura e reprodução de baixa latência (WASAPI Loopback Mode B/A, Resampler Hermite C1 48 kHz, MMCSS Pro Audio, RenderClient).
-- [ ] **T2.3**: Integração do controle de volume do sistema e mixer por aplicativo.
+- [X] **T2.3**: Integração do controle de volume do sistema e mixer por aplicativo (Concluído formalmente no Epic 5 via Stories 5.1, 5.2 e 5.3).
 - [X] **T2.4**: Motor de Convolução Binaural 7.1 KEMAR HRTF & Downfold Matrix (64 taps SSE2 SIMD, buffer circular duplo de 128 amostras, ITD 0.2-0.7ms, pinna notch 6 kHz, crossfade paramétrico e orçamento de desempenho < 25% - Story 2.1).
 - [X] **T2.5**: Reposicionamento Angular Espacial de Alto-Falantes Virtuais & Interpolação HRTF Contínua (arraste polar orbital, cálculo em tempo real de coeficientes HRTF KEMAR sem dropouts de áudio, display de coordenadas azimutais e reset para ITU-R BS.775 - Story 2.4).
 - [X] **T2.6**: Roteamento Inteligente Automático via COM IPolicyConfig & Dual-Mode DAC Bridge (chaveamento automático para Boom Audio no Master Power ON, retorno transparente ao HyperX no Master Power OFF/Exit, retry loop anti-jitter e filtragem de sinks virtuais na UI - ADR-020).
-- [ ] **T2.7**: Calibração da Matriz de Upmix Estéreo & Curva Perceptual do Dial 3D (Refinamento do ganho de ambiência lateral L-R e transição wet/dry para realce imediato de presença antes do Epic 4 - ADR-021).
+- [X] **T2.7**: Calibração da Matriz de Upmix Estéreo & Curva Perceptual do Dial 3D (Refinamento do ganho de ambiência lateral L-R e transição wet/dry para realce imediato de presença antes do Epic 4 - ADR-021).
 
 ### Sprint 3: Motor DSP & Efeitos de Som (Marco 3)
 - [X] **T3.1**: Motor do Equalizador Multibanda (31 bandas ISO 1/3-oitava, RBJ peaking biquads, Q=4.31, Direct Form II Transposed, suavização sub-buffer 32 amostras, estabilidade estrita de pólos, comandos POD SPSC - Story 3.1).
@@ -48,3 +48,4 @@
 - [X] **T5.1**: Windows Core Audio Session Manager & Thread Dedicada COM MTA (Isolamento de `IAudioSessionManager2` e `ISimpleAudioVolume` em worker thread COM MTA, canais de mensageria mpsc, inspeção segura de executáveis, poda de sessões expiradas, modo sintético headless e comandos IPC Tauri - Story 5.1).
 - [X] **T5.2**: Per-Application Mixer Drawer UI & Faders Individuais por Processo (Gaveta lateral de mixer no HUD, linhas `app-mixer-row` de 44px com ícone de processo, indicador pulsante de áudio, fader 0%-150% e mute, despacho via Tauri IPC - Story 5.2).
 - [X] **T5.3**: Persistência Atômica de Volumes por Aplicação & Recuperação Automática de Sessões (Armazenamento em `%APPDATA%\OpenBoom\app_volumes.json` via staging atômico `.tmp`, restauração automática na inicialização e recuperação quando novos processos iniciam reprodução - Story 5.3).
+- [X] **T5.4**: Audio Buffer Stability Guard & Peak-Hold Anti-Glitch Limiter (Buffer WASAPI estendido de 25ms contra jitter do Windows, 5ms peak-hold contra intermodulação em sub-graves, switch nas preferências com banner de risco acústico em vermelho e persistência atômica - ADR-031).

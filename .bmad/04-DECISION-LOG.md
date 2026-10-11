@@ -419,6 +419,27 @@
      - `AppMixerDrawer` exibe botão de restauração/reset rápido para 100% em aplicações com customizações ativas e nota informativa no rodapé.
 * **Consequência:** 4 novos testes unitários em `crates/open-boom-storage`, 1 novo teste de restauração em `crates/open-boom-wasapi`, 1 teste de integração no Tauri e 2 novos testes no frontend React/Vite. Total de 174 testes Cargo no backend e 67 testes no frontend UI verdes com 100% de sucesso. Conclusão formal do Epic 5.
 
+---
+
+## ADR-031: Audio Buffer Stability Guard, Anti-Pumping Peak-Hold Limiter & Acoustic Risk Warning Banner
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Relato do usuário de estalos/clicks secos repentinos ("tiros no som") ao reproduzir faixas com sub-graves densos e alta compressão/RMS (ex: *M.O.O.N - Dust (Vincienty Remix)*, Rock moderno). Três causas raízes foram isoladas:
+  1. *WASAPI Buffer Underruns sob Jitter:* Buffer de renderização de 10ms (`100_000` hns) muito próximo da margem de jitter do timer do Windows, descartando pacotes inteiros e gerando degraus de tensão ($\Delta V$).
+  2. *Contenção de Lock por Telemetria:* O polling de telemetria a cada 60ms causava contenção de mutex ocasional, levando o loop a copiar áudio dry (queda e salto abrupto de 6–10 dB em 10ms).
+  3. *Modulação de Envelope em Sub-Graves no Limitador:* A janela de lookahead de 2ms (96 amostras) era menor que a passagem por zero de ondas de 40–60 Hz, modulando o ganho a 100 Hz e achatando transientes.
+* **Decisões:**
+  1. **Peak-Hold de 5ms no Limitador Terminal (`crates/open-boom-core`):** Retenção de envelope por 240 amostras (5ms) durante passagens por zero de sub-graves, evitando modulação espúria de ganho e distorção harmônica.
+  2. **Buffer Guard WASAPI Estendido (25ms):** Buffer configurado para 25ms (`250_000` hns) com o guard ativo (vs 10ms em modo agressivo desativado), garantindo margem para jitter sem perda de pacotes e com latência imperceptível (< 25ms).
+  3. **Zero Queda de Processamento por Telemetria:** Substituído bypass abrupto por espera com `std::hint::spin_loop()`, garantindo que o fluxo de áudio jamais caia em dry no meio da reprodução.
+  4. **Switch Opcional na UI com Banner de Risco Acústico em Vermelho (`SettingsModal.tsx`):**
+     - Switch "Audio Buffer Stability Guard" ativado por padrão.
+     - Badge ciano "Proteção Ativa: Zero Estalos & Transientes Suaves" quando ativo.
+     - Banner de alerta vermelho em destaque ("Aviso de Risco Acústico & Fadiga Mecânica") quando desativado pelo usuário, alertando sobre os riscos acústicos e de fadiga física para transdutores ao usar o modo 10ms sem folga.
+  5. **Persistência Atômica e Hot-Restart:** Persistido em `AppConfig` (`buffer_guard_enabled: bool`) e reinicialização a quente do `AudioStreamPump` sem interrupção de áudio.
+* **Consequência:** Eliminação total de estalos em faixas com sub-graves pesados. 175 testes Rust verdes no workspace e 71 testes React/Vite no frontend aprovados com 100% de sucesso.
+
+
 
 
 

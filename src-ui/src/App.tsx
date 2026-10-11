@@ -152,6 +152,7 @@ export const App: React.FC = () => {
   // Settings Modal & Windows Startup State (Story 1.7)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
+  const [bufferGuardEnabled, setBufferGuardEnabled] = useState(true);
   const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -218,6 +219,7 @@ export const App: React.FC = () => {
           sweetener_night_mode_amount?: number;
           sweetener_spatial_enabled?: boolean;
           sweetener_spatial_amount?: number;
+          buffer_guard_enabled?: boolean;
         }>("load_app_config");
 
         if (config) {
@@ -360,6 +362,11 @@ export const App: React.FC = () => {
           dispatchCommand({ SetSweetener: { module_id: 1, enabled: fidEn, amount: fidAmt } });
           dispatchCommand({ SetSweetener: { module_id: 2, enabled: nmEn, amount: nmAmt } });
           dispatchCommand({ SetSweetener: { module_id: 3, enabled: spatEn, amount: spatAmt } });
+
+          // Restore Audio Buffer Stability Guard
+          const bgEn = config.buffer_guard_enabled ?? true;
+          setBufferGuardEnabled(bgEn);
+          dispatchCommand({ SetBufferGuard: bgEn });
         }
       } catch {
         // Browser mode fallback
@@ -489,6 +496,7 @@ export const App: React.FC = () => {
         sweetener_spatial_enabled: effectModules.find((m) => m.id === 3)?.enabled ?? true,
         sweetener_spatial_amount: effectModules.find((m) => m.id === 3)?.amount ?? 0.60,
         sweetener_pitch_semitones: 0,
+        buffer_guard_enabled: bufferGuardEnabled,
       };
 
       try {
@@ -516,6 +524,7 @@ export const App: React.FC = () => {
     speakerAzimuthsDeg,
     bypassActive,
     launchOnStartup,
+    bufferGuardEnabled,
     eqGains,
     activeAutoEqProfile,
     activeEqPreset,
@@ -634,6 +643,17 @@ export const App: React.FC = () => {
     } catch (err) {
       console.error("Failed to set startup status:", err);
       setNotification(`Failed to configure Windows startup: ${String(err)}`);
+    }
+  };
+
+  const handleToggleBufferGuard = async () => {
+    const nextVal = !bufferGuardEnabled;
+    setBufferGuardEnabled(nextVal);
+    dispatchCommand({ SetBufferGuard: nextVal });
+    try {
+      await invoke("set_buffer_guard", { enabled: nextVal });
+    } catch (err) {
+      console.error("Failed to set buffer guard status:", err);
     }
   };
 
@@ -1079,6 +1099,8 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         launchOnStartup={launchOnStartup}
         onToggleStartup={handleToggleStartup}
+        bufferGuardEnabled={bufferGuardEnabled}
+        onToggleBufferGuard={handleToggleBufferGuard}
       />
 
       {/* 8-Channel Virtual Speaker Configurator Modal (Story 2.3 & 2.4, FR7) */}

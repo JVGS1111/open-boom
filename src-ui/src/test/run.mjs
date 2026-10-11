@@ -35,6 +35,11 @@ const testFiles = [
     entry: path.join(__dirname, "AppMixer.test.tsx"),
     runnerName: "runAppMixerTests",
   },
+  {
+    name: "SettingsModal Preferences & Audio Buffer Stability Guard Test Suite",
+    entry: path.join(__dirname, "SettingsModal.test.tsx"),
+    runnerName: "runSettingsModalTests",
+  },
 ];
 
 async function main() {

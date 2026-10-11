@@ -177,6 +177,8 @@ pub enum AudioCommand {
         enabled: bool,
         amount: f32,
     },
+    /// Configure peak-hold buffer guard on the master limiter and audio pump.
+    SetBufferGuard(bool),
     /// Reset or flush all internal filter delay lines.
     ResetFilters,
 }

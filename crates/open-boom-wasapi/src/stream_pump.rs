@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 /// Configuration for the WASAPI audio streaming pump.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StreamPumpConfig {
     /// Target physical render device ID (e.g. Headphones/Speakers). None = system default.
     pub target_device_id: Option<String>,
@@ -20,6 +20,19 @@ pub struct StreamPumpConfig {
     pub capture_device_id: Option<String>,
     /// Whether synthetic/mock streaming is allowed in headless test environments.
     pub allow_synthetic: bool,
+    /// Whether WASAPI buffer guard (25ms safe buffer + anti-glitch margin) is enabled.
+    pub buffer_guard_enabled: bool,
+}
+
+impl Default for StreamPumpConfig {
+    fn default() -> Self {
+        Self {
+            target_device_id: None,
+            capture_device_id: None,
+            allow_synthetic: false,
+            buffer_guard_enabled: true,
+        }
+    }
 }
 
 /// Active streaming pump handle managing the audio processing loop.
@@ -155,10 +168,16 @@ impl AudioStreamPump {
                 Err(_) => return,
             };
 
+            let buffer_duration_hns = if config.buffer_guard_enabled {
+                250_000 // 25ms safe buffer preventing dropouts under heavy bass
+            } else {
+                100_000 // 10ms aggressive low-latency buffer
+            };
+
             let render_init_res = render_client.Initialize(
                 AUDCLNT_SHAREMODE_SHARED,
                 0,
-                100_000, // 10ms buffer
+                buffer_duration_hns,
                 0,
                 render_fmt_ptr,
                 None,
@@ -340,20 +359,35 @@ impl AudioStreamPump {
                         }
 
                         // Process audio frames through DSP pipeline
-                        // Non-blocking try_lock ensures audio thread never stalls on UI
-                        if let Ok(mut coord) = coordinator.try_lock() {
-                            coord.process_audio_chunk(
-                                &input_scratch[..stereo_sample_count],
-                                &mut output_scratch[..stereo_sample_count],
-                            );
-                        } else {
-                            // Passthrough fallback if coordinator momentarily locked by telemetry
-                            output_scratch[..stereo_sample_count]
-                                .copy_from_slice(&input_scratch[..stereo_sample_count]);
+                        // Spin-wait briefly if coordinator lock momentarily contended by UI telemetry,
+                        // never dropping DSP to passthrough during active playback
+                        let mut processed = false;
+                        for _ in 0..16 {
+                            if let Ok(mut coord) = coordinator.try_lock() {
+                                coord.process_audio_chunk(
+                                    &input_scratch[..stereo_sample_count],
+                                    &mut output_scratch[..stereo_sample_count],
+                                );
+                                processed = true;
+                                break;
+                            }
+                            std::hint::spin_loop();
+                        }
+                        if !processed {
+                            if let Ok(mut coord) = coordinator.lock() {
+                                coord.process_audio_chunk(
+                                    &input_scratch[..stereo_sample_count],
+                                    &mut output_scratch[..stereo_sample_count],
+                                );
+                            } else {
+                                output_scratch[..stereo_sample_count]
+                                    .copy_from_slice(&input_scratch[..stereo_sample_count]);
+                            }
                         }
 
                         // Write processed audio frames to physical output DAC with retry loop
-                        for _ in 0..10 {
+                        let max_retries = if config.buffer_guard_enabled { 25 } else { 12 };
+                        for _ in 0..max_retries {
                             let padding = render_client.GetCurrentPadding().unwrap_or(0);
                             let available = render_buffer_size.saturating_sub(padding);
 
@@ -386,7 +420,7 @@ impl AudioStreamPump {
                                 }
                                 break;
                             }
-                            std::thread::sleep(Duration::from_micros(500));
+                            std::thread::sleep(Duration::from_micros(400));
                         }
                     }
                     let _ = capture_svc.ReleaseBuffer(frames_read);

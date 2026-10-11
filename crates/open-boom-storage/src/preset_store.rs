@@ -104,6 +104,8 @@ pub struct AppConfig {
     pub sweetener_spatial_amount: f32,
     #[serde(default)]
     pub sweetener_pitch_semitones: i32,
+    #[serde(default = "default_true")]
+    pub buffer_guard_enabled: bool,
 }
 
 impl Default for AppConfig {
@@ -137,6 +139,7 @@ impl Default for AppConfig {
             sweetener_spatial_enabled: true,
             sweetener_spatial_amount: 0.60,
             sweetener_pitch_semitones: 0,
+            buffer_guard_enabled: true,
         }
     }
 }

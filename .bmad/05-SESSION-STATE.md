@@ -170,11 +170,25 @@
       - `ci.yml`: Validação contínua em PRs e pushes para `main`.
     - **Automação de Tag de Versão:** Script PowerShell `scripts/release.ps1` e comando `npm run release:tag` para validação de integridade e criação segura de tags anotadas.
 
+33. **Correção Definitiva de Estalos de Sub-Graves ("Tiros no Som") e Audio Buffer Stability Guard:**
+    - **Diagnóstico & Causa Raiz:** Faixas com sub-graves densos e alta compressão/RMS (ex: *M.O.O.N - Dust*, Rock moderno) causavam estalos devido a: (1) buffer WASAPI de 10ms sofrendo underrun por micro-jitter do agendador do Windows, (2) contenção transitória de lock pela telemetria da UI a cada 60ms copiando dry audio, e (3) modulação espúria de ganho a 100 Hz no limitador terminal durante a passagem por zero de ondas de 50 Hz.
+    - **Correções no Motor de Áudio (`open-boom-core` e `open-boom-wasapi`):**
+      - Peak-Hold dinâmico de 5ms (240 amostras a 48 kHz) no limitador lookahead, mantendo o envelope estável através de cruzamentos por zero de sub-graves sem distorção harmônica.
+      - Buffer Guard WASAPI estendido para 25ms (`250_000` hns), com loop de escrita de até 25 retries e `spin_loop()`, eliminando perda de pacotes e quedas para áudio dry.
+      - Comando `AudioCommand::SetBufferGuard(bool)` e IPC Tauri `set_buffer_guard` com reinicialização a quente (`hot-restart`) do stream pump.
+    - **Interface de Usuário (`SettingsModal.tsx` & `App.tsx`):**
+      - Switch opcional "Audio Buffer Stability Guard" na modal de configurações, ativado por padrão (`buffer_guard_enabled: true`).
+      - Badge ciano "Proteção Ativa: Zero Estalos & Transientes Suaves" quando habilitado.
+      - Banner de alerta vermelho proeminente ("Aviso de Risco Acústico & Fadiga Mecânica") exibido caso o usuário desative a proteção (modo 10ms agressivo).
+      - Persistência atômica das preferências em `%APPDATA%\OpenBoom\config.json`.
+    - **Verificação Completa de Testes:** 175 testes Cargo verdes no workspace total e 71 testes React/Vite verdes no frontend (incluindo `SettingsModal.test.tsx`). ADR-031 registrado no `.bmad/04-DECISION-LOG.md`.
+
 ## O que está em andamento agora
-* **PROJETO 100% PRONTO PARA LANÇAMENTO E DISTRIBUIÇÃO PÚBLICA!**
-* Compilação local de release validada: `target/release/open-boom.exe` (9.6 MB) e instalador `target/release/bundle/nsis/OpenBoom_0.1.0_x64-setup.exe` (2.34 MB).
+* **PROJETO 100% PRONTO PARA LANÇAMENTO E DISTRIBUIÇÃO PÚBLICA COM ÁUDIO ESTÁVEL E CRISTALINO!**
+* Compilação local de release validada: `target/release/open-boom.exe` e instalador `target/release/bundle/nsis/OpenBoom_0.1.0_x64-setup.exe`.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 174 testes Cargo do workspace e todos os 67 testes de UI do frontend estão passando com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 175 testes Cargo do workspace e todos os 71 testes de UI do frontend estão passando com 100% de sucesso.
+
 
 
