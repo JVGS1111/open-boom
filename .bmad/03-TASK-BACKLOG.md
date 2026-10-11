@@ -15,7 +15,7 @@
 - [X] **T1.4**: Construção do Header (Master Power Switch 48x26 com brilho ciano, Slider de Volume com valor numérico e controles de saída).
 - [X] **T1.5**: Construção do Dial Circular 3D Surround (knob rotativo 192px/144px com varredura 300°, física polar atan2, pips ciano 25/50/75%, snap duplo-clique 50%, 8 satélites e launcher de calibração - Story 2.2).
 - [ ] **T1.6**: Construção da barra de efeitos (Cards com toggles de Ambiente, Fidelidade, Modo Noturno, Espacial, Tonalidade).
-- [ ] **T1.7**: Construção dos seletores de Headphone EQ (AutoEq) e Equalizador (Presets).
+- [X] **T1.7**: Construção dos seletores de Headphone EQ (AutoEq) e Equalizador (Presets) (`AutoEqPopover.tsx` e `PresetSelectorPopover.tsx` - Stories 3.3 e 3.5).
 - [X] **T1.8**: Criação dos painéis expansíveis / modais (Modal de calibração 7.1 Soundstage com nós orbitais, faders de trim ±6 dB, atalho global Ctrl+Shift+S e arrasto angular - Stories 2.3 e 2.4).
 - [X] **T1.9**: Lock-Free POD Command Dispatcher (`AudioProcessor`, SPSC ring buffer sem alocações, bit-perfect passthrough quando desligado e telemetria sincronizada).
 - [X] **T1.10**: Comutação A/B Instantânea com Alinhamento de Fase (Crossfade equal-power 5ms, retenção do lookahead 2ms, zero pops/clicks, atalho Ctrl+Shift+B e status Hardware Passthrough - Story 1.6).
@@ -42,4 +42,4 @@
 ### Sprint 4: AutoEq & Presets (Marco 4)
 - [X] **T4.1**: Parser e indexador dos dados AutoEq (4.200 perfis, filtros paramétricos biquad e compensação automática de preamp - Story 3.3).
 - [X] **T4.2**: Integração dos perfis de fone diretamente na cadeia de equalização paramétrica desacoplada (Estágio ParametricStage de até 12 biquads Peaking/LowShelf/HighShelf com RBJ cookbook e Schur-Cohn, atenuação automática de preamp anti-clipping, cascata antes do EQ gráfico 31 bandas sem sobrescrever curvas do usuário, comandos SPSC lock-free e IPC Tauri - Story 3.4).
-- [ ] **T4.3**: Gerenciamento de presets de gênero de fábrica e presets customizados do usuário (Story 3.5).
+- [X] **T4.3**: Gerenciamento de presets de gênero de fábrica e presets customizados do usuário (15 presets calibrados de fábrica FR11, detecção de estado sujo com asterisco `Rock *`, persistência atômica CRUD em `%APPDATA%\OpenBoom\presets\*.json` via `.tmp` + `MoveFileExW`, sanitização de slugs e componente `PresetSelectorPopover.tsx` - Story 3.5).

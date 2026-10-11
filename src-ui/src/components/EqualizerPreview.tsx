@@ -1,23 +1,30 @@
 import React from "react";
-import { SlidersHorizontal, Activity, Maximize2 } from "lucide-react";
+import { SlidersHorizontal, Activity, Maximize2, ChevronDown } from "lucide-react";
+import { formatPresetDisplayLabel } from "./PresetSelectorPopover";
 
 export interface EqualizerPreviewProps {
   activePreset: string;
+  isPresetDirty?: boolean;
   bands: number[];
   preampOffsetDb: number;
   onExpand?: () => void;
+  onOpenPresets?: () => void;
   activeAutoEqName?: string;
   onOpenAutoEq?: () => void;
 }
 
 export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
   activePreset,
+  isPresetDirty = false,
   bands,
   preampOffsetDb,
   onExpand,
+  onOpenPresets,
   activeAutoEqName,
   onOpenAutoEq,
 }) => {
+  const presetLabel = formatPresetDisplayLabel(activePreset, isPresetDirty);
+
   return (
     <div className="bg-surface-card border border-border-subtle rounded-lg p-3.5 flex flex-col justify-between h-full relative">
       <div className="flex items-center justify-between mb-2">
@@ -43,10 +50,21 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
             </kbd>
           </button>
 
-          <div className="flex items-center gap-1.5 text-[10px] font-mono text-text-secondary bg-surface-base px-2 py-0.5 rounded border border-border-subtle">
-            <span>{activePreset}</span>
+          {/* Preset Selector Pill Button with Dirty Asterisk Indicator (FR11, EXPERIENCE.md §5.2) */}
+          <button
+            type="button"
+            onClick={onOpenPresets}
+            title="Select Factory Genre Preset or Save Custom Preset"
+            className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded border transition-all cursor-pointer ${
+              isPresetDirty
+                ? "text-accent-cyan bg-accent-blue/15 border-accent-cyan/50 hover:bg-accent-blue/25"
+                : "text-text-secondary hover:text-text-primary bg-surface-base hover:bg-surface-overlay border-border-subtle hover:border-accent-blue/40"
+            }`}
+          >
+            <span>{presetLabel}</span>
             <span className="text-accent-blue">({preampOffsetDb.toFixed(1)} dB)</span>
-          </div>
+            <ChevronDown className="w-3 h-3 text-text-muted" />
+          </button>
         </div>
       </div>
 

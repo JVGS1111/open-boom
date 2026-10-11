@@ -3,8 +3,8 @@
 use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot, GRAPHIC_EQ_BANDS};
 use open_boom_storage::{
-    AppConfig, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, PresetStore,
-    StartupManager,
+    AppConfig, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, EqPreset,
+    PresetStore, StartupManager,
 };
 use open_boom_wasapi::{
     AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig,
@@ -410,6 +410,55 @@ fn clear_autoeq_profile(state: State<'_, AppState>) -> Result<(), String> {
     state.dispatcher.apply_autoeq_profile(empty_filters, 0, 0.0).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_eq_presets(state: State<'_, AppState>) -> Result<Vec<EqPreset>, String> {
+    Ok(state.store.list_presets())
+}
+
+#[tauri::command]
+fn save_custom_eq_preset(
+    name: String,
+    gains_db: Vec<f32>,
+    state: State<'_, AppState>,
+) -> Result<EqPreset, String> {
+    if gains_db.len() != GRAPHIC_EQ_BANDS {
+        return Err(format!(
+            "Expected {} EQ band gains, received {}",
+            GRAPHIC_EQ_BANDS,
+            gains_db.len()
+        ));
+    }
+    let mut array = [0.0f32; GRAPHIC_EQ_BANDS];
+    array.copy_from_slice(&gains_db);
+    state
+        .store
+        .save_custom_preset(&name, array)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn rename_custom_eq_preset(
+    old_id: String,
+    new_name: String,
+    state: State<'_, AppState>,
+) -> Result<EqPreset, String> {
+    state
+        .store
+        .rename_custom_preset(&old_id, &new_name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_custom_eq_preset(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .store
+        .delete_custom_preset(&id)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new_runtime();
@@ -442,9 +491,9 @@ pub fn run() {
             let power_item = MenuItem::with_id(app, "toggle_power", "Master Power", true, None::<&str>)?;
             let mute_item = MenuItem::with_id(app, "toggle_mute", "Mute", true, None::<&str>)?;
 
-            let preset_acoustic = MenuItem::with_id(app, "preset_acoustic", "Harman Acoustic", true, None::<&str>)?;
+            let preset_acoustic = MenuItem::with_id(app, "preset_acoustic", "Acoustic", true, None::<&str>)?;
             let preset_bass = MenuItem::with_id(app, "preset_bass", "Bass Boost", true, None::<&str>)?;
-            let preset_vocal = MenuItem::with_id(app, "preset_vocal", "Vocal Clarity", true, None::<&str>)?;
+            let preset_vocal = MenuItem::with_id(app, "preset_vocal", "Vocal", true, None::<&str>)?;
             let presets_menu = Submenu::with_items(app, "Presets", true, &[&preset_acoustic, &preset_bass, &preset_vocal])?;
 
             let separator1 = PredefinedMenuItem::separator(app)?;
@@ -502,37 +551,23 @@ pub fn run() {
                             let _ = state.dispatcher.send(AudioCommand::SetMute(next_mute));
                             let _ = app.emit("tray-mute-toggled", next_mute);
                         }
-                        "preset_acoustic" => {
+                        "preset_acoustic" | "preset_bass" | "preset_vocal" => {
+                            let target_name = match event.id.as_ref() {
+                                "preset_acoustic" => "Acoustic",
+                                "preset_bass" => "Bass Boost",
+                                _ => "Vocal",
+                            };
                             let state = app.state::<AppState>();
+                            let gains = PresetStore::factory_presets()
+                                .into_iter()
+                                .find(|p| p.name == target_name)
+                                .map(|p| p.gains_db)
+                                .unwrap_or([0.0; GRAPHIC_EQ_BANDS]);
                             let _ = state.dispatcher.send(AudioCommand::LoadGraphicEqSnapshot {
-                                gains_db: [0.0; GRAPHIC_EQ_BANDS],
+                                gains_db: gains,
                                 preamp_offset_db: 0.0,
                             });
-                            let _ = app.emit("tray-preset-selected", "Harman Acoustic");
-                        }
-                        "preset_bass" => {
-                            let state = app.state::<AppState>();
-                            let mut gains = [0.0; GRAPHIC_EQ_BANDS];
-                            for (i, gain) in gains.iter_mut().enumerate().take(6) {
-                                *gain = 4.0 - (i as f32 * 0.5);
-                            }
-                            let _ = state.dispatcher.send(AudioCommand::LoadGraphicEqSnapshot {
-                                gains_db: gains,
-                                preamp_offset_db: -2.0,
-                            });
-                            let _ = app.emit("tray-preset-selected", "Bass Boost");
-                        }
-                        "preset_vocal" => {
-                            let state = app.state::<AppState>();
-                            let mut gains = [0.0; GRAPHIC_EQ_BANDS];
-                            for gain in gains.iter_mut().take(20).skip(12) {
-                                *gain = 2.5;
-                            }
-                            let _ = state.dispatcher.send(AudioCommand::LoadGraphicEqSnapshot {
-                                gains_db: gains,
-                                preamp_offset_db: -1.0,
-                            });
-                            let _ = app.emit("tray-preset-selected", "Vocal Clarity");
+                            let _ = app.emit("tray-preset-selected", target_name);
                         }
                         "quit" => {
                             let state = app.state::<AppState>();
@@ -585,6 +620,10 @@ pub fn run() {
             get_autoeq_stats,
             apply_autoeq_profile,
             clear_autoeq_profile,
+            get_eq_presets,
+            save_custom_eq_preset,
+            rename_custom_eq_preset,
+            delete_custom_eq_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -874,6 +913,47 @@ mod tests {
         let profile = state.autoeq_db.get_profile(&top.id).expect("profile exists");
         assert_eq!(profile.name, "HyperX Cloud II");
         assert!(!profile.filters.is_empty());
+    }
+
+    #[test]
+    fn test_eq_preset_commands_integration() {
+        let temp_dir = std::env::temp_dir().join(format!("tauri_presets_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let store = PresetStore::new(&temp_dir);
+        let startup = StartupManager::mock();
+        let state = AppState::with_store_and_startup(store, startup);
+
+        let initial_presets = state.store.list_presets();
+        assert_eq!(initial_presets.len(), 15);
+        assert!(initial_presets.iter().all(|p| p.is_factory));
+
+        let mut custom_gains = [0.0f32; GRAPHIC_EQ_BANDS];
+        custom_gains[0] = 3.5;
+        custom_gains[17] = 2.0;
+
+        let saved = state
+            .store
+            .save_custom_preset("Studio Reference", custom_gains)
+            .expect("save custom preset");
+        assert_eq!(saved.id, "studio-reference");
+        assert!(!saved.is_factory);
+        assert_eq!(state.store.list_presets().len(), 16);
+
+        let renamed = state
+            .store
+            .rename_custom_preset("studio-reference", "Mastering Curve")
+            .expect("rename custom preset");
+        assert_eq!(renamed.id, "mastering-curve");
+        assert_eq!(renamed.name, "Mastering Curve");
+
+        state
+            .store
+            .delete_custom_preset("mastering-curve")
+            .expect("delete custom preset");
+        assert_eq!(state.store.list_presets().len(), 15);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

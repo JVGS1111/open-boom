@@ -9,5 +9,5 @@ pub mod startup;
 pub use autoeq_db::{
     AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, ParametricFilterConfig,
 };
-pub use preset_store::{AppConfig, PresetStore};
+pub use preset_store::{AppConfig, EqPreset, PresetStore};
 pub use startup::{StartupManager, DEFAULT_APP_NAME, RUN_KEY_SUBKEY};

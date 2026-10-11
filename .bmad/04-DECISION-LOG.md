@@ -302,3 +302,17 @@
   7. **Integração na UI e Badges Dinâmicos:** Em `src-ui/src/App.tsx`, a seleção de perfil calcula o offset de atenuação, despacha o perfil via IPC e atualiza o badge de pré-amplificação em `EqualizerPreview.tsx` e `EqualizerStudioDrawer.tsx` (ex: `-6.5 dB PREAMP`). A limpeza ou reset do perfil desativa o estágio paramétrico mantendo os faders de 31 bandas inalterados.
 * **Consequência:** 11 testes em `autoeq_parametric_tests.rs` passando com 100% de estabilidade de pólos e THD+N < 0.005%, 9 testes unitários em `AutoEqParametric.test.tsx` passando, totalizando 116 testes Cargo e 39 testes de UI verdes no projeto com build de produção Vite concluído em 1.76s.
 
+---
+
+## ADR-025: Presets de Gênero de Fábrica (15 Curvas ISO), Detecção de Estado Modificado (`*`) e Persistência Atômica de Presets Customizados (Story 3.5)
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Para concluir o Epic 3 (Story 3.5), o OpenBoom precisa disponibilizar ao menos 15 presets de fábrica por gênero (`FR11`) com curvas de 31 bandas ISO 1/3-oitava calibradas, sinalizar visualmente alterações não salvas nos faders com um asterisco (`Rock *`) (`EXPERIENCE.md §5.2`) e permitir criar, renomear e excluir presets customizados de usuário em `%APPDATA%\OpenBoom\presets\*.json` com escrita atômica e resiliência total contra corrupção de arquivos ou path traversal (`AD-10`).
+* **Decisões:**
+  1. **15 Presets de Fábrica Calibrados (`FR11`):** Implementados em `PresetStore::factory_presets()` (`crates/open-boom-storage/src/preset_store.rs`) e espelhados em `FACTORY_EQ_PRESETS` (`src-ui/src/components/PresetSelectorPopover.tsx`): `Flat`, `Bass Boost`, `Treble Boost`, `Acoustic`, `Classical`, `Electronic`, `Gaming`, `Hip-Hop`, `Jazz`, `Movie`, `Pop`, `Rock`, `Vocal`, `Lounge` e `Deep`, todos com 31 ganhos finitos estritamente contidos em $[-12.0\text{ dB}, +12.0\text{ dB}]$.
+  2. **Persistência Atômica CRUD em `%APPDATA%\OpenBoom\presets\` (`AD-10`):** `save_custom_preset`, `rename_custom_preset` e `delete_custom_preset` escrevem primeiramente em arquivo temporário único (`<slug>.<pid>.<seq>.tmp` com contador atômico `AtomicU64`) e efetuam substituição atômica via `fs::rename` (`MoveFileExW` no Windows), removendo o `.tmp` imediatamente em caso de erro.
+  3. **Sanitização Estrita de Slugs e Proteção de Fábrica:** `PresetStore::sanitize_preset_slug` converte nomes para caracteres ASCII alfanuméricos minúsculos separados por hífen, bloqueando path traversal (`../`), nomes vazios e dispositivos reservados do Windows (`CON`, `NUL`, `COM1`..`COM9`, `LPT1`..`LPT9`). Presets de fábrica são protegidos contra sobrescrita, renomeação, exclusão ou sombreamento por arquivos `.json` manuais no diretório `presets/`.
+  4. **Detecção de Estado Sujo (`isPresetDirty`):** Quando qualquer uma das 31 bandas diverge mais de $0.05\text{ dB}$ da curva do preset ativo, `EqualizerPreview`, `EqualizerStudioDrawer` e `PresetSelectorPopover` exibem o sufixo `*` (ex.: `Rock *`) e destacam a ação `"Save As Custom Preset"`.
+  5. **Independência com AutoEq (`AD-6`):** A troca de presets gráficos de 31 bandas despacha `LoadGraphicEqSnapshot` com `preamp_offset_db: 0.0` (pertencente ao `GraphicEqStage`), preservando intactos o perfil de fone de ouvido e a atenuação de pré-amp do `ParametricStage`.
+* **Consequência:** 19 testes em `open-boom-storage` (122 testes no workspace Cargo) e 47 testes de UI passando com 0 falhas, concluindo 100% do Epic 3.
+

@@ -20,6 +20,11 @@ const testFiles = [
     entry: path.join(__dirname, "AutoEqParametric.test.tsx"),
     runnerName: "runAutoEqParametricTests",
   },
+  {
+    name: "Genre Factory Presets & Custom Preset Persistence Test Suite",
+    entry: path.join(__dirname, "PresetSelector.test.tsx"),
+    runnerName: "runPresetSelectorTests",
+  },
 ];
 
 async function main() {

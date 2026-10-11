@@ -1,7 +1,10 @@
-//! Unit and integration tests for OpenBoom atomic storage and startup management.
+//! Unit and integration tests for OpenBoom atomic storage, EQ presets, and startup management.
 
+use open_boom_core::types::GRAPHIC_EQ_BANDS;
 use open_boom_storage::{AppConfig, PresetStore, StartupManager};
+use std::collections::HashSet;
 use std::fs;
+use std::io;
 
 #[test]
 fn test_app_config_default_values() {
@@ -19,6 +22,7 @@ fn test_app_config_default_values() {
     assert!(!cfg.bypass_active);
     assert!(!cfg.launch_on_startup);
     assert_eq!(cfg.autoeq_profile_id, None);
+    assert_eq!(cfg.active_preset_name, "Flat");
 }
 
 #[test]
@@ -43,19 +47,30 @@ fn test_atomic_config_save_and_load() {
     custom_cfg.bypass_active = true;
     custom_cfg.launch_on_startup = true;
     custom_cfg.autoeq_profile_id = Some("hyperx-cloud-ii-oratory1990".to_string());
+    custom_cfg.active_preset_name = "Rock".to_string();
 
     store.save_config(&custom_cfg).expect("save config");
 
     // Verify file exists
     assert!(store.config_path().exists());
     // Verify no temporary files left behind
-    let tmp_path = temp_dir.join(format!("config.{}.tmp", std::process::id()));
-    assert!(!tmp_path.exists(), "Temporary staging file should be renamed away");
+    for entry in fs::read_dir(&temp_dir).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        assert!(
+            !name.ends_with(".tmp"),
+            "Temporary staging file should be renamed away: {}",
+            name
+        );
+    }
 
     // Reload and assert equality
     let reloaded = store.load_config().expect("reload config");
     assert_eq!(reloaded, custom_cfg);
-    assert_eq!(reloaded.autoeq_profile_id, Some("hyperx-cloud-ii-oratory1990".to_string()));
+    assert_eq!(
+        reloaded.autoeq_profile_id,
+        Some("hyperx-cloud-ii-oratory1990".to_string())
+    );
+    assert_eq!(reloaded.active_preset_name, "Rock");
 
     // Cleanup
     let _ = fs::remove_dir_all(&temp_dir);
@@ -74,12 +89,16 @@ fn test_corrupt_config_json_recovery() {
     fs::write(&config_file, b"INVALID_GARBAGE_JSON_DATA{{{]]]:::").unwrap();
 
     // Loading should not crash or panic; must recover defaults cleanly
-    let recovered = store.load_config().expect("recover default config on corruption");
+    let recovered = store
+        .load_config()
+        .expect("recover default config on corruption");
     assert_eq!(recovered, AppConfig::default());
 
     // Write partially broken JSON (missing braces)
     fs::write(&config_file, b"{\"master_power\": ").unwrap();
-    let recovered2 = store.load_config().expect("recover default on partial json");
+    let recovered2 = store
+        .load_config()
+        .expect("recover default on partial json");
     assert_eq!(recovered2, AppConfig::default());
 
     // Cleanup
@@ -109,6 +128,7 @@ fn test_partial_json_field_defaults() {
     assert_eq!(loaded.window_width, 840);
     assert_eq!(loaded.window_height, 560);
     assert!(loaded.master_power);
+    assert_eq!(loaded.active_preset_name, "Flat");
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -140,7 +160,10 @@ fn test_startup_manager_mock_lifecycle() {
     // Disable
     startup.disable().expect("disable startup");
     assert!(!startup.is_enabled().expect("check enabled after disable"));
-    assert_eq!(startup.get_registered_path().expect("get path after disable"), None);
+    assert_eq!(
+        startup.get_registered_path().expect("get path after disable"),
+        None
+    );
 
     // Disable again is idempotent and graceful
     assert!(startup.disable().is_ok());
@@ -152,4 +175,242 @@ fn test_preset_store_default_dir_resolution() {
     assert!(dir.to_string_lossy().contains("OpenBoom"));
     let store = PresetStore::default();
     assert_eq!(store.base_dir(), dir);
+    assert_eq!(store.presets_dir(), dir.join("presets"));
+}
+
+#[test]
+fn test_fifteen_factory_presets_integrity() {
+    let factory = PresetStore::factory_presets();
+    assert_eq!(factory.len(), 15, "Must provide all 15 factory presets (FR11)");
+
+    let required_names = [
+        "Flat",
+        "Bass Boost",
+        "Treble Boost",
+        "Acoustic",
+        "Classical",
+        "Electronic",
+        "Gaming",
+        "Hip-Hop",
+        "Jazz",
+        "Movie",
+        "Pop",
+        "Rock",
+        "Vocal",
+        "Lounge",
+        "Deep",
+    ];
+
+    let mut seen_ids = HashSet::new();
+    let mut seen_names = HashSet::new();
+
+    for expected_name in required_names {
+        let preset = factory
+            .iter()
+            .find(|p| p.name == expected_name)
+            .unwrap_or_else(|| panic!("Missing required factory preset '{}'", expected_name));
+        assert!(preset.is_factory);
+        assert!(!preset.id.is_empty());
+        assert!(!preset.category.is_empty());
+        assert!(seen_ids.insert(preset.id.clone()), "Duplicate factory id");
+        assert!(
+            seen_names.insert(preset.name.clone()),
+            "Duplicate factory name"
+        );
+        assert_eq!(preset.gains_db.len(), GRAPHIC_EQ_BANDS);
+        for &g in &preset.gains_db {
+            assert!(g.is_finite(), "Gain in {} must be finite", preset.name);
+            assert!(
+                (-12.0..=12.0).contains(&g),
+                "Gain {} in {} out of [-12, +12] dB bounds",
+                g,
+                preset.name
+            );
+        }
+    }
+
+    // Flat must be strictly 0.0 dB across all 31 bands
+    let flat = factory.iter().find(|p| p.name == "Flat").unwrap();
+    assert_eq!(flat.gains_db, [0.0; GRAPHIC_EQ_BANDS]);
+}
+
+#[test]
+fn test_custom_preset_atomic_crud_lifecycle() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("open_boom_presets_crud_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    let store = PresetStore::new(&temp_dir);
+
+    // Initially only 15 factory presets exist
+    let initial = store.list_presets();
+    assert_eq!(initial.len(), 15);
+    assert!(store.list_custom_presets().is_empty());
+
+    // 1. Save custom preset
+    let mut gains = [0.0f32; GRAPHIC_EQ_BANDS];
+    gains[0] = 4.5;
+    gains[17] = -2.0;
+    gains[30] = 3.5;
+
+    let saved = store
+        .save_custom_preset("My Late Night EQ", gains)
+        .expect("save custom preset");
+    assert_eq!(saved.id, "my-late-night-eq");
+    assert_eq!(saved.name, "My Late Night EQ");
+    assert_eq!(saved.category, "Custom");
+    assert!(!saved.is_factory);
+    assert_eq!(saved.gains_db, gains);
+
+    let expected_file = store.presets_dir().join("my-late-night-eq.json");
+    assert!(expected_file.exists(), "Custom preset JSON must exist on disk");
+
+    // Verify no orphaned .tmp files in presets directory
+    for entry in fs::read_dir(store.presets_dir()).unwrap().flatten() {
+        let fname = entry.file_name().to_string_lossy().to_string();
+        assert!(
+            !fname.ends_with(".tmp"),
+            "Orphaned .tmp file found: {}",
+            fname
+        );
+    }
+
+    // 2. Load custom preset
+    let loaded = store
+        .load_custom_preset("my-late-night-eq")
+        .expect("load custom preset");
+    assert_eq!(loaded, saved);
+
+    // 3. List all presets -> 15 factory + 1 custom = 16
+    let all = store.list_presets();
+    assert_eq!(all.len(), 16);
+    assert_eq!(all[15], saved);
+
+    // 4. Rename custom preset
+    let renamed = store
+        .rename_custom_preset("my-late-night-eq", "Warm Midnight")
+        .expect("rename custom preset");
+    assert_eq!(renamed.id, "warm-midnight");
+    assert_eq!(renamed.name, "Warm Midnight");
+    assert_eq!(renamed.gains_db, gains);
+    assert!(
+        !expected_file.exists(),
+        "Old preset file must be removed after rename"
+    );
+    assert!(store.presets_dir().join("warm-midnight.json").exists());
+
+    // 5. Delete custom preset
+    store
+        .delete_custom_preset("warm-midnight")
+        .expect("delete custom preset");
+    assert!(!store.presets_dir().join("warm-midnight.json").exists());
+    assert_eq!(store.list_presets().len(), 15);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_factory_preset_protection_and_path_sanitization() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "open_boom_presets_protect_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    let store = PresetStore::new(&temp_dir);
+    let gains = [1.0f32; GRAPHIC_EQ_BANDS];
+
+    // 1. Reject overwriting factory presets (case-insensitive & slug match)
+    for forbidden in ["Rock", "rock", "BASS BOOST", "bass_boost", "Hip-Hop", "flat"] {
+        let err = store
+            .save_custom_preset(forbidden, gains)
+            .expect_err("must reject factory preset overwrite");
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    // 2. Reject deleting factory presets
+    for forbidden in ["Rock", "Gaming", "flat", "bass-boost"] {
+        let err = store
+            .delete_custom_preset(forbidden)
+            .expect_err("must reject factory preset deletion");
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    // 3. Reject renaming a factory preset or renaming a custom preset to a factory name
+    store
+        .save_custom_preset("Custom One", gains)
+        .expect("save Custom One");
+    let err_from_factory = store
+        .rename_custom_preset("Rock", "My Rock")
+        .expect_err("must reject renaming factory preset");
+    assert_eq!(err_from_factory.kind(), io::ErrorKind::PermissionDenied);
+
+    let err_to_factory = store
+        .rename_custom_preset("custom-one", "Classical")
+        .expect_err("must reject renaming custom preset to factory name");
+    assert_eq!(err_to_factory.kind(), io::ErrorKind::PermissionDenied);
+
+    // 4. Sanitize path traversal & special characters safely
+    let traversal = store
+        .save_custom_preset("../../evil\\path/Preset!@#", gains)
+        .expect("sanitize path traversal");
+    assert_eq!(traversal.id, "evil-path-preset");
+    assert!(store.presets_dir().join("evil-path-preset.json").exists());
+
+    // 5. Reject empty, punctuation-only, and Windows reserved device names
+    for invalid in ["", "   ", "...///\\\\", "CON", "nul", "COM1", "lpt9"] {
+        let err = store
+            .save_custom_preset(invalid, gains)
+            .expect_err(&format!("must reject invalid preset name '{}'", invalid));
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_corrupt_preset_json_and_gain_clamping_resilience() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "open_boom_presets_corrupt_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    let store = PresetStore::new(&temp_dir);
+    fs::create_dir_all(store.presets_dir()).unwrap();
+
+    // Write a corrupt JSON file into presets_dir
+    fs::write(
+        store.presets_dir().join("broken-preset.json"),
+        b"{ invalid json [[[",
+    )
+    .unwrap();
+
+    // Write a file attempting to shadow factory preset "rock.json"
+    fs::write(
+        store.presets_dir().join("rock.json"),
+        r#"{"id":"rock","name":"Rock","category":"Custom","is_factory":false,"gains_db":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}"#,
+    )
+    .unwrap();
+
+    // Save a valid custom preset with out-of-range / NaN gains
+    let mut extreme_gains = [0.0f32; GRAPHIC_EQ_BANDS];
+    extreme_gains[0] = 25.0; // > +12.0 dB
+    extreme_gains[1] = -30.0; // < -12.0 dB
+    extreme_gains[2] = f32::NAN;
+
+    let saved = store
+        .save_custom_preset("Valid Studio Curve", extreme_gains)
+        .expect("save clamped preset");
+    assert_eq!(saved.gains_db[0], 12.0);
+    assert_eq!(saved.gains_db[1], -12.0);
+    assert_eq!(saved.gains_db[2], 0.0);
+
+    // Listing presets must skip the corrupt file and the shadowed factory file without crashing
+    let presets = store.list_presets();
+    assert_eq!(presets.len(), 16, "15 factory + 1 valid custom preset");
+    let rock = presets.iter().find(|p| p.id == "rock").unwrap();
+    assert!(rock.is_factory, "Factory 'rock' must not be shadowed by disk file");
+
+    let _ = fs::remove_dir_all(&temp_dir);
 }

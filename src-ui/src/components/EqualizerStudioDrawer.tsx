@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { SlidersHorizontal, RotateCcw, X, Check, Activity, Headphones } from "lucide-react";
+import { SlidersHorizontal, RotateCcw, X, Check, Activity, Headphones, ChevronDown } from "lucide-react";
+import { formatPresetDisplayLabel } from "./PresetSelectorPopover";
 
 export const ISO_31_FREQUENCIES: number[] = [
   20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
@@ -534,6 +535,8 @@ export interface EqualizerStudioDrawerProps {
   onGainChange: (bandIndex: number, gainDb: number) => void;
   onResetAll: () => void;
   activePreset?: string;
+  isPresetDirty?: boolean;
+  onOpenPresets?: () => void;
   preampOffsetDb?: number;
   activeAutoEqName?: string;
   onOpenAutoEq?: () => void;
@@ -547,13 +550,16 @@ export const EqualizerStudioDrawer: React.FC<EqualizerStudioDrawerProps> = ({
   gains,
   onGainChange,
   onResetAll,
-  activePreset = "Harman Acoustic",
+  activePreset = "Flat",
+  isPresetDirty = false,
+  onOpenPresets,
   preampOffsetDb = 0.0,
   activeAutoEqName,
   onOpenAutoEq,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const presetLabel = formatPresetDisplayLabel(activePreset, isPresetDirty);
 
   // Redraw Bezier spline curve canvas whenever gains or mode change
   const redrawCanvas = useCallback(() => {
@@ -584,6 +590,7 @@ export const EqualizerStudioDrawer: React.FC<EqualizerStudioDrawerProps> = ({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
@@ -630,9 +637,19 @@ export const EqualizerStudioDrawer: React.FC<EqualizerStudioDrawerProps> = ({
               <h2 className="text-sm font-semibold tracking-wide text-text-primary">
                 EQUALIZER STUDIO
               </h2>
-              <span className="text-[10px] font-mono text-accent-cyan bg-surface-base px-2 py-0.5 rounded border border-border-subtle">
-                {activePreset}
-              </span>
+              <button
+                type="button"
+                onClick={onOpenPresets}
+                title="Select Factory Genre Preset or Save Custom Preset"
+                className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                  isPresetDirty
+                    ? "text-accent-cyan bg-accent-blue/15 border-accent-cyan/50 hover:bg-accent-blue/25"
+                    : "text-accent-cyan bg-surface-base hover:bg-surface-overlay border-border-subtle hover:border-accent-blue/40"
+                }`}
+              >
+                <span>{presetLabel}</span>
+                <ChevronDown className="w-3 h-3 text-text-muted" />
+              </button>
               <button
                 type="button"
                 onClick={onOpenAutoEq}

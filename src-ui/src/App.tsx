@@ -13,6 +13,13 @@ import { SettingsModal } from "./components/SettingsModal";
 import { SoundstageConfiguratorModal } from "./components/SoundstageConfiguratorModal";
 import { EqualizerStudioDrawer } from "./components/EqualizerStudioDrawer";
 import { AutoEqPopover, AutoEqProfileSummary } from "./components/AutoEqPopover";
+import {
+  PresetSelectorPopover,
+  EqPreset,
+  FACTORY_EQ_PRESETS,
+  isPresetDirty,
+  toPresetSlug,
+} from "./components/PresetSelectorPopover";
 
 /**
  * Calculates automatic negative preamp attenuation offset from positive filter gains:
@@ -52,15 +59,13 @@ export const App: React.FC = () => {
   const [surroundEnabled, setSurroundEnabled] = useState(true);
   const [surroundIntensity, setSurroundIntensity] = useState(0.72);
 
-  // Equalizer State (31 Bands) & Studio Drawer (Story 3.1 & 3.2, FR9, FR12, UX-DR7)
-  const [activeEqPreset, setActiveEqPreset] = useState("Harman Acoustic");
-  const [eqGains, setEqGains] = useState<number[]>([
-    2.5, 3.0, 2.0, 1.5, 0.5, 0.0, -0.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0,
-    1.5, 1.0, 0.5, 0.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 2.0, 1.5, 1.0, 0.5,
-    0.0, -0.5,
-  ]);
+  // Equalizer State (31 Bands), Presets & Studio Drawer (Story 3.1, 3.2 & 3.5, FR9, FR11, FR12, UX-DR7)
+  const [eqPresets, setEqPresets] = useState<EqPreset[]>(FACTORY_EQ_PRESETS);
+  const [activeEqPreset, setActiveEqPreset] = useState("Flat");
+  const [eqGains, setEqGains] = useState<number[]>(() => new Array(31).fill(0.0));
   const [preampOffsetDb, setPreampOffsetDb] = useState(0.0);
   const [isEqDrawerOpen, setIsEqDrawerOpen] = useState(false);
+  const [isPresetSelectorOpen, setIsPresetSelectorOpen] = useState(false);
   const [eqMode, setEqMode] = useState<"10" | "31">("10");
 
   // AutoEq Headphone Profile Calibration State (Story 3.3 & 3.4, UX-DR8, FR15, AD-6)
@@ -137,9 +142,18 @@ export const App: React.FC = () => {
     }
   };
 
-  // 1. Restore configuration and Windows startup settings on mount (FR29)
+  // 1. Restore configuration, presets, and Windows startup settings on mount (FR11, FR29)
   useEffect(() => {
     const restoreConfig = async () => {
+      try {
+        const loadedPresets = await invoke<EqPreset[]>("get_eq_presets");
+        if (loadedPresets && loadedPresets.length >= 15) {
+          setEqPresets(loadedPresets);
+        }
+      } catch {
+        // Browser mode fallback uses FACTORY_EQ_PRESETS
+      }
+
       try {
         const config = await invoke<{
           master_power: boolean;
@@ -160,9 +174,14 @@ export const App: React.FC = () => {
           bypass_active: boolean;
           launch_on_startup: boolean;
           autoeq_profile_id?: string | null;
+          active_preset_name?: string;
         }>("load_app_config");
 
         if (config) {
+          if (config.active_preset_name) {
+            setActiveEqPreset(config.active_preset_name);
+          }
+
           if (config.autoeq_profile_id) {
             try {
               const p = await invoke<{
@@ -330,6 +349,12 @@ export const App: React.FC = () => {
         });
         unlistenPreset = await listen<string>("tray-preset-selected", (event) => {
           setActiveEqPreset(event.payload);
+          const matched = FACTORY_EQ_PRESETS.find(
+            (p) => p.name.toLowerCase() === event.payload.toLowerCase()
+          );
+          if (matched) {
+            setEqGains([...matched.gains_db]);
+          }
           setNotification(`Preset activated: ${event.payload}`);
         });
       } catch {
@@ -388,6 +413,7 @@ export const App: React.FC = () => {
         bypass_active: bypassActive,
         launch_on_startup: launchOnStartup,
         autoeq_profile_id: activeAutoEqProfile?.id ?? null,
+        active_preset_name: activeEqPreset,
       };
 
       try {
@@ -417,6 +443,7 @@ export const App: React.FC = () => {
     launchOnStartup,
     eqGains,
     activeAutoEqProfile,
+    activeEqPreset,
   ]);
 
   const handleTogglePower = () => {
@@ -583,7 +610,13 @@ export const App: React.FC = () => {
     }
   };
 
-  // Equalizer Studio Handlers (Story 3.2, FR9, FR12, UX-DR7)
+  // Equalizer Studio & Preset Handlers (Story 3.2 & 3.5, FR9, FR11, FR12, UX-DR7)
+  const activePresetObj =
+    eqPresets.find((p) => p.name.toLowerCase() === activeEqPreset.toLowerCase()) ||
+    FACTORY_EQ_PRESETS.find((p) => p.name.toLowerCase() === activeEqPreset.toLowerCase()) ||
+    FACTORY_EQ_PRESETS[0];
+  const presetDirty = isPresetDirty(eqGains, activePresetObj.gains_db);
+
   const handleEqBandGainChange = (bandIndex: number, gainDb: number) => {
     const clampedGain = Math.max(-12.0, Math.min(12.0, Math.round(gainDb * 10) / 10));
     setEqGains((prev) => {
@@ -598,6 +631,7 @@ export const App: React.FC = () => {
 
   const handleResetEqGains = () => {
     const zeroGains = new Array(31).fill(0.0);
+    setActiveEqPreset("Flat");
     setEqGains(zeroGains);
     dispatchCommand({
       LoadGraphicEqSnapshot: {
@@ -605,6 +639,138 @@ export const App: React.FC = () => {
         preamp_offset_db: 0.0,
       },
     });
+  };
+
+  const handleSelectEqPreset = (preset: EqPreset) => {
+    const nextGains = preset.gains_db.slice(0, 31);
+    while (nextGains.length < 31) {
+      nextGains.push(0.0);
+    }
+    setActiveEqPreset(preset.name);
+    setEqGains(nextGains);
+    dispatchCommand({
+      LoadGraphicEqSnapshot: {
+        gains_db: nextGains,
+        preamp_offset_db: 0.0,
+      },
+    });
+  };
+
+  const isTauriRuntime = () =>
+    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+  const sortPresetsList = (list: EqPreset[]): EqPreset[] => {
+    const factory = list.filter((p) => p.is_factory);
+    const custom = list
+      .filter((p) => !p.is_factory)
+      .sort((a, b) =>
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase()) ||
+        a.id.localeCompare(b.id)
+      );
+    return [...factory, ...custom];
+  };
+
+  const handleSaveCustomPreset = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    let savedPreset: EqPreset;
+    try {
+      savedPreset = await invoke<EqPreset>("save_custom_eq_preset", {
+        name: trimmed,
+        gainsDb: eqGains,
+      });
+      const updatedList = await invoke<EqPreset[]>("get_eq_presets");
+      if (updatedList && updatedList.length >= 15) {
+        setEqPresets(updatedList);
+      }
+    } catch (err) {
+      if (isTauriRuntime()) {
+        throw err;
+      }
+      // Browser preview fallback
+      const slug = toPresetSlug(trimmed);
+      savedPreset = {
+        id: slug,
+        name: trimmed,
+        category: "Custom",
+        is_factory: false,
+        gains_db: [...eqGains],
+      };
+      setEqPresets((prev) => {
+        const filtered = prev.filter((p) => p.id !== slug);
+        return sortPresetsList([...filtered, savedPreset]);
+      });
+    }
+
+    setActiveEqPreset(savedPreset.name);
+    setNotification(`Custom preset saved: ${savedPreset.name}`);
+  };
+
+  const handleRenameCustomPreset = async (oldId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+
+    const oldPreset = eqPresets.find((p) => p.id === oldId);
+    let renamedPreset: EqPreset;
+
+    try {
+      renamedPreset = await invoke<EqPreset>("rename_custom_eq_preset", {
+        oldId,
+        newName: trimmed,
+      });
+      const updatedList = await invoke<EqPreset[]>("get_eq_presets");
+      if (updatedList && updatedList.length >= 15) {
+        setEqPresets(updatedList);
+      }
+    } catch (err) {
+      if (isTauriRuntime()) {
+        throw err;
+      }
+      // Browser preview fallback
+      const slug = toPresetSlug(trimmed);
+      renamedPreset = {
+        id: slug,
+        name: trimmed,
+        category: "Custom",
+        is_factory: false,
+        gains_db: oldPreset ? [...oldPreset.gains_db] : [...eqGains],
+      };
+      setEqPresets((prev) =>
+        sortPresetsList(prev.map((p) => (p.id === oldId ? renamedPreset : p)))
+      );
+    }
+
+    if (
+      oldPreset &&
+      oldPreset.name.toLowerCase() === activeEqPreset.toLowerCase()
+    ) {
+      setActiveEqPreset(renamedPreset.name);
+    }
+    setNotification(`Preset renamed to: ${renamedPreset.name}`);
+  };
+
+  const handleDeleteCustomPreset = async (preset: EqPreset) => {
+    if (preset.is_factory) return;
+
+    try {
+      await invoke("delete_custom_eq_preset", { id: preset.id });
+      const updatedList = await invoke<EqPreset[]>("get_eq_presets");
+      if (updatedList && updatedList.length >= 15) {
+        setEqPresets(updatedList);
+      }
+    } catch (err) {
+      if (isTauriRuntime()) {
+        throw err;
+      }
+      // Browser preview fallback
+      setEqPresets((prev) => prev.filter((p) => p.id !== preset.id));
+    }
+
+    if (preset.name.toLowerCase() === activeEqPreset.toLowerCase()) {
+      setActiveEqPreset("Flat");
+    }
+    setNotification(`Deleted custom preset: ${preset.name}`);
   };
 
   // AutoEq Profile Selection Handlers (Story 3.3 & 3.4, UX-DR8, FR15, AD-6)
@@ -782,6 +948,20 @@ export const App: React.FC = () => {
         onClearProfile={handleClearAutoEqProfile}
       />
 
+      {/* Equalizer Genre Factory & Custom Presets Popover (Story 3.5, FR11, AD-10) */}
+      <PresetSelectorPopover
+        isOpen={isPresetSelectorOpen}
+        onClose={() => setIsPresetSelectorOpen(false)}
+        presets={eqPresets}
+        activePresetName={activeEqPreset}
+        currentGains={eqGains}
+        isDirty={presetDirty}
+        onSelectPreset={handleSelectEqPreset}
+        onSaveCustomPreset={handleSaveCustomPreset}
+        onRenameCustomPreset={handleRenameCustomPreset}
+        onDeleteCustomPreset={handleDeleteCustomPreset}
+      />
+
       {/* Fallback Notification Banner */}
       <NotificationBanner
         message={notification}
@@ -820,9 +1000,11 @@ export const App: React.FC = () => {
           <div className="flex-1">
             <EqualizerPreview
               activePreset={activeEqPreset}
+              isPresetDirty={presetDirty}
               bands={eqGains}
               preampOffsetDb={preampOffsetDb}
               onExpand={() => setIsEqDrawerOpen(true)}
+              onOpenPresets={() => setIsPresetSelectorOpen(true)}
               activeAutoEqName={activeAutoEqProfile ? activeAutoEqProfile.name : undefined}
               onOpenAutoEq={() => setIsAutoEqOpen(true)}
             />
@@ -846,6 +1028,8 @@ export const App: React.FC = () => {
           onGainChange={handleEqBandGainChange}
           onResetAll={handleResetEqGains}
           activePreset={activeEqPreset}
+          isPresetDirty={presetDirty}
+          onOpenPresets={() => setIsPresetSelectorOpen(true)}
           preampOffsetDb={preampOffsetDb}
           activeAutoEqName={activeAutoEqProfile ? activeAutoEqProfile.name : undefined}
           onOpenAutoEq={() => setIsAutoEqOpen(true)}

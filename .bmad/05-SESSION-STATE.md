@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 12:10
-* **Sprint Ativa:** Epic 3: Studio Equalization & AutoEq Headphone Calibration
-* **Tarefa Atual:** Story 3.4 (`Decoupled Parametric AutoEq Stage & Auto-Gain Preamp Compensation`) CONCLUÍDA! 116 testes Cargo verdes (incluindo 11 testes de filtros paramétricos), 39 testes de UI verdes, build Vite compilando em 1.76s! Próxima: Story 3.5 (`Genre Factory Presets & Custom Preset Persistence`).
+* **Data/Hora:** 11/10/2026 - 12:36
+* **Sprint Ativa:** Epic 3 CONCLUÍDO (`done`)! Próximo épico: Epic 4 (`Psychoacoustic Audio Sweeteners & Dynamic Effects Rack`).
+* **Tarefa Atual:** Todas as 5 histórias do Epic 3 (`3.1`, `3.2`, `3.3`, `3.4`, `3.5`) foram implementadas, verificadas, revisadas em 4 lentes e comitadas! 122 testes Cargo verdes no workspace, 47 testes de UI verdes e build Vite compilando em 1.76s!
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -97,7 +97,7 @@
     - Suíte de 84 testes passando no workspace com zero warnings e build Vite do frontend concluído em 1.71s.
     - Registro de ADR-016 no `.bmad/04-DECISION-LOG.md`.
     - Atualização formal de `sprint-status.yaml` (Epic 1 agora 100% `done`), `03-TASK-BACKLOG.md` e spec de Story 1.8 (`status: done`).
-16. **Implementação e Conclusão Completa do Epic 2: 3D Surround Soundstage & Spatial Calibration (Stories 2.1, 2.2, 2.3, 2.4):**
+19. **Implementação e Conclusão Completa do Epic 2: 3D Surround Soundstage & Spatial Calibration (Stories 2.1, 2.2, 2.3, 2.4):**
     - **Story 2.1 (`2-1-binaural-7-1-hrtf-convolution-engine-down-folding-matrix`):** Motor `Spatializer3D` em `crates/open-boom-core` com tabelas KEMAR HRTF 64 taps, atraso ITD (0.2–0.7ms), pinna rear notch a 6 kHz, buffers circulares duplos de 128 amostras, convolução SIMD SSE2 (`dot_product_64_sse`), upmix estéreo Mid/Side e downfold binaural com < 25% de orçamento de CPU.
     - **Story 2.2 (`2-2-interactive-circular-3d-surround-dial-control`):** `SoundstageDial.tsx` com diâmetro 192px/144px, varredura de 300°, física polar $\text{atan2}$, pips ciano em 25/50/75%, snap duplo-clique 50%, controle de teclado ARIA slider, 8 satélites e botão de calibração de soundstage.
     - **Story 2.3 (`2-3-8-channel-virtual-speaker-configurator-soundstage-modal`):** `SoundstageConfiguratorModal.tsx` com perspectiva top-down do ouvinte, anéis orbitais concêntricos, 8 nós virtuais com alternância de mudo e traço diagonal vermelho, faders de ganho relativo $\pm 6.0\text{ dB}$ (resolução 0.1 dB), atalho global `Ctrl + Shift + S`, persistência em `AppConfig` (`speaker_muted`, `speaker_gains_db`, `speaker_azimuths_deg`).
@@ -105,93 +105,26 @@
     - 95 testes unitários e de integração verdes no workspace Cargo com zero warnings e build Vite concluído em 1.68s.
     - Registro de ADR-017 no `.bmad/04-DECISION-LOG.md`.
     - Atualização de `sprint-status.yaml` (`epic-2: done`), `03-TASK-BACKLOG.md` e specs de Story 2.1 a 2.4 (`status: done`).
-
-17. **Correção de Conflito de Concorrência COM MTA/STA no Windows (ADR-018):**
-    - Identificada e solucionada a causa-raiz do pânico `OleInitialize failed! Result was: RPC_E_CHANGED_MODE` durante o lançamento do Tauri via `npm run dev` / `tauri dev`.
-    - Isolamento de `enumerate_windows_devices()` em thread worker dedicada (`open-boom-device-enum`) com ciclo de vida balanceado (`CoInitializeEx` / `CoUninitialize`), preservando a integridade do modelo de apartamento da thread de UI do Tao/Tauri.
-    - Validação de execução do binário e 95 testes verdes no workspace Cargo.
-    - Registro de ADR-018 no `.bmad/04-DECISION-LOG.md`.
-
-18. **Implementação do AudioStreamPump em Tempo Real e Conexão de Áudio com o Sistema (ADR-019):**
-    - Desenvolvido `crates/open-boom-wasapi/src/stream_pump.rs` para realizar captura e reprodução contínua em tempo real sob agendamento MMCSS "Pro Audio" (`AvSetMmThreadCharacteristicsW`).
-    - Ingestão Dual-Mode com detecção e priorização automática do endpoint virtual `Boom Audio` (Modo A sem slapback echo) e renderização no dispositivo físico selecionado (`HyperX Cloud II Wireless`).
-    - Integração no ciclo de vida do `AppState` em `src-tauri/src/lib.rs` com reinicialização automática sob comutação a quente de dispositivos (`set_audio_device`).
-    - 96 testes unitários e de integração verdes no workspace Cargo com zero warnings e build Vite concluído em 1.80s.
-    - Registro de ADR-019 no `.bmad/04-DECISION-LOG.md`.
-
-19. **Roteamento Inteligente Automático via COM `IPolicyConfig` e Isolamento do HyperX (ADR-020):**
-    - Solução definitiva para a ausência de efeito perceptível no headset físico: implementação de `set_windows_default_device` via COM não documentado `IPolicyConfig::SetDefaultEndpoint` (vtable index 13) rodando em thread de trabalho dedicada (`open-boom-set-default-device`).
-    - **Ciclo Transparente:** Ao ligar o Master Power (`AppState::new_runtime`), o OpenBoom comuta a saída padrão do Windows para o `Boom Audio` (sink mudo), captura esse fluxo, passa pelo motor DSP (Volume, Boost 150%, 3D Spatializer KEMAR HRTF, Master Limiter) e bombeia diretamente para o DAC físico (`HyperX Cloud II Wireless`) sem slapback echo.
-    - **Passthrough & Safe Exit:** Ao desligar o Master Power, alternar para Bypass A/B ou fechar o aplicativo (via menu de bandeja ou encerramento do processo), o Windows comuta de volta e instantaneamente para o `HyperX`, garantindo zero interrupção e impedindo que o SO fique preso em modo mudo.
-    - **Filtragem da UI:** `enumerate_physical_devices()` oculta sinks virtuais (`Boom Audio`) do dropdown, permitindo ao usuário selecionar apenas fones e caixas de som reais.
-    - **Proteção Anti-Jitter:** Adicionado loop de retry no `AudioStreamPump` para absorver flutuações de padding do WASAPI sem descarte de amostras.
-    - 96 testes verdes no workspace Cargo e build Vite concluído em 3.83s.
-    - Registro de ADR-020 no `.bmad/04-DECISION-LOG.md` e tarefa T2.6 em `.bmad/03-TASK-BACKLOG.md`.
-
-20. **Registro da Investigação de Intensidade do Efeito 3D (ADR-021):**
-    - Identificada a causa acústica da sutileza percebida no 3D Spatializer: a convolução KEMAR HRTF pura (Epic 2) atua primariamente como crossfeed acústico natural (reproduzindo dois monitores a 30° em câmara anecóica), sem adicionar reverberação de sala ou alargamento de fase artificial.
-    - Confirmado através do relatório de engenharia reversa do Boom 3D (`BoomEngine.dll` / `Audio.dll`) que o efeito comercial dramático é produto combinado de:
-      - Convolução HRTF (Epic 2);
-      - Equalizador 31-bandas / AutoEq HyperX Cloud II (Epic 3);
-      - Ambience Reverb Schroeder/FDN (Epic 4, Story 4.1);
-      - Spatial Widener Haas/Mid-Side (Epic 4, Story 4.2);
-      - Harmonic Fidelity Exciter (Epic 4, Story 4.3).
-    - Aberta a tarefa `T2.7` no backlog para calibração de ganhos do upmix estéreo e transição wet/dry.
-    - Registro de ADR-021 em `.bmad/04-DECISION-LOG.md`.
-
+20. **Correção de Conflito de Concorrência COM MTA/STA no Windows (ADR-018) & AudioStreamPump / Roteamento Inteligente (ADR-019, ADR-020, ADR-021):**
+    - Isolamento de chamadas COM (`enumerate_windows_devices` e `set_windows_default_device`) em worker threads dedicadas, eliminando `RPC_E_CHANGED_MODE`.
+    - `AudioStreamPump` em tempo real sob agendamento MMCSS "Pro Audio" com comutação automática para `Boom Audio` no Master Power ON e restauração imediata ao dispositivo físico (`HyperX Cloud II Wireless`) no OFF/Exit.
 21. **Implementação e Verificação Completa da Story 3.1 (`3-1-31-band-biquad-filter-engine-direct-form-ii-transposed-topol`):**
-    - `crates/open-boom-core/src/dsp/biquad.rs`: Fórmulas do Robert Bristow-Johnson (RBJ) Audio EQ Cookbook para peaking EQ com Q constante = 4.31, normalização $a_0 = 1.0$, verificação de estabilidade pelo critério de Schur-Cohn/Jury ($|a_2| < 1.0$, $|a_1| < 1.0 + a_2$), cálculo de módulo máximo de pólos $\max(|z_i|) < 1.0$, interpolação linear de coeficientes (`lerp`) e processamento Direct Form II Transposed com flushing anti-denormal.
-    - `crates/open-boom-core/src/dsp/graphic_eq_stage.rs`: Cascata estéreo de 31 bandas ISO 1/3-oitava (20 Hz a 20.000 Hz), suavização sub-buffer em blocos de 32 amostras (~0.67ms a 48 kHz) eliminando zipper noise e cliques, clamping defensivo em $[-12.0\text{ dB}, +12.0\text{ dB}]$ com fallback para 0.0 dB em NaN, controle de preamp gain e alternância bypass/enable.
-    - `crates/open-boom-core/src/types.rs`: Extensão dos comandos POD SPSC com `SetEqBandGain { band_idx, gain_db }`, `SetEqGains { gains_db }` e `SetEqBypass { bypassed }`, além de constantes `EQ_Q = 4.31`, `MIN_EQ_GAIN_DB = -12.0`, `MAX_EQ_GAIN_DB = 12.0`, `EQ_SUB_BUFFER_SIZE = 32`.
-    - `crates/open-boom-core/src/dsp/pipeline.rs`: Integração do `GraphicEqStage` como Estágio 3 no pipeline de `AudioProcessor` entre o 3D Spatializer (Estágio 2) e o Master Limiter (Estágio 4) para fluxos estéreo e surround 7.1.
-    - `crates/open-boom-core/tests/eq_tests.rs`: Suíte com 9 testes unitários e de integração cobrindo estabilidade de pólos nas 31 bandas e 3 taxas de amostragem, passe unitário plano com THD+N < 0.005%, reforço (+12 dB) e corte (-12 dB) em 1 kHz com envelope de Q=4.31, arraste rápido de slider em 100 frames sem estalos, sanitização de NaN/infinito, flush de delay lines (`ResetFilters`), despacho de comandos SPSC e estabilidade de pólos durante lerp contínuo.
-    - 105 testes passando no workspace Cargo e build completo de release Tauri (`.msi` e `.exe`) gerado em 2m 40s.
-    - Registro de ADR-022 em `.bmad/04-DECISION-LOG.md`.
-    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.1 (`status: done`).
-
+    - `crates/open-boom-core/src/dsp/biquad.rs` e `graphic_eq_stage.rs`: 31 bandas ISO 1/3-oitava (20 Hz a 20 kHz), RBJ peaking EQ ($Q=4.31$), Direct Form II Transposed, estabilidade Schur-Cohn ($|\text{pole}| < 1.0$), suavização de 32 amostras (~0.67ms) e THD+N < 0.005%.
 22. **Implementação e Verificação Completa da Story 3.2 (`3-2-dual-mode-equalizer-studio-drawer-10-band-vs-31-band-spline`):**
-    - `src-ui/src/components/EqualizerStudioDrawer.tsx`: Componente gaveta de estúdio com aceleração por hardware CSS (`translate-y`, `opacity`, `will-change`), toggle de modo segmented entre 10-Band (oitavas casuais: 31.5, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz) e 31-Band (1/3-oitava ISO padrão: 20 Hz a 20 kHz) preservando integralmente os valores da curva 31-band (`FR12`).
-    - Faders táteis verticais com curso de 180px, poço rebaixado, linha guia 0 dB, preenchimento dinâmico ciano/azul, badge flutuante Cascadia Code durante arrasto (`+2.4 dB`), detent magnético suave em $\pm 0.3\text{ dB}$ para $0.0\text{ dB}$, precisão 5x mais fina segurando `Shift` (sensibilidade normalizada para passos de 0.1 dB), reset instantâneo por duplo clique em $0.0\text{ dB}$, navegação por teclado e conformidade com limites operacionais $[-12.0\text{ dB}, +12.0\text{ dB}]$ (`UX-DR7`, `EXPERIENCE.md §6.2`).
-    - Visualizador interativo de curva spline de Bezier cúbica (Catmull-Rom para Bezier) desenhado em `<canvas>` com interpolação contínua $C^1$, escala logarítmica de frequência (20 Hz a 20 kHz), linhas de grade horizontal (-12, -6, 0 dB ciano, +6, +12 dB), preenchimento gradiente ciano e neon glow ciano (`FR10`).
-    - `src-ui/src/components/EqualizerPreview.tsx`: Atualizado com botão clicável "Expand EQ", atalho visual `Ctrl + Shift + E` e trigger no dock de faders.
-    - `src-ui/src/App.tsx`: Gestão de estado `isEqDrawerOpen`, `eqMode`, atalho global `Ctrl + Shift + E` (ignorado se input focado), tecla `Escape` para fechar, conexão dos faders aos comandos SPSC `SetEqBandGain` e `LoadGraphicEqSnapshot`, e persistência atômica no `AppConfig`.
-    - `src-ui/src/test/EqualizerStudioDrawer.test.tsx` e `run.mjs`: Suíte de 20 testes unitários e de componente cobrindo todas as linhas da matriz de I/O, mapeamento logarítmico, detent magnético, 5x sensibilidade Shift, spline Bezier, acessibilidade WAI-ARIA e isolamento de índices.
-    - 20 testes de UI passando, 104 testes de backend Rust passando e build Vite concluído em 3.32s com 0 erros.
-    - Revisão em 4 camadas concluída (Blind Hunter, Edge Case Hunter, Verification Gap, Intent Alignment) com todas as melhorias aplicadas.
-
+    - `src-ui/src/components/EqualizerStudioDrawer.tsx`: Gaveta acelerada por hardware (`Ctrl + Shift + E`), toggle 10-Band vs 31-Band preservando curvas, faders de 180px com precisão 5x (`Shift`), detent magnético $\pm 0.3\text{ dB}$, reset duplo-clique e canvas Bezier spline ciano (`FR10`, `FR12`, `UX-DR7`).
 23. **Implementação e Verificação Completa da Story 3.3 (`3-3-offline-autoeq-headphone-database-indexing-instant-fuzzy-sea`):**
-    - `crates/open-boom-storage/assets/autoeq_database.bin.gz`: Banco de dados comprimido contendo 4.200 perfis de calibração paramétrica de fones cobrindo mais de 45 marcas (HyperX, Sennheiser, Sony, Apple, Beyerdynamic, etc.) ocupando apenas 0.20 MB (207 KB) no disco, superando a restrição de < 5 MB (`FR13`, `AD-9`).
-    - `crates/open-boom-storage/src/autoeq_db.rs`: Descompressão via `flate2::read::GzDecoder` em ~4ms no startup, structs `AutoEqProfile`, `AutoEqProfileSummary`, `AutoEqStats`, `ParametricFilterConfig` e motor de busca fuzzy in-memory multidimensional com pesos para correspondência exata (100), modelos (98), prefixos (92), multi-tokens (85) e subsequências (45), executando queries em tempo médio de 0.04ms (< 50ms) sem telemetria (`FR14`, `NFR7`, `NFR10`).
-    - `crates/open-boom-storage/src/preset_store.rs`: Campo `autoeq_profile_id: Option<String>` adicionado a `AppConfig` com persistência atômica.
-    - `crates/open-boom-storage/tests/autoeq_tests.rs`: Suíte de 8 testes validando index size < 5 MB, 4.000+ perfis, benchmark sub-50ms, busca exata, busca fuzzy ("hd600", "xm5", "airpods"), query vazia com recomendações e parsing de filtros biquad.
-    - `src-tauri/src/lib.rs`: Integração do `AutoEqDatabase` no `AppState` e comandos IPC `search_autoeq_profiles`, `get_autoeq_profile` e `get_autoeq_stats`.
-    - `src-ui/src/components/AutoEqPopover.tsx`: Componente popover de pesquisa com auto-focus, navegação por setas (Up/Down), seleção com Enter, dismiss com Escape, botão "Reset to Flat", badges de filtros e ganho de pré-amplificação.
-    - `src-ui/src/components/EqualizerPreview.tsx` e `EqualizerStudioDrawer.tsx`: Chips clicáveis de AutoEq com trigger de abertura do popover e indicação do fone ativo.
-    - `src-ui/src/App.tsx`: Gestão de estado `isAutoEqOpen`, `activeAutoEqProfile`, auto-save no `AppConfig` e restauração de perfil no boot.
-    - `src-ui/src/test/AutoEqPopover.test.tsx` e `run.mjs`: 10 testes de UI cobrindo ciclo de vida do popover, acessibilidade, badges, seleção, reset e integração.
-    - 30 testes de UI verdes, 15 testes de storage verdes, 105+ testes Rust no workspace verdes e build Vite concluído em 1.75s com 0 erros.
-    - Revisão em 4 camadas concluída (Blind Hunter, Edge Case Hunter, Verification Gap, Intent Alignment) com todas as correções aplicadas (IDs 100% únicos, target curve tokens, WAI-ARIA combobox, etc.).
-    - Registro de ADR-023 no `.bmad/04-DECISION-LOG.md`.
-    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.3 (`status: done`).
-
+    - `crates/open-boom-storage/assets/autoeq_database.bin.gz` (209 KB < 5 MB) com 4.200 perfis de fones e IDs 100% únicos, busca fuzzy in-memory em 0.04ms (< 50ms) e `AutoEqPopover.tsx` acessível (`FR13`, `FR14`, `UX-DR8`).
 24. **Implementação e Verificação Completa da Story 3.4 (`3-4-decoupled-parametric-autoeq-stage-auto-gain-preamp-compensat`):**
-    - `crates/open-boom-core/src/dsp/biquad.rs`: Fórmulas do RBJ Audio EQ Cookbook implementadas para `low_shelf` e `high_shelf`, normalização canônica por $a_0$, verificação estrita de estabilidade pelo critério de Schur-Cohn / Jury ($|z| < 1.0$), e expansão de ganho para $[-36.0\text{ dB}, +36.0\text{ dB}]$ acomodando calibrações de fones com cortes profundos (`FR12`).
-    - `crates/open-boom-core/src/dsp/parametric_stage.rs`: Novo estágio `ParametricStage` comportando até 12 biquads em cascata por canal na topologia Direct Form II Transposed com atrasos de estado ($s_1, s_2$), suavização sub-buffer em blocos de 32 amostras (~0.67ms a 48 kHz) eliminando zipper noise, e comutação instantânea de bypass.
-    - `crates/open-boom-core/src/types.rs`: Definição de `ParametricFilterType`, struct POD plana `ParametricFilterPod`, comandos lock-free SPSC `AudioCommand::SetAutoEqProfile { filters, filter_count, preamp_offset_db }` e `AudioCommand::SetAutoEqBypass { bypassed }`, e campos de telemetria `autoeq_preamp_db` e `autoeq_active` no `TelemetrySnapshot` (`AD-1`, `NFR1`, `NFR2`).
-    - `crates/open-boom-core/src/dsp/pipeline.rs`: Integração do `ParametricStage` como Estágio 3A no `AudioProcessor`, posicionado estritamente *antes* do `GraphicEqStage` (Estágio 3B) para fluxos estéreo e surround 7.1. O estágio desacoplado neutraliza a curva do fone sem sobrescrever ou modificar os faders de 31 bandas do usuário (`AD-6`).
-    - Compensação Automática de Pré-Amp Anti-Clipping: Cálculo de atenuação negativa $A_{\text{preamp}} = -\max(0, \max_i(G_i))$ aplicado na entrada do estágio antes da cascata de biquads, assegurando que reforços positivos (ex: +6.5 dB) nunca atinjam clipping digital em estágios intermediários antes do `MasterLimiter`.
-    - `crates/open-boom-core/tests/autoeq_parametric_tests.rs`: Suíte com 11 testes cobrindo fórmulas de shelf, estabilidade sob ganhos extremos (+36 dB / -36 dB), THD+N < 0.005%, cálculo de pré-amp, ordenação em cascata e headroom intermediário anti-clipping sob múltiplos reforços simultâneos (+6.5 dB AutoEq e +6 dB EQ gráfico).
-    - `src-tauri/src/dispatcher.rs` e `src-tauri/src/lib.rs`: Comandos IPC Tauri `apply_autoeq_profile` e `clear_autoeq_profile` com conversão de tipos e testes unitários com serde.
-    - `src-ui/src/App.tsx`: Cálculo dinâmico de `calculateAutoEqPreampOffset`, gerenciamento de estado `preampOffsetDb`, despacho IPC via Tauri ao selecionar perfil ou clicar em reset, e exibição dos badges de pré-amplificação em `EqualizerPreview.tsx` e `EqualizerStudioDrawer.tsx`.
-    - `src-ui/src/test/AutoEqParametric.test.tsx` e `run.mjs`: 9 testes de UI cobrindo offset de pré-amplificação, badges numéricos, preservação de curvas 31 bandas do usuário e despacho IPC.
-    - Total de 116 testes Cargo no workspace passando, 39 testes de UI passando e compilação Vite concluída em 1.76s com zero erros.
-    - Registro de ADR-024 no `.bmad/04-DECISION-LOG.md`.
-    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.4 (`status: done`).
+    - `ParametricStage` até 12 biquads (`Peaking`, `LowShelf`, `HighShelf`) posicionado antes do `GraphicEqStage`, atenuação automática de pré-amp $A_{\text{preamp}} = -\max(0, \max_i(G_i))$ e comandos SPSC lock-free (`FR15`, `AD-6`).
+25. **Implementação e Verificação Completa da Story 3.5 (`3-5-genre-factory-presets-custom-preset-persistence`) & Conclusão do Epic 3:**
+    - `crates/open-boom-storage/src/preset_store.rs`: Struct `EqPreset`, 15 presets de fábrica calibrados (`Flat`, `Bass Boost`, `Treble Boost`, `Acoustic`, `Classical`, `Electronic`, `Gaming`, `Hip-Hop`, `Jazz`, `Movie`, `Pop`, `Rock`, `Vocal`, `Lounge`, `Deep`), campo `active_preset_name` em `AppConfig`, e CRUD atômico de presets customizados em `%APPDATA%\OpenBoom\presets\*.json` via `.tmp` + `fs::rename` (`MoveFileExW`) com sanitização de slugs e proteção de presets de fábrica (`FR11`, `AD-10`).
+    - `src-tauri/src/lib.rs`: Comandos IPC `get_eq_presets`, `save_custom_eq_preset`, `rename_custom_eq_preset` e `delete_custom_eq_preset`.
+    - `src-ui/src/components/PresetSelectorPopover.tsx`, `EqualizerPreview.tsx`, `EqualizerStudioDrawer.tsx` e `App.tsx`: Seletor de presets de 1 clique, detecção de estado modificado com asterisco (`Rock *`) quando os faders divergem $> 0.05\text{ dB}$, criação/renomeação/exclusão de presets customizados e independência total com o estágio AutoEq (`EXPERIENCE.md §5.2`, `AD-6`).
+    - `crates/open-boom-storage/tests/storage_tests.rs` e `src-ui/src/test/PresetSelector.test.tsx`: 122 testes Cargo passando no workspace, 47 testes de UI passando e build Vite concluído em 1.76s.
+    - Registro de ADR-025 em `.bmad/04-DECISION-LOG.md` e marcação de `epic-3: done` em `sprint-status.yaml`.
 
 ## O que está em andamento agora
-* **Story 3.5 no Backlog:** Genre Factory Presets & Custom Preset Persistence.
-  - Implementação de presets de fábrica por gênero (Acoustic, Bass Booster, Classical, Electronic, Hip Hop, Jazz, Pop, Rock, Vocal Booster, etc.).
-  - Persistência e gerenciamento de presets personalizados criados pelo usuário em `%APPDATA%\OpenBoom\presets.json`.
+* **Epic 3 Concluído (`done`)!** Próximo épico no backlog: **Epic 4: Psychoacoustic Audio Sweeteners & Dynamic Effects Rack** (Stories 4.1 a 4.5).
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.
