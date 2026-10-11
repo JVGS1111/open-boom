@@ -156,8 +156,32 @@ impl AudioDeviceManager {
 
     #[cfg(windows)]
     fn enumerate_windows_devices(&self) -> EngineResult<Vec<AudioDeviceInfo>> {
+        // Run Windows Core Audio MMDeviceAPI enumeration on an isolated COM worker thread.
+        // If run directly on the caller thread, initializing COINIT_MULTITHREADED permanently
+        // sets the thread to MTA mode. When the caller is the main GUI thread, Tao's
+        // subsequent OleInitialize call will fail with RPC_E_CHANGED_MODE and panic.
+        std::thread::Builder::new()
+            .name("open-boom-device-enum".to_string())
+            .spawn(|| Self::enumerate_windows_devices_isolated())
+            .map_err(|e| {
+                EngineError::DeviceInitialization(format!(
+                    "Failed to spawn device enumeration worker thread: {}",
+                    e
+                ))
+            })?
+            .join()
+            .map_err(|_| {
+                EngineError::DeviceInitialization(
+                    "Device enumeration worker thread panicked".to_string(),
+                )
+            })?
+    }
+
+    #[cfg(windows)]
+    fn enumerate_windows_devices_isolated() -> EngineResult<Vec<AudioDeviceInfo>> {
         use windows::Win32::System::Com::{
-            CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
+            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
+            STGM_READ,
         };
         use windows::Win32::Media::Audio::{
             eConsole, eRender, DEVICE_STATE_ACTIVE, IMMDevice, IMMDeviceCollection,
@@ -165,86 +189,90 @@ impl AudioDeviceManager {
         };
         use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 
-        unsafe {
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        }
+        let com_init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 
-        let enumerator: IMMDeviceEnumerator = unsafe {
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| {
-                EngineError::DeviceInitialization(format!(
-                    "Failed to create MMDeviceEnumerator: {}",
-                    e
-                ))
-            })?
-        };
-
-        // Determine default device ID to set is_default flag
-        let default_id: Option<String> = unsafe {
-            enumerator
-                .GetDefaultAudioEndpoint(eRender, eConsole)
-                .ok()
-                .and_then(|dev| dev.GetId().ok())
-                .map(|p| p.to_string().unwrap_or_default())
-        };
-
-        let collection: IMMDeviceCollection = unsafe {
-            enumerator
-                .EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)
-                .map_err(|e| {
+        let result = (|| -> EngineResult<Vec<AudioDeviceInfo>> {
+            let enumerator: IMMDeviceEnumerator = unsafe {
+                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| {
                     EngineError::DeviceInitialization(format!(
-                        "Failed to enumerate active audio endpoints: {}",
+                        "Failed to create MMDeviceEnumerator: {}",
                         e
                     ))
                 })?
-        };
-
-        let count = unsafe {
-            collection.GetCount().map_err(|e| {
-                EngineError::DeviceInitialization(format!(
-                    "Failed to get audio endpoint count: {}",
-                    e
-                ))
-            })?
-        };
-
-        let mut devices = Vec::with_capacity(count as usize);
-
-        for i in 0..count {
-            let device: IMMDevice = match unsafe { collection.Item(i) } {
-                Ok(dev) => dev,
-                Err(_) => continue,
             };
 
-            let id_str = match unsafe { device.GetId() } {
-                Ok(pwstr) => unsafe { pwstr.to_string().unwrap_or_default() },
-                Err(_) => continue,
+            // Determine default device ID to set is_default flag
+            let default_id: Option<String> = unsafe {
+                enumerator
+                    .GetDefaultAudioEndpoint(eRender, eConsole)
+                    .ok()
+                    .and_then(|dev| dev.GetId().ok())
+                    .map(|p| p.to_string().unwrap_or_default())
             };
 
-            let is_default = default_id.as_ref().is_some_and(|def| def == &id_str);
+            let collection: IMMDeviceCollection = unsafe {
+                enumerator
+                    .EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)
+                    .map_err(|e| {
+                        EngineError::DeviceInitialization(format!(
+                            "Failed to enumerate active audio endpoints: {}",
+                            e
+                        ))
+                    })?
+            };
 
-            let friendly_name = unsafe {
-                match device.OpenPropertyStore(STGM_READ) {
-                    Ok(props) => {
-                        match props.GetValue(&PKEY_Device_FriendlyName) {
-                            Ok(prop_var) => {
-                                prop_var.to_string()
-                            }
+            let count = unsafe {
+                collection.GetCount().map_err(|e| {
+                    EngineError::DeviceInitialization(format!(
+                        "Failed to get audio endpoint count: {}",
+                        e
+                    ))
+                })?
+            };
+
+            let mut devices = Vec::with_capacity(count as usize);
+
+            for i in 0..count {
+                let device: IMMDevice = match unsafe { collection.Item(i) } {
+                    Ok(dev) => dev,
+                    Err(_) => continue,
+                };
+
+                let id_str = match unsafe { device.GetId() } {
+                    Ok(pwstr) => unsafe { pwstr.to_string().unwrap_or_default() },
+                    Err(_) => continue,
+                };
+
+                let is_default = default_id.as_ref().is_some_and(|def| def == &id_str);
+
+                let friendly_name = unsafe {
+                    match device.OpenPropertyStore(STGM_READ) {
+                        Ok(props) => match props.GetValue(&PKEY_Device_FriendlyName) {
+                            Ok(prop_var) => prop_var.to_string(),
                             Err(_) => id_str.clone(),
-                        }
+                        },
+                        Err(_) => id_str.clone(),
                     }
-                    Err(_) => id_str.clone(),
-                }
-            };
+                };
 
-            let clean_name = if friendly_name.trim().is_empty() {
-                format!("Audio Device {}", i + 1)
-            } else {
-                friendly_name
-            };
+                let clean_name = if friendly_name.trim().is_empty() {
+                    format!("Audio Device {}", i + 1)
+                } else {
+                    friendly_name
+                };
 
-            devices.push(AudioDeviceInfo::new(id_str, clean_name, is_default));
+                devices.push(AudioDeviceInfo::new(id_str, clean_name, is_default));
+            }
+
+            Ok(devices)
+        })();
+
+        if com_init.is_ok() {
+            unsafe {
+                CoUninitialize();
+            }
         }
 
-        Ok(devices)
+        result
     }
 }

@@ -191,3 +191,17 @@
   6. **Ação Unificada de Reset para Padrões ITU-R BS.775:** Botão "Reset Speaker Positions" restaura os ângulos de azimute de todos os 8 alto-falantes para os valores nominais ITU-R BS.775 (-30°, +30°, 0°, 180°/0°, -135°, +135°, -90°, +90°) tanto na interface quanto nas matrizes do motor de áudio.
 * **Consequência:** Experiência imersiva 3D surround de alta fidelidade com espacialização personalizável, desempenho em tempo real ultrarrápido (< 1% CPU), zero alocações na thread de áudio e conformidade estrita com todos os requisitos do Epic 2 (`FR5`, `FR6`, `FR7`, `FR8`, `UX-DR4`, `UX-DR5`).
 
+---
+
+## ADR-018: Isolamento de Enumeração MMDeviceAPI em Thread COM Dedicada para Prevenção de Conflito de Apartamento (RPC_E_CHANGED_MODE)
+* **Data:** 10/10/2026
+* **Status:** Aceito
+* **Contexto:** Ao iniciar a aplicação desktop via `npm run dev` / `tauri dev`, ocorria um pânico fatal do Tao na thread principal Win32:
+  `thread 'main' panicked at tao-0.37.1\src\platform_impl\windows\window.rs: OleInitialize failed! Result was: RPC_E_CHANGED_MODE`.
+  A investigação revelou que durante a inicialização do `AppState` (`src-tauri/src/lib.rs`), o `AudioEngineCoordinator::with_command_queue` invocava `bridge.detect(&device_manager)` na thread principal do processo. Esta chamada executava `enumerate_windows_devices()` em `crates/open-boom-wasapi/src/device.rs`, chamando `CoInitializeEx(None, COINIT_MULTITHREADED)` diretamente na thread chamadora sem correspondente `CoUninitialize()`.
+  Isso definia permanentemente o modelo de concorrência COM da thread GUI como MTA (Multi-Threaded Apartment). Quando o Tao tentava criar a janela Win32 na thread principal chamando `OleInitialize(None)` (que exige STA / Single-Threaded Apartment), o Windows retornava o erro `RPC_E_CHANGED_MODE` (0x80010106).
+* **Decisões:**
+  1. **Isolamento em Thread Worker Dedicada (`open-boom-device-enum`):** O método `enumerate_windows_devices(&self)` foi refatorado para delegar a consulta MMDeviceAPI a uma thread de trabalho dedicada via `std::thread::Builder::new().name("open-boom-device-enum").spawn(...)`.
+  2. **Ciclo de Vida COM Estritamente Balanceado:** Na thread isolada (`enumerate_windows_devices_isolated`), `CoInitializeEx(None, COINIT_MULTITHREADED)` é chamado no início e `CoUninitialize()` é garantido no encerramento da thread.
+  3. **Preservação da Thread GUI Win32:** A thread principal de UI nunca é inicializada em MTA pelo adaptador WASAPI, permitindo que o `OleInitialize` do Tao seja executado com sucesso e suporte todas as operações OLE/STA (incluindo drag and drop e event loop) sem conflitos.
+* **Consequência:** Resolução definitiva do pânico de inicialização, preservação do funcionamento do shell Tauri desktop e manutenção de 100% dos testes unitários e de integração (95 testes passando).

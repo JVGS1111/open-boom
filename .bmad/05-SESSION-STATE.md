@@ -106,8 +106,14 @@
     - Registro de ADR-017 no `.bmad/04-DECISION-LOG.md`.
     - Atualização de `sprint-status.yaml` (`epic-2: done`), `03-TASK-BACKLOG.md` e specs de Story 2.1 a 2.4 (`status: done`).
 
+17. **Correção de Conflito de Concorrência COM MTA/STA no Windows (ADR-018):**
+    - Identificada e solucionada a causa-raiz do pânico `OleInitialize failed! Result was: RPC_E_CHANGED_MODE` durante o lançamento do Tauri via `npm run dev` / `tauri dev`.
+    - Isolamento de `enumerate_windows_devices()` em thread worker dedicada (`open-boom-device-enum`) com ciclo de vida balanceado (`CoInitializeEx` / `CoUninitialize`), preservando a integridade do modelo de apartamento da thread de UI do Tao/Tauri.
+    - Validação de execução do binário e 95 testes verdes no workspace Cargo.
+    - Registro de ADR-018 no `.bmad/04-DECISION-LOG.md`.
+
 ## O que está em andamento agora
-* **Epic 1 e Epic 2 CONCLUÍDOS a 100%** com todas as 12 histórias implementadas, validadas e testadas (95 testes passando).
+* **Epic 1 e Epic 2 CONCLUÍDOS a 100%** com todas as 12 histórias implementadas, validadas e testadas (95 testes passando), e shell desktop Tauri validado sem erros de inicialização.
 
 ## Próximo Passo Imediato
 * Iniciar o desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).
