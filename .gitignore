@@ -11,6 +11,8 @@ dist-ssr/
 
 # Tauri build artifacts
 src-tauri/target/
+release/
+release-assets/
 
 # BMAD artifacts
 .bmad/render/
