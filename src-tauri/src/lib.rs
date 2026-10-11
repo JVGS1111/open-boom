@@ -32,6 +32,7 @@ pub struct AppState {
     pub active_physical_device_id: Arc<Mutex<Option<String>>>,
     pub virtual_device_id: Arc<Mutex<Option<String>>>,
     pub is_routed_to_virtual: Arc<Mutex<bool>>,
+    pub auto_route: bool,
 }
 
 impl Default for AppState {
@@ -75,7 +76,7 @@ impl AppState {
             StreamPumpConfig {
                 target_device_id: physical_id.clone(),
                 capture_device_id: virtual_id.clone(),
-                allow_synthetic: true,
+                allow_synthetic: !auto_route,
             },
         ).ok();
         let pump = Arc::new(Mutex::new(pump_instance));
@@ -106,6 +107,7 @@ impl AppState {
             active_physical_device_id: Arc::new(Mutex::new(physical_id)),
             virtual_device_id: Arc::new(Mutex::new(virtual_id)),
             is_routed_to_virtual,
+            auto_route,
         }
     }
 
@@ -237,7 +239,7 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
             StreamPumpConfig {
                 target_device_id: device_id.clone(),
                 capture_device_id: virtual_id,
-                allow_synthetic: true,
+                allow_synthetic: !state.auto_route,
             },
         ).ok();
     }
@@ -278,7 +280,7 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
             StreamPumpConfig {
                 target_device_id: fallback_id,
                 capture_device_id: virtual_id,
-                allow_synthetic: true,
+                allow_synthetic: !state.auto_route,
             },
         ).ok();
     }

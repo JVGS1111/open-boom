@@ -257,6 +257,14 @@ impl AudioStreamPump {
                 }
             };
 
+            let render_channels = (*render_fmt_ptr).nChannels.max(1) as usize;
+            let render_sample_rate = (*render_fmt_ptr).nSamplesPerSec;
+            let capture_channels = (*capture_fmt_ptr).nChannels.max(1) as usize;
+
+            if let Ok(mut coord) = coordinator.lock() {
+                coord.processor_mut().set_sample_rate(render_sample_rate);
+            }
+
             let _ = capture_client.Start();
 
             // Preallocate scratch buffers (zero heap allocations in processing loop, AD-1)
@@ -280,50 +288,105 @@ impl AudioStreamPump {
                     .GetBuffer(&mut p_data, &mut frames_read, &mut flags, None, None)
                     .is_ok()
                 {
-                    if frames_read > 0 && !p_data.is_null() {
-                        let sample_count = (frames_read as usize) * 2; // Stereo interleaved f32
-                        if sample_count <= scratch_capacity {
-                            if (flags & (AUDCLNT_BUFFERFLAGS_SILENT.0 as u32)) != 0 {
-                                input_scratch[..sample_count].fill(0.0);
-                            } else {
-                                let incoming = std::slice::from_raw_parts(
-                                    p_data as *const f32,
-                                    sample_count,
-                                );
-                                input_scratch[..sample_count].copy_from_slice(incoming);
+                    let frames = frames_read as usize;
+                    let stereo_sample_count = frames * 2;
+                    if frames > 0 && !p_data.is_null() && stereo_sample_count <= scratch_capacity {
+                        if (flags & (AUDCLNT_BUFFERFLAGS_SILENT.0 as u32)) != 0 {
+                            input_scratch[..stereo_sample_count].fill(0.0);
+                        } else if capture_channels == 2 {
+                            let incoming = std::slice::from_raw_parts(
+                                p_data as *const f32,
+                                stereo_sample_count,
+                            );
+                            input_scratch[..stereo_sample_count].copy_from_slice(incoming);
+                        } else if capture_channels >= 8 {
+                            let incoming = std::slice::from_raw_parts(
+                                p_data as *const f32,
+                                frames * capture_channels,
+                            );
+                            for f in 0..frames {
+                                let base = f * capture_channels;
+                                let fl = incoming[base];
+                                let fr = incoming[base + 1];
+                                let c = incoming[base + 2] * std::f32::consts::FRAC_1_SQRT_2;
+                                let lfe = incoming[base + 3] * 0.5;
+                                let rl = incoming[base + 4] * std::f32::consts::FRAC_1_SQRT_2;
+                                let rr = incoming[base + 5] * std::f32::consts::FRAC_1_SQRT_2;
+                                let sl = incoming[base + 6] * std::f32::consts::FRAC_1_SQRT_2;
+                                let sr = incoming[base + 7] * std::f32::consts::FRAC_1_SQRT_2;
+                                input_scratch[f * 2] = fl + c + lfe + rl + sl;
+                                input_scratch[f * 2 + 1] = fr + c + lfe + rr + sr;
                             }
-
-                            // Process audio frames through DSP pipeline
-                            // Non-blocking try_lock ensures audio thread never stalls on UI
-                            if let Ok(mut coord) = coordinator.try_lock() {
-                                coord.process_audio_chunk(
-                                    &input_scratch[..sample_count],
-                                    &mut output_scratch[..sample_count],
-                                );
-                            } else {
-                                // Passthrough fallback if coordinator momentarily locked by telemetry
-                                output_scratch[..sample_count]
-                                    .copy_from_slice(&input_scratch[..sample_count]);
+                        } else if capture_channels == 1 {
+                            let incoming = std::slice::from_raw_parts(
+                                p_data as *const f32,
+                                frames,
+                            );
+                            for f in 0..frames {
+                                let mono = incoming[f];
+                                input_scratch[f * 2] = mono;
+                                input_scratch[f * 2 + 1] = mono;
                             }
+                        } else {
+                            let incoming = std::slice::from_raw_parts(
+                                p_data as *const f32,
+                                frames * capture_channels,
+                            );
+                            for f in 0..frames {
+                                let base = f * capture_channels;
+                                input_scratch[f * 2] = incoming[base];
+                                input_scratch[f * 2 + 1] = incoming[base + 1];
+                            }
+                        }
 
-                            // Write processed audio frames to physical output DAC with retry loop
-                            for _ in 0..10 {
-                                let padding = render_client.GetCurrentPadding().unwrap_or(0);
-                                let available = render_buffer_size.saturating_sub(padding);
+                        // Process audio frames through DSP pipeline
+                        // Non-blocking try_lock ensures audio thread never stalls on UI
+                        if let Ok(mut coord) = coordinator.try_lock() {
+                            coord.process_audio_chunk(
+                                &input_scratch[..stereo_sample_count],
+                                &mut output_scratch[..stereo_sample_count],
+                            );
+                        } else {
+                            // Passthrough fallback if coordinator momentarily locked by telemetry
+                            output_scratch[..stereo_sample_count]
+                                .copy_from_slice(&input_scratch[..stereo_sample_count]);
+                        }
 
-                                if available >= frames_read {
-                                    if let Ok(render_ptr) = render_svc.GetBuffer(frames_read) {
-                                        let render_slice = std::slice::from_raw_parts_mut(
-                                            render_ptr as *mut f32,
-                                            sample_count,
-                                        );
-                                        render_slice.copy_from_slice(&output_scratch[..sample_count]);
-                                        let _ = render_svc.ReleaseBuffer(frames_read, 0);
+                        // Write processed audio frames to physical output DAC with retry loop
+                        for _ in 0..10 {
+                            let padding = render_client.GetCurrentPadding().unwrap_or(0);
+                            let available = render_buffer_size.saturating_sub(padding);
+
+                            if available >= frames_read {
+                                if let Ok(render_ptr) = render_svc.GetBuffer(frames_read) {
+                                    let render_slice = std::slice::from_raw_parts_mut(
+                                        render_ptr as *mut f32,
+                                        frames * render_channels,
+                                    );
+                                    if render_channels == 2 {
+                                        render_slice
+                                            .copy_from_slice(&output_scratch[..stereo_sample_count]);
+                                    } else if render_channels == 1 {
+                                        for f in 0..frames {
+                                            render_slice[f] = 0.5
+                                                * (output_scratch[f * 2]
+                                                    + output_scratch[f * 2 + 1]);
+                                        }
+                                    } else {
+                                        for f in 0..frames {
+                                            let base = f * render_channels;
+                                            render_slice[base] = output_scratch[f * 2];
+                                            render_slice[base + 1] = output_scratch[f * 2 + 1];
+                                            for c in 2..render_channels {
+                                                render_slice[base + c] = 0.0;
+                                            }
+                                        }
                                     }
-                                    break;
+                                    let _ = render_svc.ReleaseBuffer(frames_read, 0);
                                 }
-                                std::thread::sleep(Duration::from_micros(500));
+                                break;
                             }
+                            std::thread::sleep(Duration::from_micros(500));
                         }
                     }
                     let _ = capture_svc.ReleaseBuffer(frames_read);

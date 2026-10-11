@@ -153,3 +153,20 @@ fn test_audio_device_info_contract() {
     let info_clone = info.clone();
     assert_eq!(info, info_clone);
 }
+
+#[test]
+fn test_set_default_device_com_lifecycle_no_access_violation() {
+    let manager = AudioDeviceManager::new();
+    if let Ok(Some(physical)) = manager.get_physical_default_device() {
+        // Repeatedly invoke set_default_device on isolated COM worker threads
+        // to ensure IUnknown guards are released before CoUninitialize() without 0xC0000005.
+        for _ in 0..3 {
+            let res = manager.set_default_device(&physical.id);
+            assert!(
+                res.is_ok(),
+                "set_default_device on physical endpoint should succeed: {:?}",
+                res
+            );
+        }
+    }
+}

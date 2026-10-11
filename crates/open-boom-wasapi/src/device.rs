@@ -221,53 +221,66 @@ impl AudioDeviceManager {
         use windows::Win32::System::Com::{
             CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
         };
-        use windows::Win32::Media::Audio::ERole;
+        use windows::Win32::Media::Audio::{eCommunications, eConsole, eMultimedia, ERole};
 
         const CLSID_POLICY_CONFIG: GUID = GUID::from_u128(0x870af99c_171d_4f9e_af0d_e63df40c2bc9);
         const IID_IPOLICY_CONFIG: GUID = GUID::from_u128(0xf8679f50_850a_41cf_9c72_430f290290c8);
 
-        unsafe {
-            let com_init = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let unk: IUnknown = CoCreateInstance(&CLSID_POLICY_CONFIG, None, CLSCTX_ALL)
-                .map_err(|e| EngineError::DeviceInitialization(format!("Failed to create PolicyConfig: {}", e)))?;
+        let com_init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 
-            let mut policy_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-            let qi_hr = unk.query(&IID_IPOLICY_CONFIG, &mut policy_ptr);
-            if qi_hr.is_err() || policy_ptr.is_null() {
-                if com_init.is_ok() {
-                    CoUninitialize();
+        let result = unsafe {
+            (|| -> EngineResult<()> {
+                let unk: IUnknown = CoCreateInstance(&CLSID_POLICY_CONFIG, None, CLSCTX_ALL)
+                    .map_err(|e| {
+                        EngineError::DeviceInitialization(format!(
+                            "Failed to create PolicyConfig: {}",
+                            e
+                        ))
+                    })?;
+
+                let mut policy_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+                let qi_hr = unk.query(&IID_IPOLICY_CONFIG, &mut policy_ptr);
+                if qi_hr.is_err() || policy_ptr.is_null() {
+                    return Err(EngineError::DeviceInitialization(
+                        "Failed to query IPolicyConfig interface".to_string(),
+                    ));
                 }
-                return Err(EngineError::DeviceInitialization("Failed to query IPolicyConfig interface".to_string()));
-            }
 
-            let _policy_guard = IUnknown::from_raw(policy_ptr);
-            let vtable_ptr = *(policy_ptr as *const *const usize);
-            let set_default_func_ptr = *vtable_ptr.add(13);
-            let set_default_func: unsafe extern "system" fn(
-                this: *mut std::ffi::c_void,
-                wsz_device_id: PCWSTR,
-                role: ERole,
-            ) -> HRESULT = std::mem::transmute(set_default_func_ptr);
+                let _policy_guard = IUnknown::from_raw(policy_ptr);
+                let vtable_ptr = *(policy_ptr as *const *const usize);
+                let set_default_func_ptr = *vtable_ptr.add(13);
+                let set_default_func: unsafe extern "system" fn(
+                    this: *mut std::ffi::c_void,
+                    wsz_device_id: PCWSTR,
+                    role: ERole,
+                ) -> HRESULT = std::mem::transmute(set_default_func_ptr);
 
-            let wide_id: Vec<u16> = device_id.encode_utf16().chain(std::iter::once(0)).collect();
-            let pcwstr = PCWSTR::from_raw(wide_id.as_ptr());
+                let wide_id: Vec<u16> =
+                    device_id.encode_utf16().chain(std::iter::once(0)).collect();
+                let pcwstr = PCWSTR::from_raw(wide_id.as_ptr());
 
-            let hr_console = set_default_func(policy_ptr, pcwstr, windows::Win32::Media::Audio::eConsole);
-            let hr_multi = set_default_func(policy_ptr, pcwstr, windows::Win32::Media::Audio::eMultimedia);
+                let hr_console = set_default_func(policy_ptr, pcwstr, eConsole);
+                let hr_multi = set_default_func(policy_ptr, pcwstr, eMultimedia);
+                let _hr_comm = set_default_func(policy_ptr, pcwstr, eCommunications);
 
-            if com_init.is_ok() {
+                if hr_console.is_err() || hr_multi.is_err() {
+                    return Err(EngineError::DeviceInitialization(format!(
+                        "SetDefaultEndpoint failed: {:?}, {:?}",
+                        hr_console, hr_multi
+                    )));
+                }
+
+                Ok(())
+            })()
+        };
+
+        if com_init.is_ok() {
+            unsafe {
                 CoUninitialize();
             }
-
-            if hr_console.is_err() || hr_multi.is_err() {
-                return Err(EngineError::DeviceInitialization(format!(
-                    "SetDefaultEndpoint failed: {:?}, {:?}",
-                    hr_console, hr_multi
-                )));
-            }
-
-            Ok(())
         }
+
+        result
     }
 
     #[cfg(windows)]
