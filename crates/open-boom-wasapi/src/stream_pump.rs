@@ -124,20 +124,20 @@ impl AudioStreamPump {
                 }
             };
 
-            // 1. Resolve Target Output Render Endpoint
+            // 1. Resolve Target Output Render Endpoint (Must be physical, never virtual sink)
             let render_device: IMMDevice = if let Some(ref target_id) = config.target_device_id {
                 let h_id = HSTRING::from(target_id.as_str());
                 match enumerator.GetDevice(&h_id) {
                     Ok(dev) => dev,
-                    Err(_) => match enumerator.GetDefaultAudioEndpoint(eRender, eConsole) {
-                        Ok(dev) => dev,
-                        Err(_) => return,
+                    Err(_) => match Self::find_physical_render_device(&enumerator) {
+                        Some(dev) => dev,
+                        None => return,
                     },
                 }
             } else {
-                match enumerator.GetDefaultAudioEndpoint(eRender, eConsole) {
-                    Ok(dev) => dev,
-                    Err(_) => return,
+                match Self::find_physical_render_device(&enumerator) {
+                    Some(dev) => dev,
+                    None => return,
                 }
             };
 
@@ -320,19 +320,23 @@ impl AudioStreamPump {
                                     .copy_from_slice(&input_scratch[..sample_count]);
                             }
 
-                            // Write processed audio frames to physical output DAC
-                            let padding = render_client.GetCurrentPadding().unwrap_or(0);
-                            let available = render_buffer_size.saturating_sub(padding);
+                            // Write processed audio frames to physical output DAC with retry loop
+                            for _ in 0..10 {
+                                let padding = render_client.GetCurrentPadding().unwrap_or(0);
+                                let available = render_buffer_size.saturating_sub(padding);
 
-                            if available >= frames_read {
-                                if let Ok(render_ptr) = render_svc.GetBuffer(frames_read) {
-                                    let render_slice = std::slice::from_raw_parts_mut(
-                                        render_ptr as *mut f32,
-                                        sample_count,
-                                    );
-                                    render_slice.copy_from_slice(&output_scratch[..sample_count]);
-                                    let _ = render_svc.ReleaseBuffer(frames_read, 0);
+                                if available >= frames_read {
+                                    if let Ok(render_ptr) = render_svc.GetBuffer(frames_read) {
+                                        let render_slice = std::slice::from_raw_parts_mut(
+                                            render_ptr as *mut f32,
+                                            sample_count,
+                                        );
+                                        render_slice.copy_from_slice(&output_scratch[..sample_count]);
+                                        let _ = render_svc.ReleaseBuffer(frames_read, 0);
+                                    }
+                                    break;
                                 }
+                                std::thread::sleep(Duration::from_micros(500));
                             }
                         }
                     }
@@ -350,6 +354,47 @@ impl AudioStreamPump {
                 CoUninitialize();
             }
         }
+    }
+
+    #[cfg(windows)]
+    fn find_physical_render_device(
+        enumerator: &windows::Win32::Media::Audio::IMMDeviceEnumerator,
+    ) -> Option<windows::Win32::Media::Audio::IMMDevice> {
+        use windows::Win32::Media::Audio::{eConsole, eRender, DEVICE_STATE_ACTIVE};
+        use windows::Win32::System::Com::STGM_READ;
+        use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
+
+        // Check if default render endpoint is non-virtual
+        if let Ok(dev) = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole) } {
+            if let Ok(props) = unsafe { dev.OpenPropertyStore(STGM_READ) } {
+                if let Ok(name_var) = unsafe { props.GetValue(&PKEY_Device_FriendlyName) } {
+                    let name = name_var.to_string();
+                    if !crate::device::AudioDeviceManager::is_virtual_device_name(&name) {
+                        return Some(dev);
+                    }
+                }
+            }
+        }
+
+        // If default is virtual (e.g. Boom Audio), find first active non-virtual render endpoint
+        if let Ok(collection) = unsafe { enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) } {
+            if let Ok(count) = unsafe { collection.GetCount() } {
+                for i in 0..count {
+                    if let Ok(dev) = unsafe { collection.Item(i) } {
+                        if let Ok(props) = unsafe { dev.OpenPropertyStore(STGM_READ) } {
+                            if let Ok(name_var) = unsafe { props.GetValue(&PKEY_Device_FriendlyName) } {
+                                let name = name_var.to_string();
+                                if !crate::device::AudioDeviceManager::is_virtual_device_name(&name) {
+                                    return Some(dev);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
 

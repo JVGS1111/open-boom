@@ -4,7 +4,8 @@ use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot, GRAPHIC_EQ_BANDS};
 use open_boom_storage::{AppConfig, PresetStore, StartupManager};
 use open_boom_wasapi::{
-    AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig, StreamPumpConfig,
+    AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig,
+    StreamPumpConfig,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -24,6 +25,9 @@ pub struct AppState {
     pub store: PresetStore,
     pub startup: StartupManager,
     pub pump: Arc<Mutex<Option<AudioStreamPump>>>,
+    pub active_physical_device_id: Arc<Mutex<Option<String>>>,
+    pub virtual_device_id: Arc<Mutex<Option<String>>>,
+    pub is_routed_to_virtual: Arc<Mutex<bool>>,
 }
 
 impl Default for AppState {
@@ -34,6 +38,14 @@ impl Default for AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        Self::with_routing_options(false)
+    }
+
+    pub fn new_runtime() -> Self {
+        Self::with_routing_options(true)
+    }
+
+    pub fn with_routing_options(auto_route: bool) -> Self {
         let command_queue = SpscQueue::<AudioCommand, COMMAND_QUEUE_CAPACITY>::new();
         let dispatcher = UiDispatcher::new(command_queue.clone());
         let render_config = RenderConfig {
@@ -47,11 +59,36 @@ impl AppState {
         )));
         let store = PresetStore::default();
         let startup = StartupManager::new();
+
+        let device_mgr = AudioDeviceManager::new();
+        let physical_default = device_mgr.get_physical_default_device().ok().flatten();
+        let physical_id = physical_default.as_ref().map(|d| d.id.clone());
+        let virtual_dev = device_mgr.find_virtual_device().ok().flatten();
+        let virtual_id = virtual_dev.as_ref().map(|d| d.id.clone());
+
         let pump_instance = AudioStreamPump::start(
             coordinator.clone(),
-            StreamPumpConfig::default(),
+            StreamPumpConfig {
+                target_device_id: physical_id.clone(),
+                capture_device_id: virtual_id.clone(),
+                allow_synthetic: true,
+            },
         ).ok();
         let pump = Arc::new(Mutex::new(pump_instance));
+
+        let is_routed_to_virtual = Arc::new(Mutex::new(false));
+
+        // If auto_route requested, virtual device present and master power is ON (default true), route to virtual sink
+        if auto_route {
+            if let Some(ref v_id) = virtual_id {
+                if device_mgr.set_default_device(v_id).is_ok() {
+                    if let Ok(mut routed) = is_routed_to_virtual.lock() {
+                        *routed = true;
+                    }
+                }
+            }
+        }
+
         Self {
             dispatcher,
             command_queue,
@@ -59,6 +96,9 @@ impl AppState {
             store,
             startup,
             pump,
+            active_physical_device_id: Arc::new(Mutex::new(physical_id)),
+            virtual_device_id: Arc::new(Mutex::new(virtual_id)),
+            is_routed_to_virtual,
         }
     }
 
@@ -67,6 +107,46 @@ impl AppState {
         state.store = store;
         state.startup = startup;
         state
+    }
+
+    pub fn handle_master_power_toggle(&self, power: bool) -> Result<(), String> {
+        let coord = self.coordinator.lock().map_err(|e| e.to_string())?;
+        let device_mgr = coord.device_manager().clone();
+        drop(coord);
+
+        let physical_id = self.active_physical_device_id.lock().ok().and_then(|g| g.clone());
+        let virtual_id = self.virtual_device_id.lock().ok().and_then(|g| g.clone());
+
+        if power {
+            if let Some(ref v_id) = virtual_id {
+                let _ = device_mgr.set_default_device(v_id);
+                if let Ok(mut routed) = self.is_routed_to_virtual.lock() {
+                    *routed = true;
+                }
+            }
+        } else {
+            if let Some(ref p_id) = physical_id {
+                let _ = device_mgr.set_default_device(p_id);
+                if let Ok(mut routed) = self.is_routed_to_virtual.lock() {
+                    *routed = false;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn restore_physical_default_device(&self) {
+        let was_routed = self.is_routed_to_virtual.lock().ok().map(|g| *g).unwrap_or(false);
+        if was_routed {
+            let physical_id = self.active_physical_device_id.lock().ok().and_then(|g| g.clone());
+            if let Some(ref p_id) = physical_id {
+                let device_mgr = AudioDeviceManager::new();
+                let _ = device_mgr.set_default_device(p_id);
+                if let Ok(mut routed) = self.is_routed_to_virtual.lock() {
+                    *routed = false;
+                }
+            }
+        }
     }
 
     pub fn get_telemetry_snapshot(&self) -> TelemetrySnapshot {
@@ -87,8 +167,23 @@ impl AppState {
     }
 }
 
+impl Drop for AppState {
+    fn drop(&mut self) {
+        self.restore_physical_default_device();
+    }
+}
+
 #[tauri::command]
 fn dispatch_command(cmd: AudioCommand, state: State<'_, AppState>) -> Result<(), String> {
+    match &cmd {
+        AudioCommand::SetMasterPower(power) => {
+            let _ = state.handle_master_power_toggle(*power);
+        }
+        AudioCommand::SetBypass(bypassed) => {
+            let _ = state.handle_master_power_toggle(!*bypassed);
+        }
+        _ => {}
+    }
     state.dispatcher.send(cmd).map_err(|e| e.to_string())
 }
 
@@ -100,14 +195,31 @@ fn get_telemetry(state: State<'_, AppState>) -> TelemetrySnapshot {
 #[tauri::command]
 fn get_audio_devices(state: State<'_, AppState>) -> Result<Vec<AudioDeviceInfo>, String> {
     let coord = state.coordinator.lock().map_err(|e| e.to_string())?;
-    coord.enumerate_devices().map_err(|e| e.to_string())
+    let mut devices = coord.device_manager().enumerate_physical_devices().map_err(|e| e.to_string())?;
+    drop(coord);
+
+    let active_id = state.active_physical_device_id.lock().ok().and_then(|g| g.clone());
+    if let Some(ref id) = active_id {
+        for dev in &mut devices {
+            dev.is_default = &dev.id == id;
+        }
+    }
+
+    Ok(devices)
 }
 
 #[tauri::command]
 fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
     let mut coord = state.coordinator.lock().map_err(|e| e.to_string())?;
     coord.switch_device(device_id.clone()).map_err(|e| e.to_string())?;
+    let device_mgr = coord.device_manager().clone();
     drop(coord);
+
+    if let Ok(mut target_guard) = state.active_physical_device_id.lock() {
+        *target_guard = device_id.clone();
+    }
+
+    let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
 
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
@@ -116,11 +228,21 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
         *pump_guard = AudioStreamPump::start(
             state.coordinator.clone(),
             StreamPumpConfig {
-                target_device_id: device_id,
-                ..Default::default()
+                target_device_id: device_id.clone(),
+                capture_device_id: virtual_id,
+                allow_synthetic: true,
             },
         ).ok();
     }
+
+    // If master power is currently OFF, route Windows default directly to the new physical device
+    let power = state.coordinator.lock().map(|c| c.processor().master_power()).unwrap_or(true);
+    if !power {
+        if let Some(ref id) = device_id {
+            let _ = device_mgr.set_default_device(id);
+        }
+    }
+
     Ok(())
 }
 
@@ -128,7 +250,17 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
 fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
     let mut coord = state.coordinator.lock().map_err(|e| e.to_string())?;
     coord.handle_device_lost().map_err(|e| e.to_string())?;
+    let device_mgr = coord.device_manager().clone();
     drop(coord);
+
+    let physical_default = device_mgr.get_physical_default_device().ok().flatten();
+    let fallback_id = physical_default.map(|d| d.id);
+
+    if let Ok(mut target_guard) = state.active_physical_device_id.lock() {
+        *target_guard = fallback_id.clone();
+    }
+
+    let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
 
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
@@ -137,13 +269,15 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
         *pump_guard = AudioStreamPump::start(
             state.coordinator.clone(),
             StreamPumpConfig {
-                target_device_id: None,
-                ..Default::default()
+                target_device_id: fallback_id,
+                capture_device_id: virtual_id,
+                allow_synthetic: true,
             },
         ).ok();
     }
     Ok(())
 }
+
 
 #[tauri::command]
 fn minimize_window(app_handle: AppHandle) -> Result<(), String> {
@@ -187,7 +321,7 @@ fn set_launch_on_startup(enabled: bool, state: State<'_, AppState>) -> Result<()
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let state = AppState::new();
+    let state = AppState::new_runtime();
 
     tauri::Builder::default()
         .manage(state)
@@ -310,6 +444,8 @@ pub fn run() {
                             let _ = app.emit("tray-preset-selected", "Vocal Clarity");
                         }
                         "quit" => {
+                            let state = app.state::<AppState>();
+                            state.restore_physical_default_device();
                             app.exit(0);
                         }
                         _ => {}

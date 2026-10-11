@@ -218,3 +218,20 @@
   3. **Zero Alocações no Loop de Processamento (`AD-1`, `NFR2`):** Buffers de scratch para entrada e saída de 48 kHz estéreo (16.384 floats) são pré-alocados. A passagem pelos estágios de DSP utiliza `try_lock()` no coordenador para garantir que a thread de áudio nunca bloqueie caso a interface esteja consultando telemetria.
   4. **Integração no Ciclo de Vida do Tauri:** O `AudioStreamPump` é instanciado automaticamente no `AppState::new()` e reinicializado em tempo hábil (< 500ms) quando o usuário troca o dispositivo de saída no seletor de endpoints (`set_audio_device`).
 * **Consequência:** Fluxo contínuo de áudio em tempo real com sub-15ms de latência, integração total com os controles de 3D Surround, Limitador e Volume Boost, e 96 testes passando no workspace.
+
+---
+
+## ADR-020: Roteamento Inteligente Automático de Endpoint via COM IPolicyConfig e Isolamento de Dispositivo Físico (HyperX)
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Diagnóstico em tempo real revelou que, mesmo com a thread de streaming ativa, o usuário não percebia alterações no áudio do headset físico (`HyperX Cloud II Wireless`). As aplicações do Windows (Spotify, YouTube, jogos) estavam enviando seus fluxos diretamente para o DAC físico do HyperX, enquanto o OpenBoom escutava o dispositivo virtual `Boom Audio` (que permanecia em silêncio absoluto). Selecionar o `Boom Audio` manualmente no Windows resultava em silêncio total porque ele é um sink mudo (driver SYSVAD) que exige um software lendo seus buffers e retransmitindo para o hardware. Além disso, captura em loopback direto na placa física causa eco acústico duplo (slapback echo).
+* **Decisões:**
+  1. **Comutação Programática via COM `IPolicyConfig` (`SetDefaultEndpoint`):** Implementada a interface COM não documentada `IPolicyConfig` (CLSID `{870af99c-171d-4f9e-af0d-e63df40c2bc9}`, IID `{f8679f50-850a-41cf-9c72-430f290290c8}`) com chamada a `SetDefaultEndpoint` no índice 13 da vtable em thread dedicada (`open-boom-set-default-device`).
+  2. **Ciclo de Vida de Roteamento Transparente:**
+     - **Master Power LIGADO (ou início do runtime via `AppState::new_runtime`):** O OpenBoom detecta o DAC físico ativo (`HyperX`), fixa-o como destino do `AudioStreamPump`, e altera a saída padrão do Windows para o dispositivo virtual `Boom Audio`. O Windows e todos os programas passam a tocar no `Boom Audio`; o OpenBoom captura esse fluxo, aplica Volume Boost, 3D Spatializer (HRTF KEMAR) e Peak Limiter, e renderiza diretamente no HyperX com latência < 15ms.
+     - **Master Power DESLIGADO (ou Bypass A/B):** O OpenBoom comuta imediatamente a saída padrão do Windows de volta para o DAC físico (`HyperX`), assegurando passthrough bit-perfect sem interrupção.
+  3. **Restauração Garantida no Encerramento:** Implementado `restore_physical_default_device` em `AppState::drop` e no menu de contexto da bandeja do sistema ("Exit OpenBoom"), garantindo que o sistema operacional nunca fique preso no sink virtual ao fechar o aplicativo.
+  4. **Filtragem de Dispositivos Virtuais na Interface:** Criado `enumerate_physical_devices()`, que remove `Boom Audio` e outros adaptadores virtuais do seletor da UI, permitindo que o usuário visualize e selecione apenas fones e caixas reais.
+  5. **Proteção de Retry no `AudioStreamPump`:** Implementado loop de retry de até 10 iterações com delay de 500µs contra variações transitórias de padding do WASAPI, eliminando descartes acidentais de buffers.
+  6. **Isolamento de Testes Unitários:** `AppState::new()` desativa o chaveamento de sistema por padrão (`auto_route: false`), reservando o roteamento dinâmico para `AppState::new_runtime()` executado no entrypoint da aplicação.
+* **Consequência:** Eliminação definitiva de eco acústico, ativação imediata e audível de todos os efeitos de DSP no headset físico do usuário, abstração total da complexidade de drivers virtuais (idêntico ao comportamento comercial do Boom 3D) e suíte completa de testes (96 testes) verde no workspace.

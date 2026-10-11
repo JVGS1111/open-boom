@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 10/10/2026 - 20:45
-* **Sprint Ativa:** Epic 2: 3D Surround Soundstage & Spatial Calibration - 100% Concluído!
-* **Tarefa Atual:** Epic 2 CONCLUÍDO com status `done` em todas as 4 histórias (Story 2.1, 2.2, 2.3, 2.4). Todos os 95 testes do workspace passando, zero warnings, TypeScript/Vite compilando com sucesso!
+* **Data/Hora:** 11/10/2026 - 09:25
+* **Sprint Ativa:** Epic 2 Concluído + Roteamento de Áudio Inteligente (ADR-020)
+* **Tarefa Atual:** Roteamento Inteligente via COM IPolicyConfig CONCLUÍDO! Todos os 96 testes do workspace passando, zero warnings, TypeScript/Vite compilando com sucesso!
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -119,8 +119,17 @@
     - 96 testes unitários e de integração verdes no workspace Cargo com zero warnings e build Vite concluído em 1.80s.
     - Registro de ADR-019 no `.bmad/04-DECISION-LOG.md`.
 
+19. **Roteamento Inteligente Automático via COM `IPolicyConfig` e Isolamento do HyperX (ADR-020):**
+    - Solução definitiva para a ausência de efeito perceptível no headset físico: implementação de `set_windows_default_device` via COM não documentado `IPolicyConfig::SetDefaultEndpoint` (vtable index 13) rodando em thread de trabalho dedicada (`open-boom-set-default-device`).
+    - **Ciclo Transparente:** Ao ligar o Master Power (`AppState::new_runtime`), o OpenBoom comuta a saída padrão do Windows para o `Boom Audio` (sink mudo), captura esse fluxo, passa pelo motor DSP (Volume, Boost 150%, 3D Spatializer KEMAR HRTF, Master Limiter) e bombeia diretamente para o DAC físico (`HyperX Cloud II Wireless`) sem slapback echo.
+    - **Passthrough & Safe Exit:** Ao desligar o Master Power, alternar para Bypass A/B ou fechar o aplicativo (via menu de bandeja ou encerramento do processo), o Windows comuta de volta e instantaneamente para o `HyperX`, garantindo zero interrupção e impedindo que o SO fique preso em modo mudo.
+    - **Filtragem da UI:** `enumerate_physical_devices()` oculta sinks virtuais (`Boom Audio`) do dropdown, permitindo ao usuário selecionar apenas fones e caixas de som reais.
+    - **Proteção Anti-Jitter:** Adicionado loop de retry no `AudioStreamPump` para absorver flutuações de padding do WASAPI sem descarte de amostras.
+    - 96 testes verdes no workspace Cargo e build Vite concluído em 3.83s.
+    - Registro de ADR-020 no `.bmad/04-DECISION-LOG.md` e tarefa T2.6 em `.bmad/03-TASK-BACKLOG.md`.
+
 ## O que está em andamento agora
-* **Streaming de áudio em tempo real ativo e conectado ao Tauri**, com todos os controles de 3D Surround, Limitador e Boost operando no fluxo contínuo de áudio do sistema. 96 testes verdes.
+* **Roteamento Inteligente Automático e Streaming Ativo:** Sistema 100% capaz de interceptar o áudio do Windows, processar através do pipeline DSP e entregar no HyperX sem eco e com retorno seguro à placa física.
 
 ## Próximo Passo Imediato
 * Iniciar o desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).

@@ -154,6 +154,122 @@ impl AudioDeviceManager {
         Ok(devices.into_iter().find(|d| d.id == id))
     }
 
+    /// Enumerates only physical audio render endpoints, filtering out any virtual devices/sinks.
+    pub fn enumerate_physical_devices(&self) -> EngineResult<Vec<AudioDeviceInfo>> {
+        let all_devices = self.enumerate_devices()?;
+        let mut physical: Vec<AudioDeviceInfo> = all_devices
+            .into_iter()
+            .filter(|d| !Self::is_virtual_device_name(&d.name))
+            .collect();
+
+        // If no physical device is marked default (e.g. because Windows default is currently a virtual sink),
+        // mark the first physical device as default.
+        if !physical.is_empty() && !physical.iter().any(|d| d.is_default) {
+            physical[0].is_default = true;
+        }
+
+        Ok(physical)
+    }
+
+    /// Returns the active physical default audio render endpoint.
+    pub fn get_physical_default_device(&self) -> EngineResult<Option<AudioDeviceInfo>> {
+        let physical = self.enumerate_physical_devices()?;
+        Ok(physical.into_iter().find(|d| d.is_default))
+    }
+
+    /// Sets the Windows default audio playback endpoint (eConsole and eMultimedia roles).
+    pub fn set_default_device(&self, device_id: &str) -> EngineResult<()> {
+        if self.force_synthetic {
+            return Ok(());
+        }
+
+        #[cfg(windows)]
+        {
+            Self::set_windows_default_device(device_id)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = device_id;
+            Ok(())
+        }
+    }
+
+    /// Sets the Windows default audio playback endpoint via COM IPolicyConfig on an isolated thread.
+    #[cfg(windows)]
+    pub fn set_windows_default_device(device_id: &str) -> EngineResult<()> {
+        let id_string = device_id.to_string();
+        std::thread::Builder::new()
+            .name("open-boom-set-default-device".to_string())
+            .spawn(move || Self::set_windows_default_device_worker(&id_string))
+            .map_err(|e| {
+                EngineError::DeviceInitialization(format!(
+                    "Failed to spawn set-default-device worker thread: {}",
+                    e
+                ))
+            })?
+            .join()
+            .map_err(|_| {
+                EngineError::DeviceInitialization(
+                    "Set-default-device worker thread panicked".to_string(),
+                )
+            })?
+    }
+
+    #[cfg(windows)]
+    fn set_windows_default_device_worker(device_id: &str) -> EngineResult<()> {
+        use windows::core::{Interface, IUnknown, GUID, HRESULT, PCWSTR};
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
+        };
+        use windows::Win32::Media::Audio::ERole;
+
+        const CLSID_POLICY_CONFIG: GUID = GUID::from_u128(0x870af99c_171d_4f9e_af0d_e63df40c2bc9);
+        const IID_IPOLICY_CONFIG: GUID = GUID::from_u128(0xf8679f50_850a_41cf_9c72_430f290290c8);
+
+        unsafe {
+            let com_init = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let unk: IUnknown = CoCreateInstance(&CLSID_POLICY_CONFIG, None, CLSCTX_ALL)
+                .map_err(|e| EngineError::DeviceInitialization(format!("Failed to create PolicyConfig: {}", e)))?;
+
+            let mut policy_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+            let qi_hr = unk.query(&IID_IPOLICY_CONFIG, &mut policy_ptr);
+            if qi_hr.is_err() || policy_ptr.is_null() {
+                if com_init.is_ok() {
+                    CoUninitialize();
+                }
+                return Err(EngineError::DeviceInitialization("Failed to query IPolicyConfig interface".to_string()));
+            }
+
+            let _policy_guard = IUnknown::from_raw(policy_ptr);
+            let vtable_ptr = *(policy_ptr as *const *const usize);
+            let set_default_func_ptr = *vtable_ptr.add(13);
+            let set_default_func: unsafe extern "system" fn(
+                this: *mut std::ffi::c_void,
+                wsz_device_id: PCWSTR,
+                role: ERole,
+            ) -> HRESULT = std::mem::transmute(set_default_func_ptr);
+
+            let wide_id: Vec<u16> = device_id.encode_utf16().chain(std::iter::once(0)).collect();
+            let pcwstr = PCWSTR::from_raw(wide_id.as_ptr());
+
+            let hr_console = set_default_func(policy_ptr, pcwstr, windows::Win32::Media::Audio::eConsole);
+            let hr_multi = set_default_func(policy_ptr, pcwstr, windows::Win32::Media::Audio::eMultimedia);
+
+            if com_init.is_ok() {
+                CoUninitialize();
+            }
+
+            if hr_console.is_err() || hr_multi.is_err() {
+                return Err(EngineError::DeviceInitialization(format!(
+                    "SetDefaultEndpoint failed: {:?}, {:?}",
+                    hr_console, hr_multi
+                )));
+            }
+
+            Ok(())
+        }
+    }
+
     #[cfg(windows)]
     fn enumerate_windows_devices(&self) -> EngineResult<Vec<AudioDeviceInfo>> {
         // Run Windows Core Audio MMDeviceAPI enumeration on an isolated COM worker thread.
