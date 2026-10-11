@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Titlebar } from "./components/Titlebar";
 import { SoundstageDial } from "./components/SoundstageDial";
 import { EqualizerPreview } from "./components/EqualizerPreview";
-import { EffectsRackPreview, EffectModule } from "./components/EffectsRackPreview";
+import { EffectsRackStrip, EffectModule } from "./components/EffectsRackStrip";
 import { StatusBar } from "./components/StatusBar";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
@@ -72,7 +72,7 @@ export const App: React.FC = () => {
   const [isAutoEqOpen, setIsAutoEqOpen] = useState(false);
   const [activeAutoEqProfile, setActiveAutoEqProfile] = useState<AutoEqProfileSummary | null>(null);
 
-  // Sweeteners Rack State
+  // Sweeteners Rack State (Epic 4, UX-DR6)
   const [effectModules, setEffectModules] = useState<EffectModule[]>([
     {
       id: 0,
@@ -93,14 +93,22 @@ export const App: React.FC = () => {
       name: "Night Mode",
       description: "Dynamic Range Soft-Knee",
       enabled: false,
-      amount: 0.5,
+      amount: 0.50,
     },
     {
       id: 3,
-      name: "Spatial Widener",
+      name: "Spatial",
       description: "Mid/Side Stereo Crossfeed",
       enabled: true,
-      amount: 0.6,
+      amount: 0.60,
+    },
+    {
+      id: 4,
+      name: "Pitch",
+      description: "Pitch Shifter (-12..+12 st)",
+      enabled: false,
+      amount: 0.00,
+      isComingSoon: true,
     },
   ]);
 
@@ -175,6 +183,14 @@ export const App: React.FC = () => {
           launch_on_startup: boolean;
           autoeq_profile_id?: string | null;
           active_preset_name?: string;
+          sweetener_ambience_enabled?: boolean;
+          sweetener_ambience_amount?: number;
+          sweetener_fidelity_enabled?: boolean;
+          sweetener_fidelity_amount?: number;
+          sweetener_night_mode_enabled?: boolean;
+          sweetener_night_mode_amount?: number;
+          sweetener_spatial_enabled?: boolean;
+          sweetener_spatial_amount?: number;
         }>("load_app_config");
 
         if (config) {
@@ -294,6 +310,29 @@ export const App: React.FC = () => {
           dispatchCommand({ SetBypass: config.bypass_active });
 
           setLaunchOnStartup(config.launch_on_startup);
+
+          // Restore Sweeteners Rack (Epic 4, UX-DR6, FR16-FR19)
+          const ambEn = config.sweetener_ambience_enabled ?? true;
+          const ambAmt = config.sweetener_ambience_amount ?? 0.35;
+          const fidEn = config.sweetener_fidelity_enabled ?? true;
+          const fidAmt = config.sweetener_fidelity_amount ?? 0.45;
+          const nmEn = config.sweetener_night_mode_enabled ?? false;
+          const nmAmt = config.sweetener_night_mode_amount ?? 0.50;
+          const spatEn = config.sweetener_spatial_enabled ?? true;
+          const spatAmt = config.sweetener_spatial_amount ?? 0.60;
+
+          setEffectModules([
+            { id: 0, name: "Ambience", description: "FDN Reverb Matrix", enabled: ambEn, amount: ambAmt },
+            { id: 1, name: "Fidelity", description: "Harmonic Clarity Exciter", enabled: fidEn, amount: fidAmt },
+            { id: 2, name: "Night Mode", description: "Dynamic Range Soft-Knee", enabled: nmEn, amount: nmAmt },
+            { id: 3, name: "Spatial", description: "Mid/Side Stereo Crossfeed", enabled: spatEn, amount: spatAmt },
+            { id: 4, name: "Pitch", description: "Pitch Shifter (-12..+12 st)", enabled: false, amount: 0.00, isComingSoon: true },
+          ]);
+
+          dispatchCommand({ SetSweetener: { module_id: 0, enabled: ambEn, amount: ambAmt } });
+          dispatchCommand({ SetSweetener: { module_id: 1, enabled: fidEn, amount: fidAmt } });
+          dispatchCommand({ SetSweetener: { module_id: 2, enabled: nmEn, amount: nmAmt } });
+          dispatchCommand({ SetSweetener: { module_id: 3, enabled: spatEn, amount: spatAmt } });
         }
       } catch {
         // Browser mode fallback
@@ -414,6 +453,15 @@ export const App: React.FC = () => {
         launch_on_startup: launchOnStartup,
         autoeq_profile_id: activeAutoEqProfile?.id ?? null,
         active_preset_name: activeEqPreset,
+        sweetener_ambience_enabled: effectModules.find((m) => m.id === 0)?.enabled ?? true,
+        sweetener_ambience_amount: effectModules.find((m) => m.id === 0)?.amount ?? 0.35,
+        sweetener_fidelity_enabled: effectModules.find((m) => m.id === 1)?.enabled ?? true,
+        sweetener_fidelity_amount: effectModules.find((m) => m.id === 1)?.amount ?? 0.45,
+        sweetener_night_mode_enabled: effectModules.find((m) => m.id === 2)?.enabled ?? false,
+        sweetener_night_mode_amount: effectModules.find((m) => m.id === 2)?.amount ?? 0.50,
+        sweetener_spatial_enabled: effectModules.find((m) => m.id === 3)?.enabled ?? true,
+        sweetener_spatial_amount: effectModules.find((m) => m.id === 3)?.amount ?? 0.60,
+        sweetener_pitch_semitones: 0,
       };
 
       try {
@@ -444,6 +492,7 @@ export const App: React.FC = () => {
     eqGains,
     activeAutoEqProfile,
     activeEqPreset,
+    effectModules,
   ]);
 
   const handleTogglePower = () => {
@@ -505,6 +554,7 @@ export const App: React.FC = () => {
   };
 
   const handleToggleEffect = (id: number) => {
+    if (id >= 4) return; // Pitch is Phase 2 Coming Soon (FR20)
     setEffectModules((prev) =>
       prev.map((mod) => {
         if (mod.id === id) {
@@ -524,6 +574,7 @@ export const App: React.FC = () => {
   };
 
   const handleEffectAmountChange = (id: number, val: number) => {
+    if (id >= 4) return; // Pitch is Phase 2 Coming Soon (FR20)
     setEffectModules((prev) =>
       prev.map((mod) => {
         if (mod.id === id) {
@@ -1010,10 +1061,11 @@ export const App: React.FC = () => {
             />
           </div>
           <div className="flex-1">
-            <EffectsRackPreview
+            <EffectsRackStrip
               modules={effectModules}
               onToggleModule={handleToggleEffect}
               onAmountChange={handleEffectAmountChange}
+              disabled={!masterPower || bypassActive}
             />
           </div>
         </section>

@@ -62,12 +62,12 @@ development_status:
   3-5-genre-factory-presets-custom-preset-persistence: done
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-5-effect-quick-rack-strip-ui-component: backlog
-  4-2-ambience-reverb-module-schroeder-moorer-fdn-dsp: backlog
-  4-3-fidelity-psychoacoustic-harmonic-exciter-module: backlog
-  4-4-night-mode-dynamic-range-compressor-drc: backlog
-  4-5-spatial-stereo-expander-crossfeed-matrix: backlog
+  epic-4: done
+  4-1-5-effect-quick-rack-strip-ui-component: done
+  4-2-ambience-reverb-module-schroeder-moorer-fdn-dsp: done
+  4-3-fidelity-psychoacoustic-harmonic-exciter-module: done
+  4-4-night-mode-dynamic-range-compressor-drc: done
+  4-5-spatial-stereo-expander-crossfeed-matrix: done
   epic-4-retrospective: optional
 
   epic-5: backlog

@@ -25,6 +25,11 @@ const testFiles = [
     entry: path.join(__dirname, "PresetSelector.test.tsx"),
     runnerName: "runPresetSelectorTests",
   },
+  {
+    name: "5-Effect Quick Rack Strip UI Component Test Suite",
+    entry: path.join(__dirname, "EffectsRack.test.tsx"),
+    runnerName: "runEffectsRackTests",
+  },
 ];
 
 async function main() {

@@ -316,3 +316,58 @@
   5. **Independência com AutoEq (`AD-6`):** A troca de presets gráficos de 31 bandas despacha `LoadGraphicEqSnapshot` com `preamp_offset_db: 0.0` (pertencente ao `GraphicEqStage`), preservando intactos o perfil de fone de ouvido e a atenuação de pré-amp do `ParametricStage`.
 * **Consequência:** 19 testes em `open-boom-storage` (122 testes no workspace Cargo) e 47 testes de UI passando com 0 falhas, concluindo 100% do Epic 3.
 
+---
+
+## ADR-026: Ordem de Destruição RAII de Interfaces COM (`IUnknown::Release`) Antes de `CoUninitialize` em `set_windows_default_device_worker` e Ativação Real-Time do `AudioStreamPump`
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Ao executar `npm run dev` (`tauri dev`), o processo `open-boom.exe` encerrava imediatamente na inicialização com código `0xc0000005` (`STATUS_ACCESS_VIOLATION`).
+  A investigação e a inspeção via REA MCP (`inspect_managed_members` e `inspect_managed_artifact` em `Boom3D\Audio.dll` para `Audio.IPolicyConfigVista` e `Audio.CPolicyConfigVistaClient`) revelaram duas causas interligadas:
+  1. Em `AudioDeviceManager::set_windows_default_device_worker` (`crates/open-boom-wasapi/src/device.rs`), os guardiões RAII `unk: IUnknown` e `_policy_guard: IUnknown` permaneciam no escopo léxico até o final da função `unsafe`, **após** a chamada explícita de `CoUninitialize()`. Como `open-boom-set-default-device` é uma thread worker isolada e `AudioStreamPump` estava em modo sintético (`allow_synthetic: true`), `CoUninitialize()` zerava a contagem do apartamento COM e descarregava `AudioSes.dll` do espaço de endereçamento antes que o compilador Rust invocasse `Drop::drop` (`IUnknown::Release`) nos ponteiros COM — resultando em desreferenciação de vtable inválida (`0xc0000005`, `STATUS_ACCESS_VIOLATION`).
+  2. Em `src-tauri/src/lib.rs`, `StreamPumpConfig` recebia `allow_synthetic: true` mesmo quando instanciado via `AppState::new_runtime()`, fazendo a thread `open-boom-audio-pump` entrar no loop sintético de teste em vez de executar `run_windows_pump`. Além disso, `run_windows_pump` assumia fixamente 2 canais (`nChannels == 2`) tanto na captura quanto na renderização.
+* **Decisões:**
+  1. **Escopo Léxico Estrito Antes de `CoUninitialize()`:** Em `set_windows_default_device_worker`, toda a criação, consulta e invocação de `IPolicyConfig` (`eConsole`, `eMultimedia`, `eCommunications` — alinhado com `Audio.CPolicyConfigVistaClient.SetDefaultDevice` verificado via REA MCP) foi encapsulada em uma closure interna `(|| -> EngineResult<()> { ... })()`. Assim, `_policy_guard` e `unk` executam `IUnknown::Release()` estritamente **antes** de `CoUninitialize()`.
+  2. **Ativação Real-Time do `AudioStreamPump` em Runtime (`allow_synthetic: !auto_route`):** `AppState` agora propaga `allow_synthetic: !auto_route` para `StreamPumpConfig` (na inicialização, em `set_audio_device` e em `trigger_device_fallback`), mantendo o isolamento sintético nos testes (`AppState::new()`) e ativando `run_windows_pump` na aplicação desktop (`AppState::new_runtime()`).
+  3. **Adaptação Segura Multi-Canal em `run_windows_pump`:** Leitura dinâmica de `(*capture_fmt_ptr).nChannels`, `(*render_fmt_ptr).nChannels` e `(*render_fmt_ptr).nSamplesPerSec`, com downmix seguro de fluxos 7.1 (8 canais) ou mono para o pipeline estéreo e mapeamento exato para a contagem de canais do DAC físico sem risco de buffer overrun.
+  4. **Teste de Regressão Dedicado:** Adicionado `test_set_default_device_com_lifecycle_no_access_violation` em `crates/open-boom-wasapi/tests/device_tests.rs`.
+* **Consequência:** Eliminação total do crash `0xc0000005` (`STATUS_ACCESS_VIOLATION`), bombeamento de áudio em tempo real ativo no `npm run dev` e 123 testes Cargo passando no workspace.
+
+---
+
+## ADR-027: Topologia DSP dos Efeitos Psicoacústicos (Epic 4: Ambience, Fidelity, Night Mode, Spatial e Quick Rack Strip UI)
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Implementação do Epic 4 (Stories 4.1 a 4.5, FR19 a FR23, UX-DR6): suíte completa de pós-processamento dinâmico e melhoramento psicoacústico (Ambience Reverb, Fidelity Harmonic Exciter, Night Mode DRC, Spatial Stereo Expander e Quick Rack Strip UI). O motor requer latência zero adicional para módulos de saturação e estéreo, preservação rigorosa da coerência de fase em mono, zero alocações na thread de áudio e transições suaves de parâmetros sem zíper acústico.
+* **Decisões:**
+  1. **Topologia em Cascata no Pipeline (Stage 4):** Inserido o estágio `Stage 4: SweetenersRack` no `AudioProcessor` entre a Equalização Gráfica (Stage 3) e o Limitador de Pico Lookahead (Stage 5). Isso assegura que os harmônicos gerados e a ambiência reverberada recebam sinal equalizado e fiquem estritamente contidos pelo teto protetor de -0.2 dBFS do limitador.
+  2. **Story 4.2 - Ambience Reverb (Schroeder-Moorer / FDN):**
+     - Estrutura baseada em 4 filtros comb com amortecimento passa-baixa de 1 polo (delays de 1116, 1188, 1277 e 1356 amostras entre 23ms e 28ms a 48 kHz).
+     - 2 estágios all-pass de difusão em série (delays: 225 e 556 amostras, ganho 0.5) eliminando eco flutter.
+     - 2 taps de reflexão inicial (early reflections) assimétricos entre os canais para espacialidade estéreo natural.
+     - Interpolação paramétrica suave de 200 amostras com filtro de 1 polo eliminando cliques ao ajustar o fader.
+  3. **Story 4.3 - Fidelity Psychoacoustic Harmonic Exciter:**
+     - Divisor de frequência passa-altas Butterworth de 2ª ordem (> 3.2 kHz) para isolar transientes agudos e presença.
+     - Bloco DC de 1 polo para manter a simetria do sinal isolado.
+     - Síntese de harmônicos pares ($x^2$, calor e plenitude) e harmônicos ímpares ($x^3$, presença e ataque) combinados com saturação suave tanh-like ($x / (1 + |x|)$) que previne corte abrupto digital.
+     - Air shelf de alta frequência (> 10 kHz) para brilho e extensão sem aspereza.
+     - Latência zero absoluta (0.0 ms) e bypass bit-idêntico quando desativado.
+  4. **Story 4.4 - Night Mode Dynamic Range Compressor (DRC):**
+     - Detector de envelope com ataque ultrarrápido programável (2.5 ms, < 5 ms) e liberação suave (120 ms).
+     - Curva de ganho com soft-knee quadrática de 6 dB centrada em limiar de -20 dBFS com compressão de até -18 dB em transientes fortes.
+     - Boost de diálogo de baixo nível (até +6 dB) com gate de silêncio a -55 dBFS para evitar amplificação de ruído de fundo/hiss.
+     - Aplicação simétrica da redução de ganho em ambos os canais, preservando 100% da imagem estéreo.
+  5. **Story 4.5 - Spatial Stereo Expander & Crossfeed Matrix:**
+     - Matriz Mid/Side: $M = 0.5(L + R)$, $S = 0.5(L - R)$.
+     - Filtro passa-baixa de 1 polo a 200 Hz para separar o canal de sub-graves no sinal Side.
+     - Centralização estrita de sub-graves (< 200 Hz): o componente grave do Side é cancelado ($S_{low} \times 0.0$), enquanto as frequências médias e agudas são multiplicadas pelo fator de largura ($1.0 + 1.2 \times \text{amount}$).
+     - Invariante matemático de compatibilidade mono: como $L = R \implies S = 0$, para qualquer sinal puramente mono a saída é 100% bit-idêntica à entrada ($L_{out} = M = L$, $R_{out} = M = R$), com zero cancelamento de fase.
+  6. **Story 4.1 - 5-Effect Quick Rack Strip UI Component & Pitch Phase 2 Boundary:**
+     - Componente de UI responsivo com grid de 5 cartões (`EffectsRackStrip.tsx`), iluminação neon ciano, switches de acionamento rápido, mini-sliders verticais com Cascadia Code e tooltips acústicos.
+     - Respeito estrito ao boundary de Pitch Shift (PRD §6.2, FR20): exibição de badge "Soon" (Fase 2) na interface e bloqueio de despacho para o DSP core, preservando conformidade com a arquitetura do MVP.
+  7. **Contrato Lock-Free SPSC e Persistência Atômica:**
+     - Comando `AudioCommand::SetSweetener { effect_id, enabled, amount }` despachado via SPSC queue sem alocações dinâmicas nem locks.
+     - Persistência em `%APPDATA%\OpenBoom\config.json` via campos `sweetener_*` no `AppConfig` com substituição atômica de arquivo.
+* **Consequência:** 17 testes de integração e DSP em `crates/open-boom-core/tests/sweeteners_tests.rs`, 9 testes de UI em `src-ui/src/test/EffectsRack.test.tsx`, elevando o suite total para 140 testes Cargo e 56 testes UI verdes no workspace com zero regressões.
+
+
+

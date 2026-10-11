@@ -23,6 +23,15 @@ fn test_app_config_default_values() {
     assert!(!cfg.launch_on_startup);
     assert_eq!(cfg.autoeq_profile_id, None);
     assert_eq!(cfg.active_preset_name, "Flat");
+    assert!(cfg.sweetener_ambience_enabled);
+    assert!((cfg.sweetener_ambience_amount - 0.35).abs() < 1e-6);
+    assert!(cfg.sweetener_fidelity_enabled);
+    assert!((cfg.sweetener_fidelity_amount - 0.45).abs() < 1e-6);
+    assert!(!cfg.sweetener_night_mode_enabled);
+    assert!((cfg.sweetener_night_mode_amount - 0.50).abs() < 1e-6);
+    assert!(cfg.sweetener_spatial_enabled);
+    assert!((cfg.sweetener_spatial_amount - 0.60).abs() < 1e-6);
+    assert_eq!(cfg.sweetener_pitch_semitones, 0);
 }
 
 #[test]

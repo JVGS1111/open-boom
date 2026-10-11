@@ -37,6 +37,26 @@ impl EqPreset {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_amount_ambience() -> f32 {
+    0.35
+}
+
+fn default_amount_fidelity() -> f32 {
+    0.45
+}
+
+fn default_amount_night_mode() -> f32 {
+    0.50
+}
+
+fn default_amount_spatial() -> f32 {
+    0.60
+}
+
 /// Top-level OpenBoom user settings and preferences.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -62,6 +82,24 @@ pub struct AppConfig {
     pub autoeq_profile_id: Option<String>,
     #[serde(default = "default_active_preset")]
     pub active_preset_name: String,
+    #[serde(default = "default_true")]
+    pub sweetener_ambience_enabled: bool,
+    #[serde(default = "default_amount_ambience")]
+    pub sweetener_ambience_amount: f32,
+    #[serde(default = "default_true")]
+    pub sweetener_fidelity_enabled: bool,
+    #[serde(default = "default_amount_fidelity")]
+    pub sweetener_fidelity_amount: f32,
+    #[serde(default)]
+    pub sweetener_night_mode_enabled: bool,
+    #[serde(default = "default_amount_night_mode")]
+    pub sweetener_night_mode_amount: f32,
+    #[serde(default = "default_true")]
+    pub sweetener_spatial_enabled: bool,
+    #[serde(default = "default_amount_spatial")]
+    pub sweetener_spatial_amount: f32,
+    #[serde(default)]
+    pub sweetener_pitch_semitones: i32,
 }
 
 impl Default for AppConfig {
@@ -86,6 +124,15 @@ impl Default for AppConfig {
             launch_on_startup: false,
             autoeq_profile_id: None,
             active_preset_name: default_active_preset(),
+            sweetener_ambience_enabled: true,
+            sweetener_ambience_amount: 0.35,
+            sweetener_fidelity_enabled: true,
+            sweetener_fidelity_amount: 0.45,
+            sweetener_night_mode_enabled: false,
+            sweetener_night_mode_amount: 0.50,
+            sweetener_spatial_enabled: true,
+            sweetener_spatial_amount: 0.60,
+            sweetener_pitch_semitones: 0,
         }
     }
 }

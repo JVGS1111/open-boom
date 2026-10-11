@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 12:36
-* **Sprint Ativa:** Epic 3 CONCLUÍDO (`done`)! Próximo épico: Epic 4 (`Psychoacoustic Audio Sweeteners & Dynamic Effects Rack`).
-* **Tarefa Atual:** Todas as 5 histórias do Epic 3 (`3.1`, `3.2`, `3.3`, `3.4`, `3.5`) foram implementadas, verificadas, revisadas em 4 lentes e comitadas! 122 testes Cargo verdes no workspace, 47 testes de UI verdes e build Vite compilando em 1.76s!
+* **Data/Hora:** 11/10/2026 - 14:45
+* **Sprint Ativa:** Epic 4 CONCLUÍDO (`done`) — `Psychoacoustic Audio Sweeteners & Dynamic Effects Rack`. Próximo no backlog: **Epic 5: Windows Per-Application Audio Session Mixer & Volume Routing**.
+* **Tarefa Atual:** Conclusão formal do Epic 4 (Stories 4.1 a 4.5, ADR-027, 140 testes Cargo e 56 testes UI verdes).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -122,12 +122,23 @@
     - `src-ui/src/components/PresetSelectorPopover.tsx`, `EqualizerPreview.tsx`, `EqualizerStudioDrawer.tsx` e `App.tsx`: Seletor de presets de 1 clique, detecção de estado modificado com asterisco (`Rock *`) quando os faders divergem $> 0.05\text{ dB}$, criação/renomeação/exclusão de presets customizados e independência total com o estágio AutoEq (`EXPERIENCE.md §5.2`, `AD-6`).
     - `crates/open-boom-storage/tests/storage_tests.rs` e `src-ui/src/test/PresetSelector.test.tsx`: 122 testes Cargo passando no workspace, 47 testes de UI passando e build Vite concluído em 1.76s.
     - Registro de ADR-025 em `.bmad/04-DECISION-LOG.md` e marcação de `epic-3: done` em `sprint-status.yaml`.
+26. **Correção de Crash `0xc0000005` (`STATUS_ACCESS_VIOLATION`) no Startup COM `IPolicyConfig` e Ativação Live do `AudioStreamPump` (ADR-026):**
+    - Identificada a causa-raiz do `STATUS_ACCESS_VIOLATION` durante `npm run dev`: em `AudioDeviceManager::set_windows_default_device_worker` (`crates/open-boom-wasapi/src/device.rs`), os objetos COM `unk: IUnknown` e `_policy_guard: IUnknown` sofriam `Drop` (`IUnknown::Release()`) **após** `CoUninitialize()` ter encerrado o apartamento COM e descarregado `AudioSes.dll` da thread worker isolada.
+    - Encapsulado o ciclo de vida dos ponteiros COM em closure interna antes de `CoUninitialize()`, alinhado com `Audio.CPolicyConfigVistaClient.SetDefaultDevice` (`eConsole`, `eMultimedia`, `eCommunications`) inspecionado via REA MCP em `Boom3D\Audio.dll`.
+    - Corrigido `allow_synthetic: !auto_route` em `src-tauri/src/lib.rs` para ativar `run_windows_pump` em `AppState::new_runtime()`, e adicionado suporte multi-canal seguro (1ch/2ch/7.1ch) em `crates/open-boom-wasapi/src/stream_pump.rs`.
+27. **Implementação e Conclusão Completa do Epic 4: Psychoacoustic Audio Sweeteners & Dynamic Effects Rack (Stories 4.1 a 4.5):**
+    - **Story 4.1 (`4-1-5-effect-quick-rack-strip-ui-component`):** Componente `EffectsRackStrip.tsx` no `src-ui` com grid de 5 cartões (Ambience, Fidelity, Night Mode, Spatial, Pitch), switches de bypass por módulo com brilho ciano neon, mini-sliders verticais com Cascadia Code monospace, tooltips técnicos e boundary de Pitch Fase 2 com badge "Soon" e bloqueio de despacho para o DSP core (`FR19`, `FR20`, `UX-DR6`, `PRD §6.2`).
+    - **Story 4.2 (`4-2-ambience-reverb-module-schroeder-moorer-fdn-dsp`):** `AmbienceProcessor` (`crates/open-boom-core/src/dsp/ambience.rs`) com topologia Schroeder-Moorer / FDN: 4 filtros comb com amortecimento passa-baixa de 1 polo (delays de 1116 a 1356 amostras), 2 all-pass diffusers em série (delays de 225 e 556 amostras, ganho 0.5), early reflections cruzadas assimétricas, descorrelação estéreo, interpolação suave de parâmetros (~200 amostras) e zero alocações na heap (`FR21`).
+    - **Story 4.3 (`4-3-fidelity-psychoacoustic-harmonic-exciter-module`):** `FidelityProcessor` (`crates/open-boom-core/src/dsp/fidelity.rs`) com isolamento de altas frequências (> 3.2 kHz) via Butterworth HP de 2ª ordem, DC-blocker de 1 polo, síntese de 2º harmônico ($x^2$) e 3º harmônico ($x^3$), saturação suave tanh-like, filtro air shelf (> 10 kHz), latência zero absoluta (0.0 ms) e bypass bit-idêntico (`FR22`).
+    - **Story 4.4 (`4-4-night-mode-dynamic-range-compressor-drc`):** `NightModeProcessor` (`crates/open-boom-core/src/dsp/night_mode.rs`) com compressor de faixa dinâmica soft-knee: ataque rápido de 2.5 ms (< 5 ms), liberação de 120 ms, atenuação de picos barulhentos em até -18 dB, boost de diálogo de baixo nível em até +6 dB, gate de silêncio a -55 dBFS impedindo amplificação de ruído/hiss, e ganho estéreo simétrico (`FR23`).
+    - **Story 4.5 (`4-5-spatial-stereo-expander-crossfeed-matrix`):** `SpatialProcessor` (`crates/open-boom-core/src/dsp/spatial.rs`) com matriz Mid/Side ($M = 0.5(L + R), S = 0.5(L - R)$), separação passa-baixa de 1 polo a 200 Hz para isolar sub-graves, centralização mono de graves ($S_{low} \times 0.0$), expansão de largura das frequências médias/agudas ($1.0 + 1.2 \times \text{amount}$) e invariante matemático de compatibilidade mono perfeita (sinal puramente mono $L=R \implies S=0 \implies$ saída bit-idêntica à entrada) (`FR20`).
+    - **Pipeline e Integração de Sistema:** `AudioProcessor` (`crates/open-boom-core/src/dsp/pipeline.rs`) atualizado com `Stage 4: SweetenersRack` entre Equalizador Gráfico (Stage 3) e Master Limiter (Stage 5); comando lock-free `AudioCommand::SetSweetener` consumido via SPSC queue; persistência atômica dos 5 efeitos em `%APPDATA%\OpenBoom\config.json` via `AppConfig` (`crates/open-boom-storage/src/preset_store.rs`).
+    - **Verificação de Testes:** 17 testes de integração/DSP em `sweeteners_tests.rs` (140 testes Cargo verdes no workspace) e 9 testes de UI em `EffectsRack.test.tsx` (56 testes UI verdes no suite `npm test` do `src-ui`).
+    - Registro de ADR-027 em `.bmad/04-DECISION-LOG.md`, specs 4.1 a 4.5 marcadas como `done` e sprint atualizado.
 
 ## O que está em andamento agora
-* **Epic 3 Concluído (`done`)!** Próximo épico no backlog: **Epic 4: Psychoacoustic Audio Sweeteners & Dynamic Effects Rack** (Stories 4.1 a 4.5).
+* **Epic 4 Concluído com Sucesso (`done`)!**
+* **Próximo no Backlog:** **Epic 5: Windows Per-Application Audio Session Mixer & Volume Routing** (Stories 5.1 a 5.3).
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo.
-
-
-
+* Nenhum bloqueio ativo. Todos os 140 testes Cargo e 56 testes UI estão passando com 100% de sucesso.

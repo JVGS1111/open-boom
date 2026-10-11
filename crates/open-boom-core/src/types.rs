@@ -21,6 +21,12 @@ pub const CROSSFADE_SAMPLES: usize = 240;
 /// Mandatory true peak limiter ceiling in dBFS (-0.2 dBFS).
 pub const LIMITER_CEILING_DBFS: f32 = -0.2;
 
+/// Sweetener module IDs.
+pub const SWEETENER_AMBIENCE: u8 = 0;
+pub const SWEETENER_FIDELITY: u8 = 1;
+pub const SWEETENER_NIGHT_MODE: u8 = 2;
+pub const SWEETENER_SPATIAL: u8 = 3;
+
 /// Maximum graphic EQ bands (ISO 1/3-octave standard).
 pub const GRAPHIC_EQ_BANDS: usize = 31;
 

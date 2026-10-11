@@ -3,9 +3,13 @@
 //! Enforces zero heap allocations, zero locks, and bit-perfect zero-latency
 //! passthrough when master power is switched OFF.
 
+use crate::dsp::ambience::AmbienceModule;
+use crate::dsp::fidelity::FidelityModule;
 use crate::dsp::graphic_eq_stage::GraphicEqStage;
 use crate::dsp::limiter::MasterLimiter;
+use crate::dsp::night_mode::NightModeModule;
 use crate::dsp::parametric_stage::ParametricStage;
+use crate::dsp::spatial::SpatialWidenerModule;
 use crate::dsp::spatializer_3d::Spatializer3D;
 use crate::ring_buffer::SpscQueue;
 use crate::types::{AudioCommand, TelemetrySnapshot, SURROUND_7_1_CHANNELS};
@@ -21,6 +25,10 @@ pub struct AudioProcessor {
     pub spatializer: Spatializer3D,
     pub parametric_eq: ParametricStage,
     pub graphic_eq: GraphicEqStage,
+    pub ambience: AmbienceModule,
+    pub fidelity: FidelityModule,
+    pub night_mode: NightModeModule,
+    pub spatial: SpatialWidenerModule,
     limiter: MasterLimiter,
     peak_l: f32,
     peak_r: f32,
@@ -45,6 +53,10 @@ impl AudioProcessor {
             spatializer: Spatializer3D::new(),
             parametric_eq: ParametricStage::new(),
             graphic_eq: GraphicEqStage::new(),
+            ambience: AmbienceModule::new(),
+            fidelity: FidelityModule::new(),
+            night_mode: NightModeModule::new(),
+            spatial: SpatialWidenerModule::new(),
             limiter: MasterLimiter::new(),
             peak_l: 0.0,
             peak_r: 0.0,
@@ -101,8 +113,12 @@ impl AudioProcessor {
 
     /// Sets the operational sample rate and updates all internal DSP stages.
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
-        self.parametric_eq.set_sample_rate(sample_rate as f32);
-        self.graphic_eq.set_sample_rate(sample_rate as f32);
+        let sr = sample_rate as f32;
+        self.parametric_eq.set_sample_rate(sr);
+        self.graphic_eq.set_sample_rate(sr);
+        self.fidelity.set_sample_rate(sr);
+        self.night_mode.set_sample_rate(sr);
+        self.spatial.set_sample_rate(sr);
     }
 
     /// Drains and processes all pending commands from an SPSC lock-free queue.
@@ -151,6 +167,10 @@ impl AudioProcessor {
                 self.spatializer.reset();
                 self.parametric_eq.reset();
                 self.graphic_eq.reset();
+                self.ambience.reset();
+                self.fidelity.reset();
+                self.night_mode.reset();
+                self.spatial.reset();
             }
             AudioCommand::SetSurround3D { enabled, intensity } => {
                 self.spatializer.enabled = enabled;
@@ -195,9 +215,29 @@ impl AudioProcessor {
             AudioCommand::SetAutoEqBypass { bypassed } => {
                 self.parametric_eq.set_bypass(bypassed);
             }
-            AudioCommand::SetSweetener { .. } => {
-                // Prepared for Story 4.1
-            }
+            AudioCommand::SetSweetener {
+                module_id,
+                enabled,
+                amount,
+            } => match module_id {
+                crate::types::SWEETENER_AMBIENCE => {
+                    self.ambience.enabled = enabled;
+                    self.ambience.set_amount(amount);
+                }
+                crate::types::SWEETENER_FIDELITY => {
+                    self.fidelity.enabled = enabled;
+                    self.fidelity.set_amount(amount);
+                }
+                crate::types::SWEETENER_NIGHT_MODE => {
+                    self.night_mode.enabled = enabled;
+                    self.night_mode.set_amount(amount);
+                }
+                crate::types::SWEETENER_SPATIAL => {
+                    self.spatial.enabled = enabled;
+                    self.spatial.set_amount(amount);
+                }
+                _ => {}
+            },
         }
     }
 
@@ -263,8 +303,14 @@ impl AudioProcessor {
             // Stage 3B: 31-Band ISO Graphic Equalizer Bank
             let (eq_l, eq_r) = self.graphic_eq.process_stereo(autoeq_l, autoeq_r);
 
-            let proc_l = eq_l * gain;
-            let proc_r = eq_r * gain;
+            // Stage 4: Real-Time Sweeteners Rack & Dynamics Control (Epic 4)
+            let (amb_l, amb_r) = self.ambience.process_stereo(eq_l, eq_r);
+            let (fid_l, fid_r) = self.fidelity.process_stereo(amb_l, amb_r);
+            let (nm_l, nm_r) = self.night_mode.process_stereo(fid_l, fid_r);
+            let (sw_l, sw_r) = self.spatial.process_stereo(nm_l, nm_r);
+
+            let proc_l = sw_l * gain;
+            let proc_r = sw_r * gain;
 
             let alpha = self.crossfade_pos;
             let (mix_l, mix_r) = if alpha <= 0.0 {
@@ -312,7 +358,11 @@ impl AudioProcessor {
             };
             let autoeq_val = self.parametric_eq.process_mono_left(spat_val);
             let eq_val = self.graphic_eq.process_mono_left(autoeq_val);
-            let proc_val = eq_val * gain;
+            let (amb_val, _) = self.ambience.process_stereo(eq_val, eq_val);
+            let (fid_val, _) = self.fidelity.process_stereo(amb_val, amb_val);
+            let (nm_val, _) = self.night_mode.process_stereo(fid_val, fid_val);
+            let (sw_val, _) = self.spatial.process_stereo(nm_val, nm_val);
+            let proc_val = sw_val * gain;
             let alpha = self.crossfade_pos;
             let mix_val = if alpha <= 0.0 {
                 proc_val
@@ -348,9 +398,13 @@ impl AudioProcessor {
         let (spat_l, spat_r) = self.spatializer.process_frame(channels);
         let (autoeq_l, autoeq_r) = self.parametric_eq.process_stereo(spat_l, spat_r);
         let (eq_l, eq_r) = self.graphic_eq.process_stereo(autoeq_l, autoeq_r);
+        let (amb_l, amb_r) = self.ambience.process_stereo(eq_l, eq_r);
+        let (fid_l, fid_r) = self.fidelity.process_stereo(amb_l, amb_r);
+        let (nm_l, nm_r) = self.night_mode.process_stereo(fid_l, fid_r);
+        let (sw_l, sw_r) = self.spatial.process_stereo(nm_l, nm_r);
         let gain = self.master_volume * self.master_boost;
-        let proc_l = eq_l * gain;
-        let proc_r = eq_r * gain;
+        let proc_l = sw_l * gain;
+        let proc_r = sw_r * gain;
         self.limiter.process_stereo(proc_l, proc_r)
     }
 
