@@ -254,3 +254,19 @@
      - Confirmada a cobertura programada nos Epicos 3 e 4.
      - Aberta a tarefa de melhoria `T2.7` no backlog para calibração de ganhos da matriz de upmix estéreo (reforço de canais laterais/surround no sinal $L-R$) e ajuste da curva de interpolação wet/dry do `SoundstageDial` para maximizar a presença perceptível mesmo em modo KEMAR puro.
 * **Consequência:** Alinhamento técnico completo entre arquitetura e percepção do usuário, mantendo a integridade da progressão dos épicos e registrando a oportunidade de tuning para a experiência do usuário.
+
+---
+
+## ADR-022: Motor de Equalização Gráfica de 31 Bandas ISO, Topologia Direct Form II Transposed e Suavização Sub-Buffer
+
+* **Data:** 11/10/2026
+* **Status:** Aceito
+* **Contexto:** Para o Epic 3 (Equalização de Estúdio e Calibração Headphone AutoEq), o pipeline de DSP exigia um motor equalizador gráfico de 31 bandas ISO 1/3-oitava (20 Hz a 20 kHz) de alta precisão, sem estalos (zipper noise) durante ajustes dinâmicos rápidos de sliders, sem perigo de explosão numérica por migração de pólos para fora do círculo unitário, com baixíssima distorção (THD+N < 0.005%) e com zero alocações de heap na thread de áudio em tempo real (Story 3.1).
+* **Decisões:**
+  1. **Fórmulas de Peaking EQ (Cookbook Robert Bristow-Johnson):** Implementada a geração paramétrica de coeficientes biquad de 2ª ordem para peaking EQ com Q constante = 4.31 (largura de banda padrão 1/3-oitava), $A = 10^{\text{gain\_db} / 40}$ e normalização canônica com $a_0 = 1.0$.
+  2. **Topologia Direct Form II Transposed:** Escolhida a forma transposta com duas variáveis de estado de atraso ($s_1, s_2$) por banda por canal. Esta topologia minimiza ruído de quantização em precisão simples (IEEE 754 float32) e garante resposta direta $y[n] = b_0 x[n] + s_1[n-1]$.
+  3. **Verificação Estrita de Estabilidade de Pólos (Critério de Schur-Cohn / Jury):** Provado matematicamente e verificado em código que $|a_2| < 1.0$ e $|a_1| < 1.0 + a_2$ para todos os ganhos entre -12.0 dB e +12.0 dB. Implementado cálculo de módulo máximo de pólos $\max(|z_i|) < 1.0$.
+  4. **Suavização Sub-Buffer em Blocos de 32 Amostras (~0.67ms a 48 kHz):** Para evitar recomputar coeficientes trigonometricamente a cada amostra (custo desnecessário de CPU), o estágio mantém `current_coeffs` e `target_coeffs`. A cada fronteira de 32 amostras, os coeficientes são interpolados linearmente (`lerp`), eliminando qualquer ruído audível de zipper noise ou transientes bruscos durante arraste contínuo de sliders.
+  5. **Sanitização Imediata e Clamping Defensivo:** Entradas de ganho são limitadas rigorosamente a $[-12.0\text{ dB}, +12.0\text{ dB}]$ (com resolução de 0.1 dB), com $\pm\infty$ truncado aos limites e valores $NaN$ revertidos confiavelmente para $0.0\text{ dB}$ (resposta plana).
+  6. **Integração no Estágio 3 de `AudioProcessor`:** `GraphicEqStage` foi posicionado no pipeline de processamento estéreo e surround 7.1 entre o Estágio 2 (`Spatializer3D`) e o Estágio 4 (`MasterLimiter`), integrando despacho lock-free via comandos POD SPSC `LoadGraphicEqSnapshot`, `SetEqBandGain`, `SetEqGains` e `SetEqBypass`.
+* **Consequência:** Resposta em amplitude milimetricamente fiel a $\pm 12.0\text{ dB}$ na frequência central de 1 kHz com decaimento suave nas bandas adjacentes, passagem 100% transparente com THD+N < 0.005% quando todas as bandas estão em 0.0 dB, estabilidade matemática absoluta, zero alocações na thread de áudio e 105 testes passando no workspace Cargo.

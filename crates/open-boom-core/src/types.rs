@@ -34,6 +34,31 @@ pub const ISO_31_BAND_FREQUENCIES: [f32; GRAPHIC_EQ_BANDS] = [
     8000.0, 10000.0, 12500.0, 16000.0, 20000.0,
 ];
 
+/// Standard constant Q factor for ISO 1/3-octave equalizer filters.
+pub const EQ_Q: f32 = 4.31;
+
+/// Minimum allowable graphic EQ band gain in decibels (-12.0 dB).
+pub const MIN_EQ_GAIN_DB: f32 = -12.0;
+
+/// Maximum allowable graphic EQ band gain in decibels (+12.0 dB).
+pub const MAX_EQ_GAIN_DB: f32 = 12.0;
+
+/// Number of casual octave bands for 10-band graphic equalizer mode.
+pub const CASUAL_EQ_10_BANDS: usize = 10;
+
+/// ISO standard center frequencies for 10-band graphic equalizer (Hz).
+pub const ISO_10_BAND_FREQUENCIES: [f32; CASUAL_EQ_10_BANDS] = [
+    31.5, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0,
+];
+
+/// Mapping of 10-band octave sliders to their corresponding 31-band ISO indices.
+pub const ISO_10_TO_31_BAND_INDICES: [usize; CASUAL_EQ_10_BANDS] = [
+    2, 5, 8, 11, 14, 17, 20, 23, 26, 29,
+];
+
+/// Sub-buffer parameter smoothing block size in samples (32 samples = ~0.67ms at 48 kHz).
+pub const EQ_SUB_BUFFER_SIZE: usize = 32;
+
 /// Standard ITU-R BS.775 7.1 channel indices:
 pub const CH_FRONT_LEFT: usize = 0;
 pub const CH_FRONT_RIGHT: usize = 1;
@@ -84,6 +109,19 @@ pub enum AudioCommand {
     LoadGraphicEqSnapshot {
         gains_db: [f32; GRAPHIC_EQ_BANDS],
         preamp_offset_db: f32,
+    },
+    /// Adjust gain for an individual graphic EQ band (0..30) in dB (-12.0 to +12.0 dB).
+    SetEqBandGain {
+        band_idx: usize,
+        gain_db: f32,
+    },
+    /// Set all 31 graphic EQ band gains atomically.
+    SetEqGains {
+        gains_db: [f32; GRAPHIC_EQ_BANDS],
+    },
+    /// Enable or disable bypass for the graphic EQ stage.
+    SetEqBypass {
+        bypassed: bool,
     },
     /// Configure one of the audio sweetener modules.
     SetSweetener {

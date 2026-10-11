@@ -635,6 +635,37 @@ mod tests {
         // 6. SetBypass
         let cmd6: AudioCommand = serde_json::from_str(r#"{"SetBypass": true}"#).unwrap();
         assert_eq!(cmd6, AudioCommand::SetBypass(true));
+
+        // 7. SetEqBandGain
+        let cmd7: AudioCommand = serde_json::from_str(
+            r#"{"SetEqBandGain": {"band_idx": 17, "gain_db": 6.0}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cmd7,
+            AudioCommand::SetEqBandGain {
+                band_idx: 17,
+                gain_db: 6.0
+            }
+        );
+
+        // 8. SetEqBypass
+        let cmd8: AudioCommand = serde_json::from_str(r#"{"SetEqBypass": {"bypassed": true}}"#).unwrap();
+        assert_eq!(cmd8, AudioCommand::SetEqBypass { bypassed: true });
+
+        // 9. LoadGraphicEqSnapshot
+        let snapshot_json = format!(
+            r#"{{"LoadGraphicEqSnapshot": {{"gains_db": {:?}, "preamp_offset_db": -3.0}}}}"#,
+            [0.0f32; 31]
+        );
+        let cmd9: AudioCommand = serde_json::from_str(&snapshot_json).unwrap();
+        assert_eq!(
+            cmd9,
+            AudioCommand::LoadGraphicEqSnapshot {
+                gains_db: [0.0; 31],
+                preamp_offset_db: -3.0
+            }
+        );
     }
 
     #[test]

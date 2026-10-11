@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 09:25
-* **Sprint Ativa:** Epic 2 Concluído + Roteamento de Áudio Inteligente (ADR-020)
-* **Tarefa Atual:** Roteamento Inteligente via COM IPolicyConfig CONCLUÍDO! Todos os 96 testes do workspace passando, zero warnings, TypeScript/Vite compilando com sucesso!
+* **Data/Hora:** 11/10/2026 - 09:55
+* **Sprint Ativa:** Epic 3: Studio Equalization & AutoEq Headphone Calibration
+* **Tarefa Atual:** Story 3.1 (`31-Band Biquad Filter Engine & Direct Form II Transposed Topology`) CONCLUÍDA! Todos os 105 testes do workspace passando, zero warnings, release Tauri compilando com sucesso!
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -139,9 +139,19 @@
     - Aberta a tarefa `T2.7` no backlog para calibração de ganhos do upmix estéreo e transição wet/dry.
     - Registro de ADR-021 em `.bmad/04-DECISION-LOG.md`.
 
+21. **Implementação e Verificação Completa da Story 3.1 (`3-1-31-band-biquad-filter-engine-direct-form-ii-transposed-topol`):**
+    - `crates/open-boom-core/src/dsp/biquad.rs`: Fórmulas do Robert Bristow-Johnson (RBJ) Audio EQ Cookbook para peaking EQ com Q constante = 4.31, normalização $a_0 = 1.0$, verificação de estabilidade pelo critério de Schur-Cohn/Jury ($|a_2| < 1.0$, $|a_1| < 1.0 + a_2$), cálculo de módulo máximo de pólos $\max(|z_i|) < 1.0$, interpolação linear de coeficientes (`lerp`) e processamento Direct Form II Transposed com flushing anti-denormal.
+    - `crates/open-boom-core/src/dsp/graphic_eq_stage.rs`: Cascata estéreo de 31 bandas ISO 1/3-oitava (20 Hz a 20.000 Hz), suavização sub-buffer em blocos de 32 amostras (~0.67ms a 48 kHz) eliminando zipper noise e cliques, clamping defensivo em $[-12.0\text{ dB}, +12.0\text{ dB}]$ com fallback para 0.0 dB em NaN, controle de preamp gain e alternância bypass/enable.
+    - `crates/open-boom-core/src/types.rs`: Extensão dos comandos POD SPSC com `SetEqBandGain { band_idx, gain_db }`, `SetEqGains { gains_db }` e `SetEqBypass { bypassed }`, além de constantes `EQ_Q = 4.31`, `MIN_EQ_GAIN_DB = -12.0`, `MAX_EQ_GAIN_DB = 12.0`, `EQ_SUB_BUFFER_SIZE = 32`.
+    - `crates/open-boom-core/src/dsp/pipeline.rs`: Integração do `GraphicEqStage` como Estágio 3 no pipeline de `AudioProcessor` entre o 3D Spatializer (Estágio 2) e o Master Limiter (Estágio 4) para fluxos estéreo e surround 7.1.
+    - `crates/open-boom-core/tests/eq_tests.rs`: Suíte com 9 testes unitários e de integração cobrindo estabilidade de pólos nas 31 bandas e 3 taxas de amostragem, passe unitário plano com THD+N < 0.005%, reforço (+12 dB) e corte (-12 dB) em 1 kHz com envelope de Q=4.31, arraste rápido de slider em 100 frames sem estalos, sanitização de NaN/infinito, flush de delay lines (`ResetFilters`), despacho de comandos SPSC e estabilidade de pólos durante lerp contínuo.
+    - 105 testes passando no workspace Cargo e build completo de release Tauri (`.msi` e `.exe`) gerado em 2m 40s.
+    - Registro de ADR-022 em `.bmad/04-DECISION-LOG.md`.
+    - Atualização formal de `sprint-status.yaml`, `03-TASK-BACKLOG.md` e spec de Story 3.1 (`status: done`).
+
 ## O que está em andamento agora
-* **Roteamento Inteligente e DSP em Tempo Real Operantes:** O áudio do Windows flui pelo pipeline do OpenBoom e toca no headset físico (`HyperX Cloud II Wireless`) com efeito audível.
-* **Planejamento & Próximo Passo Imediato:** Início do desenvolvimento do **Epic 3: Studio Equalization & AutoEq Headphone Calibration** (iniciando com Story 3.1: 31-Band Biquad Filter Engine & Direct Form II Transposed Topology).
+* **Story 3.1 Concluída:** O motor de equalização gráfica de 31 bandas está operante e integrado ao pipeline de áudio.
+* **Próximo Passo Imediato:** Início do desenvolvimento da **Story 3.2: Dual-Mode Equalizer Studio Drawer (10-Band vs 31-Band) & Spline Curve Visualizer** na interface React/TypeScript.
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio ativo.

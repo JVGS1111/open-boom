@@ -32,7 +32,7 @@
 - [ ] **T2.7**: Calibração da Matriz de Upmix Estéreo & Curva Perceptual do Dial 3D (Refinamento do ganho de ambiência lateral L-R e transição wet/dry para realce imediato de presença antes do Epic 4 - ADR-021).
 
 ### Sprint 3: Motor DSP & Efeitos de Som (Marco 3)
-- [ ] **T3.1**: Motor do Equalizador Multibanda (10 e 31 bandas).
+- [X] **T3.1**: Motor do Equalizador Multibanda (31 bandas ISO 1/3-oitava, RBJ peaking biquads, Q=4.31, Direct Form II Transposed, suavização sub-buffer 32 amostras, estabilidade estrita de pólos, comandos POD SPSC - Story 3.1).
 - [X] **T3.2**: Algoritmo de espacialização 3D com HRTF (Convolução KEMAR 64 taps por canal, interpolação angular dinâmica, ganho e mute por canal - Stories 2.1, 2.3, 2.4).
 - [ ] **T3.3**: Módulo de efeitos: Reverb, Exciter de harmônicos, Compressor DRC e Stereo Widener.
 - [X] **T3.4**: Master Limiter anti-clipping (Lookahead 2ms -0.2 dBFS, brickwall ceiling clamp, 0% digital clipping, medidor de headroom dinâmico e telemetria pulsante - Story 1.5).

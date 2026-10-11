@@ -3,6 +3,7 @@
 //! Enforces zero heap allocations, zero locks, and bit-perfect zero-latency
 //! passthrough when master power is switched OFF.
 
+use crate::dsp::graphic_eq_stage::GraphicEqStage;
 use crate::dsp::limiter::MasterLimiter;
 use crate::dsp::spatializer_3d::Spatializer3D;
 use crate::ring_buffer::SpscQueue;
@@ -17,6 +18,7 @@ pub struct AudioProcessor {
     is_bypassed: bool,
     crossfade_pos: f32,
     pub spatializer: Spatializer3D,
+    pub graphic_eq: GraphicEqStage,
     limiter: MasterLimiter,
     peak_l: f32,
     peak_r: f32,
@@ -39,6 +41,7 @@ impl AudioProcessor {
             is_bypassed: false,
             crossfade_pos: 0.0,
             spatializer: Spatializer3D::new(),
+            graphic_eq: GraphicEqStage::new(),
             limiter: MasterLimiter::new(),
             peak_l: 0.0,
             peak_r: 0.0,
@@ -93,6 +96,11 @@ impl AudioProcessor {
         self.crossfade_pos
     }
 
+    /// Sets the operational sample rate and updates all internal DSP stages.
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        self.graphic_eq.set_sample_rate(sample_rate as f32);
+    }
+
     /// Drains and processes all pending commands from an SPSC lock-free queue.
     ///
     /// Must be invoked by the real-time audio thread before processing each buffer.
@@ -137,6 +145,7 @@ impl AudioProcessor {
             AudioCommand::ResetFilters => {
                 self.limiter.reset();
                 self.spatializer.reset();
+                self.graphic_eq.reset();
             }
             AudioCommand::SetSurround3D { enabled, intensity } => {
                 self.spatializer.enabled = enabled;
@@ -154,8 +163,20 @@ impl AudioProcessor {
             AudioCommand::ResetSpeakerPositions => {
                 self.spatializer.reset_speaker_positions();
             }
-            AudioCommand::LoadGraphicEqSnapshot { .. } => {
-                // Prepared for Story 3.1
+            AudioCommand::LoadGraphicEqSnapshot {
+                gains_db,
+                preamp_offset_db,
+            } => {
+                self.graphic_eq.load_snapshot(gains_db, preamp_offset_db);
+            }
+            AudioCommand::SetEqBandGain { band_idx, gain_db } => {
+                self.graphic_eq.set_band_gain(band_idx, gain_db);
+            }
+            AudioCommand::SetEqGains { gains_db } => {
+                self.graphic_eq.set_gains(&gains_db);
+            }
+            AudioCommand::SetEqBypass { bypassed } => {
+                self.graphic_eq.set_bypass(bypassed);
             }
             AudioCommand::SetSweetener { .. } => {
                 // Prepared for Story 4.1
@@ -219,8 +240,11 @@ impl AudioProcessor {
                 (dry_l, dry_r)
             };
 
-            let proc_l = spat_l * gain;
-            let proc_r = spat_r * gain;
+            // Stage 3: 31-Band ISO Graphic Equalizer Bank
+            let (eq_l, eq_r) = self.graphic_eq.process_stereo(spat_l, spat_r);
+
+            let proc_l = eq_l * gain;
+            let proc_r = eq_r * gain;
 
             let alpha = self.crossfade_pos;
             let (mix_l, mix_r) = if alpha <= 0.0 {
@@ -266,7 +290,8 @@ impl AudioProcessor {
             } else {
                 dry_val
             };
-            let proc_val = spat_val * gain;
+            let eq_val = self.graphic_eq.process_mono_left(spat_val);
+            let proc_val = eq_val * gain;
             let alpha = self.crossfade_pos;
             let mix_val = if alpha <= 0.0 {
                 proc_val
@@ -300,9 +325,10 @@ impl AudioProcessor {
             return (0.0, 0.0);
         }
         let (spat_l, spat_r) = self.spatializer.process_frame(channels);
+        let (eq_l, eq_r) = self.graphic_eq.process_stereo(spat_l, spat_r);
         let gain = self.master_volume * self.master_boost;
-        let proc_l = spat_l * gain;
-        let proc_r = spat_r * gain;
+        let proc_l = eq_l * gain;
+        let proc_r = eq_r * gain;
         self.limiter.process_stereo(proc_l, proc_r)
     }
 
@@ -348,5 +374,29 @@ impl AudioProcessor {
             surround_intensity: self.spatializer.target_intensity,
             surround_enabled: self.spatializer.enabled,
         }
+    }
+
+    /// Adjust gain for an individual graphic EQ band (0..30) in dB (-12.0 to +12.0 dB).
+    #[inline]
+    pub fn set_eq_band_gain(&mut self, band_idx: usize, gain_db: f32) {
+        self.graphic_eq.set_band_gain(band_idx, gain_db);
+    }
+
+    /// Set whether the graphic EQ stage is bypassed.
+    #[inline]
+    pub fn set_eq_bypass(&mut self, bypassed: bool) {
+        self.graphic_eq.set_bypass(bypassed);
+    }
+
+    /// Returns whether the graphic EQ stage is bypassed.
+    #[inline]
+    pub fn is_eq_bypassed(&self) -> bool {
+        self.graphic_eq.is_bypassed()
+    }
+
+    /// Load 31-band graphic EQ snapshot and preamp offset.
+    #[inline]
+    pub fn load_graphic_eq_snapshot(&mut self, gains_db: [f32; crate::types::GRAPHIC_EQ_BANDS], preamp_offset_db: f32) {
+        self.graphic_eq.load_snapshot(gains_db, preamp_offset_db);
     }
 }
