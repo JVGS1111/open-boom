@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { Settings, X, HardDrive, CheckCircle2, ShieldCheck, Monitor, AlertTriangle } from "lucide-react";
+import { Settings, X, HardDrive, CheckCircle2, ShieldCheck, Monitor, AlertTriangle, Globe } from "lucide-react";
+import { useI18n, LANGUAGE_OPTIONS } from "../i18n";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleBufferGuard,
   storagePath = "%APPDATA%\\OpenBoom\\config.json",
 }) => {
+  const { t, language, setLanguage } = useI18n();
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -54,7 +56,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       <div
         ref={modalRef}
-        className="w-[480px] bg-surface-card border border-border-default rounded-xl shadow-2xl p-5 relative overflow-hidden flex flex-col gap-4"
+        className="w-[490px] max-h-[90vh] bg-surface-card border border-border-default rounded-xl shadow-2xl p-5 relative overflow-y-auto flex flex-col gap-3.5"
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
@@ -67,10 +69,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 id="settings-modal-title"
                 className="font-display font-bold text-sm tracking-wide text-text-primary"
               >
-                Preferences & System
+                {t.settings.modalTitle}
               </h2>
               <p className="text-[11px] text-text-secondary">
-                Configuration persistence and Windows lifecycle
+                {t.settings.modalSubtitle}
               </p>
             </div>
           </div>
@@ -79,21 +81,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             onClick={onClose}
             className="w-7 h-7 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors cursor-pointer"
-            aria-label="Close Settings"
-            title="Close (Escape)"
+            aria-label={t.common.close}
+            title={`${t.common.close} (Escape)`}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Section 1: Windows Startup (FR29) */}
+        {/* Section 1: Language & Interface */}
+        <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-0.5 pr-3">
+              <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-accent-cyan" />
+                {t.settings.languageTitle}
+              </span>
+              <span className="text-[11px] text-text-muted leading-tight">
+                {t.settings.languageSubtitle}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5 pt-1">
+            {LANGUAGE_OPTIONS.map((opt) => {
+              const isSelected = language === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setLanguage(opt.id)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
+                    isSelected
+                      ? "bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/50 shadow-cyan-glow-sm"
+                      : "bg-surface-elevated hover:bg-surface-card border border-border-subtle text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  <span className="text-[10px] font-mono font-bold">{opt.badge}</span>
+                  <span className="text-[11px] truncate max-w-full">{opt.nativeName}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Section 2: Windows Startup (FR29) */}
         <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex items-center justify-between">
           <div className="flex flex-col gap-0.5 pr-3">
             <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
-              Launch on Windows Startup
+              {t.settings.startupTitle}
             </span>
             <span className="text-[11px] text-text-muted leading-tight">
-              Start OpenBoom automatically in background via user registry (<code className="text-accent-cyan/90 font-mono text-[10px]">HKCU\...\Run</code>) without UAC prompts.
+              {t.settings.startupDesc}
             </span>
           </div>
 
@@ -102,7 +140,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             role="switch"
             aria-checked={launchOnStartup}
-            aria-label="Launch on Windows Startup"
+            aria-label={t.settings.startupTitle}
             onClick={onToggleStartup}
             className={`w-11 h-6 shrink-0 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer relative ${
               launchOnStartup
@@ -118,16 +156,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Section 2: Audio Buffer Stability & Acoustic Guard */}
+        {/* Section 3: Audio Buffer Stability & Acoustic Guard */}
         <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-0.5 pr-3">
               <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent-cyan" />
-                Audio Buffer Stability Guard
+                {t.settings.bufferGuardTitle}
               </span>
               <span className="text-[11px] text-text-muted leading-tight">
-                Buffer estendido de segurança WASAPI (25ms) e retenção dinâmica de pico (5ms hold) no limitador master, eliminando estalos e cortes em sub-graves pesados.
+                {t.settings.bufferGuardDesc}
               </span>
             </div>
 
@@ -136,7 +174,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="button"
               role="switch"
               aria-checked={bufferGuardEnabled}
-              aria-label="Audio Buffer Stability Guard"
+              aria-label={t.settings.bufferGuardTitle}
               onClick={onToggleBufferGuard}
               className={`w-11 h-6 shrink-0 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer relative ${
                 bufferGuardEnabled
@@ -158,25 +196,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-status-offline animate-pulse" />
               <div className="text-[11px] leading-tight">
                 <span className="font-semibold block text-red-400 mb-0.5">
-                  Aviso de Risco Acústico & Fadiga Mecânica
+                  {t.settings.bufferGuardWarningTitle}
                 </span>
-                Proteção desativada (Modo de baixa latência agressivo 10ms). Músicas com sub-graves densos e transientes pesados (Rock, Synthwave, Kick 808) podem sofrer micro-cortes do Windows e estalos secos ("tiros") por falta de folga de buffer.
+                {t.settings.bufferGuardWarningDesc}
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-[10px] text-accent-cyan font-mono bg-accent-cyan/10 border border-accent-cyan/20 px-2 py-1 rounded">
               <CheckCircle2 className="w-3 h-3 text-status-online" />
-              <span>Proteção Ativa: Zero Estalos & Transientes Suaves</span>
+              <span>{t.settings.bufferGuardActive}</span>
             </div>
           )}
         </div>
 
-        {/* Section 3: Storage Architecture & Atomic Invariants (AD-10) */}
+        {/* Section 4: Storage Architecture & Atomic Invariants (AD-10) */}
         <div className="flex flex-col gap-2 bg-surface-base/50 border border-border-subtle rounded-lg p-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
               <HardDrive className="w-3.5 h-3.5 text-accent-cyan" />
-              <span>Atomic Persistence Contract</span>
+              <span>{t.settings.atomicTitle}</span>
             </div>
             <span className="flex items-center gap-1 text-[10px] font-mono text-status-online bg-status-online/10 px-1.5 py-0.5 rounded border border-status-online/20">
               <CheckCircle2 className="w-3 h-3" />
@@ -189,25 +227,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           <p className="text-[10px] text-text-muted leading-relaxed">
-            Settings are staged to <code className="text-text-secondary font-mono">config.&lt;pid&gt;.tmp</code> and atomically swapped using NTFS <code className="text-text-secondary font-mono">MoveFileExW</code> replacement, preventing corrupt state on sudden shutdowns.
+            {t.settings.atomicDesc}
           </p>
         </div>
 
-        {/* Section 3: HUD Geometry & Audio Thread Guarantees */}
+        {/* Section 5: HUD Geometry & Audio Thread Guarantees */}
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div className="bg-surface-base/40 border border-border-subtle rounded p-2 flex items-center gap-2">
             <Monitor className="w-4 h-4 text-accent-cyan shrink-0" />
             <div>
-              <div className="font-semibold text-text-primary text-[10px]">Window Geometry</div>
-              <div className="text-[10px] text-text-muted">Auto-restored screen position</div>
+              <div className="font-semibold text-text-primary text-[10px]">{t.settings.windowGeometry}</div>
+              <div className="text-[10px] text-text-muted">{t.settings.windowGeometryDesc}</div>
             </div>
           </div>
 
           <div className="bg-surface-base/40 border border-border-subtle rounded p-2 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-accent-cyan shrink-0" />
             <div>
-              <div className="font-semibold text-text-primary text-[10px]">Real-Time Safety</div>
-              <div className="text-[10px] text-text-muted">Zero disk I/O on audio loop</div>
+              <div className="font-semibold text-text-primary text-[10px]">{t.settings.realTimeSafety}</div>
+              <div className="text-[10px] text-text-muted">{t.settings.realTimeSafetyDesc}</div>
             </div>
           </div>
         </div>
@@ -219,7 +257,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-surface-elevated hover:bg-surface-card-hover border border-border-default text-xs font-medium text-text-primary transition-colors cursor-pointer"
           >
-            Done
+            {t.common.done}
           </button>
         </div>
       </div>

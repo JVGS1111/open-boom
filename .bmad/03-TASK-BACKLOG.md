@@ -49,3 +49,10 @@
 - [X] **T5.2**: Per-Application Mixer Drawer UI & Faders Individuais por Processo (Gaveta lateral de mixer no HUD, linhas `app-mixer-row` de 44px com ícone de processo, indicador pulsante de áudio, fader 0%-150% e mute, despacho via Tauri IPC - Story 5.2).
 - [X] **T5.3**: Persistência Atômica de Volumes por Aplicação & Recuperação Automática de Sessões (Armazenamento em `%APPDATA%\OpenBoom\app_volumes.json` via staging atômico `.tmp`, restauração automática na inicialização e recuperação quando novos processos iniciam reprodução - Story 5.3).
 - [X] **T5.4**: Audio Buffer Stability Guard & Peak-Hold Anti-Glitch Limiter (Buffer WASAPI estendido de 25ms contra jitter do Windows, 5ms peak-hold contra intermodulação em sub-graves, switch nas preferências com banner de risco acústico em vermelho e persistência atômica - ADR-031).
+- [X] **T5.5**: Suporte a Internacionalização (i18n: pt-BR, en, es), Menu de Idiomas e Detecção Automática do Sistema Operacional (Dicionários completos sem dependências externas, seletor na barra de título, modal de configurações e menu de bandeja nativo do Windows, persistência atômica no AppConfig e lançamento v0.2.0 - ADR-033).
+
+### Sprint 6: 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica)
+- [ ] **T6.1**: Motor DSP de Modulação Azimutal Orbital & Rotação Contínua 7.1 em Sub-Blocos (Extensão de `Spatializer3D` com cálculo dinâmico $\theta_k(t)$ a cada 32 frames, interpolação suave KEMAR e zero alocações na heap - CAP-1, ADR-032).
+- [ ] **T6.2**: Controle de Orientação e Velocidade Angular (Suporte a Sentido Horário, Anti-Horário e Pêndulo; período de 2s a 30s; comando `AudioCommand::SetOrbit8D` lock-free - CAP-2, CAP-3).
+- [ ] **T6.3**: Integração de UI / HUD do Modo 8D (Toggle 8D, seletores de direção e velocidade, visualização do cometa/beacon orbital $\ge 30\text{ fps}$ e persistência no `AppConfig` - CAP-4, CAP-5).
+

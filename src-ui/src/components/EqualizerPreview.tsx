@@ -26,7 +26,7 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
   const presetLabel = formatPresetDisplayLabel(activePreset, isPresetDirty);
 
   return (
-    <div className="bg-surface-card border border-border-subtle rounded-lg p-3.5 flex flex-col justify-between h-full relative">
+    <div className="bg-surface-card border border-border-subtle rounded-lg p-3.5 flex flex-col justify-between h-full relative shadow-sm">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="w-4 h-4 text-accent-blue" />
@@ -71,7 +71,7 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
       {/* Visual EQ Curve Faders Preview (Clickable trigger to expand drawer) */}
       <div
         onClick={onExpand}
-        className="flex-1 min-h-[72px] bg-surface-base/80 hover:bg-surface-base rounded border border-border-subtle hover:border-accent-blue/40 p-2 flex items-end justify-between gap-0.5 relative overflow-hidden cursor-pointer transition-colors group"
+        className="flex-1 min-h-[80px] bg-surface-base/80 hover:bg-surface-base rounded border border-border-subtle hover:border-accent-blue/40 p-2.5 flex items-end justify-between gap-0.5 relative overflow-hidden cursor-pointer transition-colors group"
         title="Click to expand Equalizer Studio Drawer"
       >
         {/* Center 0 dB Reference Grid Line */}
@@ -89,7 +89,7 @@ export const EqualizerPreview: React.FC<EqualizerPreviewProps> = ({
             >
               <div
                 style={{ height: `${normalized}%` }}
-                className={`w-full max-w-[6px] rounded-t-sm transition-all duration-150 ${
+                className={`w-full max-w-[6px] rounded-t-sm ${
                   isBoost
                     ? "bg-accent-blue group-hover:bg-accent-cyan shadow-[0_0_4px_rgba(59,130,246,0.5)]"
                     : "bg-border-default group-hover:bg-text-secondary"

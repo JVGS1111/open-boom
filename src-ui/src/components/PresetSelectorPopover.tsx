@@ -9,6 +9,7 @@ import {
   Sparkles,
   Bookmark,
 } from "lucide-react";
+import { useI18n } from "../i18n";
 
 export interface EqPreset {
   id: string;
@@ -337,6 +338,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
   onRenameCustomPreset,
   onDeleteCustomPreset,
 }) => {
+  const { t } = useI18n();
   const [isCreating, setIsCreating] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -484,7 +486,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xs font-semibold tracking-wider text-text-primary uppercase">
-                  Equalizer Presets
+                  {t.presets.presetsTitle}
                 </h2>
                 <span className="text-[10px] font-mono text-accent-cyan bg-surface-base px-2 py-0.5 rounded border border-border-subtle">
                   {displayLabel}
@@ -514,13 +516,13 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
               title="Save current 31-band curve as a custom preset"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Save As Custom Preset</span>
+              <span>{t.presets.saveCurrentAs}</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close Preset Selector"
+              aria-label={t.common.close}
               className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-base transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -543,7 +545,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
                   setNewPresetName(e.target.value);
                   setErrorMsg(null);
                 }}
-                placeholder="Enter custom preset name (e.g. My Late Night EQ)..."
+                placeholder={t.presets.presetNamePlaceholder}
                 maxLength={48}
                 className="flex-1 bg-surface-card border border-border-default focus:border-accent-cyan rounded-md px-2.5 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none"
               />
@@ -551,7 +553,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
                 type="submit"
                 className="px-3 py-1 rounded-md text-xs font-semibold bg-accent-cyan text-background hover:bg-accent-cyan/90 cursor-pointer"
               >
-                Save
+                {t.common.save}
               </button>
               <button
                 type="button"
@@ -561,7 +563,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
                 }}
                 className="px-2.5 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary bg-surface-card border border-border-subtle cursor-pointer"
               >
-                Cancel
+                {t.common.cancel}
               </button>
             </div>
             {errorMsg && (
@@ -585,7 +587,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
             <div className="flex items-center justify-between px-1 mb-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted flex items-center gap-1.5">
                 <Bookmark className="w-3 h-3 text-accent-cyan" />
-                User Custom Presets ({customPresets.length})
+                {t.presets.customCategory} ({customPresets.length})
               </span>
               <span className="text-[9px] font-mono text-text-muted">
                 %APPDATA%\OpenBoom\presets\
@@ -627,7 +629,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
                           type="submit"
                           className="px-2.5 py-0.5 rounded text-[11px] font-semibold bg-accent-cyan text-background cursor-pointer"
                         >
-                          Rename
+                          {t.common.rename}
                         </button>
                         <button
                           type="button"
@@ -637,7 +639,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
                           }}
                           className="px-2 py-0.5 rounded text-[11px] text-text-muted hover:text-text-primary cursor-pointer"
                         >
-                          Cancel
+                          {t.common.cancel}
                         </button>
                       </form>
                     );
@@ -704,7 +706,7 @@ export const PresetSelectorPopover: React.FC<PresetSelectorPopoverProps> = ({
             <div className="flex items-center justify-between px-1 mb-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 text-accent-blue" />
-                Factory Genre Presets ({factoryPresets.length})
+                {t.presets.factoryCategory} ({factoryPresets.length})
               </span>
               <span className="text-[9px] font-mono text-text-muted">
                 31-Band ISO Calibrated

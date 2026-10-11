@@ -3,6 +3,8 @@ import { Sliders, Volume2, VolumeX, Minus, X, Settings, Layers } from "lucide-re
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MasterPowerSwitch } from "./MasterPowerSwitch";
 import { DeviceSelector, AudioDeviceInfo } from "./DeviceSelector";
+import { LanguageMenu } from "./LanguageMenu";
+import { useI18n } from "../i18n";
 
 interface TitlebarProps {
   masterPower: boolean;
@@ -33,6 +35,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   onToggleAppMixer,
   isAppMixerOpen,
 }) => {
+  const { t } = useI18n();
+
   const handleMinimize = async () => {
     try {
       const win = getCurrentWindow();
@@ -82,7 +86,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             OPENBOOM
           </span>
           <span className="text-[10px] font-mono px-1.5 py-0.5 bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/30 rounded font-medium">
-            PRO DSP
+            {t.titlebar.brandSubtitle}
           </span>
         </div>
       </div>
@@ -98,7 +102,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           <span className={`text-[11px] font-semibold tracking-wider uppercase transition-colors ${
             masterPower ? "text-accent-cyan" : "text-text-muted"
           }`}>
-            {masterPower ? "ON" : "OFF"}
+            {masterPower ? t.common.on : t.common.off}
           </span>
         </div>
 
@@ -121,8 +125,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             type="button"
             onClick={onToggleMute}
             className="text-text-secondary hover:text-text-primary transition-colors p-1 cursor-pointer"
-            title={isMuted ? "Unmute" : "Mute"}
-            aria-label={isMuted ? "Unmute audio" : "Mute audio"}
+            title={isMuted ? t.titlebar.unmute : t.titlebar.mute}
+            aria-label={isMuted ? t.titlebar.unmuteAudioAria : t.titlebar.muteAudioAria}
           >
             {isMuted ? (
               <VolumeX className="w-4 h-4 text-meter-red" />
@@ -138,8 +142,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             value={isMuted ? 0 : volume}
             onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
             onDoubleClick={() => onVolumeChange(1.0)} // Snap to 100% (0.0 dB)
-            title="Master Volume (0% - 150%). Double click to reset to 0 dB (100%)."
-            aria-label="Master Volume and Boost"
+            title={t.titlebar.masterVolumeTooltip}
+            aria-label={t.titlebar.masterVolume}
             aria-valuemin={0}
             aria-valuemax={1.5}
             aria-valuenow={isMuted ? 0 : volume}
@@ -148,7 +152,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           />
           <span
             onDoubleClick={() => onVolumeChange(1.0)}
-            title="Double-click to reset to 0.0 dB"
+            title={t.titlebar.resetVolumeTooltip}
             className="text-[11px] font-mono text-text-secondary w-14 text-right cursor-pointer select-none hover:text-text-primary transition-colors shrink-0"
           >
             {getDbString()}
@@ -167,19 +171,22 @@ export const Titlebar: React.FC<TitlebarProps> = ({
               ? "text-accent-cyan bg-accent-cyan/15 border border-accent-cyan/40 shadow-cyan-glow-sm"
               : "text-text-secondary hover:text-text-primary hover:bg-surface-card border border-transparent"
           }`}
-          title="App Volumes (Ctrl + Shift + M)"
-          aria-label="Application Stream Mixer"
+          title={t.titlebar.appVolumesTooltip}
+          aria-label={t.titlebar.appVolumesTooltip}
           aria-expanded={isAppMixerOpen}
         >
           <Layers className="w-4 h-4" />
         </button>
 
+        {/* Dedicated Language Menu Dropdown */}
+        <LanguageMenu />
+
         <button
           type="button"
           onClick={onOpenSettings}
           className="w-8 h-8 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-card transition-colors cursor-pointer mr-0.5"
-          title="Settings & Preferences"
-          aria-label="Settings"
+          title={t.titlebar.settingsTooltip}
+          aria-label={t.titlebar.settingsTooltip}
         >
           <Settings className="w-4 h-4" />
         </button>
@@ -187,7 +194,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           type="button"
           onClick={handleMinimize}
           className="w-8 h-8 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-card transition-colors cursor-pointer"
-          title="Minimize"
+          title={t.titlebar.minimizeTooltip}
         >
           <Minus className="w-4 h-4" />
         </button>
@@ -195,7 +202,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           type="button"
           onClick={handleClose}
           className="w-8 h-8 rounded flex items-center justify-center text-text-secondary hover:text-white hover:bg-meter-red/80 transition-colors cursor-pointer"
-          title="Minimize to Notification Tray"
+          title={t.titlebar.closeTooltip}
         >
           <X className="w-4 h-4" />
         </button>

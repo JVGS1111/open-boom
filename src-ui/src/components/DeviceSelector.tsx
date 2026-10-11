@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Headphones, Check, ChevronDown } from "lucide-react";
+import { useI18n } from "../i18n";
 
 export interface AudioDeviceInfo {
   id: string;
@@ -20,6 +21,7 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
   onSelectDevice,
   disabled = false,
 }) => {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,8 +108,8 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-label={`Select audio playback device. Current device: ${activeDevice.name}`}
-        title={`Active WASAPI Output: ${activeDevice.name}`}
+        aria-label={`${t.deviceSelector.switchDevice}: ${activeDevice.name}`}
+        title={`${t.deviceSelector.activeEndpoint}: ${activeDevice.name}`}
         className={`flex items-center gap-2 bg-surface-card border px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer select-none ${
           isOpen
             ? "border-accent-cyan ring-1 ring-accent-cyan/30 text-text-primary"
@@ -134,11 +136,11 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
         <ul
           ref={listRef}
           role="listbox"
-          aria-label="Audio Output Devices"
+          aria-label={t.deviceSelector.audioOutput}
           className="absolute left-0 mt-1.5 min-w-[220px] max-w-[280px] bg-surface-card border border-border-default rounded-lg shadow-2xl py-1.5 px-1 z-50 backdrop-blur-md focus:outline-none animate-in fade-in zoom-in-95 duration-100"
         >
           <li className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted border-b border-border-subtle mb-1">
-            Playback Endpoints ({devices.length})
+            {t.deviceSelector.audioOutput} ({devices.length})
           </li>
           {devices.map((device, index) => {
             const isSelected = device.id === activeDevice.id;
@@ -169,7 +171,7 @@ export const DeviceSelector: React.FC<DeviceSelectorProps> = ({
                 </div>
                 {device.is_default && (
                   <span className="text-[9px] font-mono px-1 py-0.2 bg-border-subtle text-text-muted rounded shrink-0">
-                    DEFAULT
+                    {t.deviceSelector.defaultEndpoint}
                   </span>
                 )}
               </li>

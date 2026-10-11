@@ -1,0 +1,160 @@
+export type SupportedLocale = "pt-BR" | "en" | "es";
+export type LanguageOption = "system" | SupportedLocale;
+
+export interface TranslationDictionary {
+  common: {
+    open: string;
+    close: string;
+    save: string;
+    cancel: string;
+    delete: string;
+    rename: string;
+    reset: string;
+    done: string;
+    on: string;
+    off: string;
+    systemDefault: string;
+    soon: string;
+    active: string;
+    bypassed: string;
+  };
+  titlebar: {
+    brandSubtitle: string;
+    masterPower: string;
+    masterVolume: string;
+    masterVolumeTooltip: string;
+    resetVolumeTooltip: string;
+    mute: string;
+    unmute: string;
+    muteAudioAria: string;
+    unmuteAudioAria: string;
+    appVolumesTooltip: string;
+    settingsTooltip: string;
+    languageTooltip: string;
+    minimizeTooltip: string;
+    closeTooltip: string;
+  };
+  deviceSelector: {
+    audioOutput: string;
+    defaultEndpoint: string;
+    activeEndpoint: string;
+    switchDevice: string;
+  };
+  soundstage: {
+    title: string;
+    immersion: string;
+    calibrateSoundstage: string;
+    doubleClickReset: string;
+    calibrateModalTitle: string;
+    calibrateModalSubtitle: string;
+    calibrateDragHint: string;
+    listener: string;
+    front: string;
+    resetSpeakers: string;
+    gain: string;
+    channels: {
+      c: string;
+      l: string;
+      r: string;
+      lfe: string;
+      ls: string;
+      rs: string;
+      lsr: string;
+      rsr: string;
+    };
+  };
+  equalizer: {
+    dualStageTitle: string;
+    expandEq: string;
+    expandEqTooltip: string;
+    studioDrawerTitle: string;
+    studioDrawerSubtitle: string;
+    mode10: string;
+    mode31: string;
+    flatReset: string;
+    preampOffset: string;
+    autoEqChip: string;
+    selectHeadphone: string;
+    bandsCount: string;
+    bandTooltip: string;
+    clickToExpand: string;
+  };
+  presets: {
+    presetsTitle: string;
+    factoryCategory: string;
+    customCategory: string;
+    saveCurrentAs: string;
+    presetNamePlaceholder: string;
+    deleteConfirm: string;
+    selectorTitle: string;
+  };
+  autoEq: {
+    modalTitle: string;
+    modalSubtitle: string;
+    searchPlaceholder: string;
+    activeProfile: string;
+    clearProfile: string;
+    autoPreampOffset: string;
+    filtersCount: string;
+    targetCurve: string;
+    flatRecommended: string;
+  };
+  effectsRack: {
+    ambienceTitle: string;
+    ambienceDesc: string;
+    fidelityTitle: string;
+    fidelityDesc: string;
+    nightModeTitle: string;
+    nightModeDesc: string;
+    spatialTitle: string;
+    spatialDesc: string;
+    pitchTitle: string;
+    pitchDesc: string;
+    pitchSoonTooltip: string;
+  };
+  appMixer: {
+    drawerTitle: string;
+    drawerSubtitle: string;
+    activeStreams: string;
+    noActiveStreams: string;
+    resetDefault: string;
+    autoSaveNotice: string;
+  };
+  statusBar: {
+    bypassBypassed: string;
+    latencyGuaranteed: string;
+    virtualSink: string;
+    virtualSinkTooltip: string;
+    loopbackMode: string;
+    loopbackModeTooltip: string;
+    proAudioMmmss: string;
+    headroom: string;
+    headroomTooltip: string;
+    limiterOff: string;
+    limiterBypassed: string;
+    limiterCeiling: string;
+    limiterCeilingTooltip: string;
+    abBypassButton: string;
+    abBypassedButton: string;
+    abBypassTooltip: string;
+  };
+  settings: {
+    modalTitle: string;
+    modalSubtitle: string;
+    languageTitle: string;
+    languageSubtitle: string;
+    startupTitle: string;
+    startupDesc: string;
+    bufferGuardTitle: string;
+    bufferGuardDesc: string;
+    bufferGuardActive: string;
+    bufferGuardWarningTitle: string;
+    bufferGuardWarningDesc: string;
+    atomicTitle: string;
+    atomicDesc: string;
+    windowGeometry: string;
+    windowGeometryDesc: string;
+    realTimeSafety: string;
+    realTimeSafetyDesc: string;
+  };
+}

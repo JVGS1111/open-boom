@@ -607,6 +607,11 @@ pub fn run() {
             let preset_vocal = MenuItem::with_id(app, "preset_vocal", "Vocal", true, None::<&str>)?;
             let presets_menu = Submenu::with_items(app, "Presets", true, &[&preset_acoustic, &preset_bass, &preset_vocal])?;
 
+            let lang_pt = MenuItem::with_id(app, "lang_pt", "Português (Brasil)", true, None::<&str>)?;
+            let lang_en = MenuItem::with_id(app, "lang_en", "English", true, None::<&str>)?;
+            let lang_es = MenuItem::with_id(app, "lang_es", "Español", true, None::<&str>)?;
+            let lang_menu = Submenu::with_items(app, "Language / Idioma", true, &[&lang_pt, &lang_en, &lang_es])?;
+
             let separator1 = PredefinedMenuItem::separator(app)?;
             let separator2 = PredefinedMenuItem::separator(app)?;
             let quit_item = MenuItem::with_id(app, "quit", "Exit OpenBoom", true, None::<&str>)?;
@@ -619,6 +624,7 @@ pub fn run() {
                     &power_item,
                     &mute_item,
                     &presets_menu,
+                    &lang_menu,
                     &separator2,
                     &quit_item,
                 ],
@@ -679,6 +685,15 @@ pub fn run() {
                                 preamp_offset_db: 0.0,
                             });
                             let _ = app.emit("tray-preset-selected", target_name);
+                        }
+                        "lang_pt" => {
+                            let _ = app.emit("tray-language-changed", "pt-BR");
+                        }
+                        "lang_en" => {
+                            let _ = app.emit("tray-language-changed", "en");
+                        }
+                        "lang_es" => {
+                            let _ = app.emit("tray-language-changed", "es");
                         }
                         "quit" => {
                             let state = app.state::<AppState>();
@@ -757,10 +772,10 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(conf_str).expect("parse tauri.conf.json");
         let window = &v["app"]["windows"][0];
 
-        assert_eq!(window["width"], 1000, "Window width must be 1000px");
-        assert_eq!(window["height"], 620, "Window height must be 620px");
-        assert_eq!(window["minWidth"], 960, "Window minWidth must be 960px");
-        assert_eq!(window["minHeight"], 580, "Window minHeight must be 580px");
+        assert_eq!(window["width"], 1040, "Window width must be 1040px");
+        assert_eq!(window["height"], 640, "Window height must be 640px");
+        assert_eq!(window["minWidth"], 1000, "Window minWidth must be 1000px");
+        assert_eq!(window["minHeight"], 600, "Window minHeight must be 600px");
         assert_eq!(window["decorations"], false, "Window must be frameless");
         assert_eq!(window["backgroundColor"], "#121316", "Background must be obsidian canvas token");
     }

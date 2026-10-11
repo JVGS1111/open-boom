@@ -1,5 +1,6 @@
 import React from "react";
 import { Sparkles, Waves, Moon, Expand, Music2 } from "lucide-react";
+import { useI18n } from "../i18n";
 
 export interface EffectModule {
   id: number;
@@ -31,6 +32,30 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
   onAmountChange,
   disabled = false,
 }) => {
+  const { t } = useI18n();
+
+  const getModuleName = (id: number, fallback: string) => {
+    switch (id) {
+      case 0: return t.effectsRack.ambienceTitle;
+      case 1: return t.effectsRack.fidelityTitle;
+      case 2: return t.effectsRack.nightModeTitle;
+      case 3: return t.effectsRack.spatialTitle;
+      case 4: return t.effectsRack.pitchTitle;
+      default: return fallback;
+    }
+  };
+
+  const getModuleDescription = (id: number, fallback: string) => {
+    switch (id) {
+      case 0: return t.effectsRack.ambienceDesc;
+      case 1: return t.effectsRack.fidelityDesc;
+      case 2: return t.effectsRack.nightModeDesc;
+      case 3: return t.effectsRack.spatialDesc;
+      case 4: return t.effectsRack.pitchDesc;
+      default: return fallback;
+    }
+  };
+
   const getIcon = (id: number) => {
     switch (id) {
       case 0:
@@ -77,7 +102,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
     <div
       role="region"
       aria-label="Dynamic Effects Rack"
-      className="grid grid-cols-5 gap-2 w-full"
+      className="grid grid-cols-5 gap-2.5 w-full h-full"
     >
       {modules.map((mod) => {
         const isModActive = mod.enabled && !disabled && !mod.isComingSoon;
@@ -88,7 +113,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
             key={mod.id}
             tabIndex={disabled || mod.isComingSoon ? -1 : 0}
             onKeyDown={(e) => handleKeyDown(e, mod)}
-            className={`group bg-surface-card border rounded-lg p-2.5 flex flex-col justify-between h-[86px] transition-all select-none relative outline-none overflow-hidden focus-visible:ring-1 focus-visible:ring-accent-cyan ${
+            className={`group bg-surface-card border rounded-lg p-3 flex flex-col justify-between h-full min-h-[115px] transition-all select-none relative outline-none overflow-hidden focus-visible:ring-1 focus-visible:ring-accent-cyan ${
               isModActive
                 ? "border-accent-cyan/60 shadow-cyan-glow-sm bg-surface-card-hover"
                 : "border-border-subtle hover:border-border-default"
@@ -96,7 +121,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
             title={`${mod.name}: ${mod.description}`}
           >
             {/* Header: Icon + Title + Switch */}
-            <div className="flex items-center justify-between gap-1 mb-0.5">
+            <div className="flex items-center justify-between gap-1 mb-1">
               <div
                 className="flex items-center gap-1.5 min-w-0 cursor-pointer"
                 onClick={() => {
@@ -117,7 +142,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
                     isModActive ? "text-text-primary" : "text-text-secondary"
                   }`}
                 >
-                  {mod.name}
+                  {getModuleName(mod.id, mod.name)}
                 </span>
               </div>
 
@@ -125,16 +150,16 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
               {mod.isComingSoon ? (
                 <span
                   className="text-[9px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded bg-surface-elevated text-text-muted border border-border-default/60 shrink-0"
-                  title="Phase 2 Feature"
+                  title={t.effectsRack.pitchSoonTooltip}
                 >
-                  Soon
+                  {t.common.soon}
                 </span>
               ) : (
                 <button
                   type="button"
                   role="switch"
                   aria-checked={isModActive}
-                  aria-label={`Toggle ${mod.name}`}
+                  aria-label={`Toggle ${getModuleName(mod.id, mod.name)}`}
                   disabled={disabled}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -154,14 +179,14 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
             </div>
 
             {/* Description Subtitle */}
-            <div className="text-[9.5px] text-text-muted truncate mb-1 font-sans">
-              {mod.isComingSoon ? "Pitch Shifter (-12..+12 st)" : mod.description}
+            <div className="text-[10px] text-text-muted truncate mb-1.5 font-sans">
+              {getModuleDescription(mod.id, mod.description)}
             </div>
 
             {/* Bottom Slider & Percentage Readout */}
-            <div className="flex items-center gap-1.5 pt-0.5 min-w-0">
+            <div className="flex items-center gap-2 pt-1 min-w-0">
               {mod.isComingSoon ? (
-                <div className="flex-1 min-w-0 flex items-center justify-between text-[10px] font-mono text-text-muted/60 px-1 py-0.5 bg-surface-base/40 rounded border border-border-subtle/40">
+                <div className="flex-1 min-w-0 flex items-center justify-between text-[10px] font-mono text-text-muted/60 px-1.5 py-1 bg-surface-base/40 rounded border border-border-subtle/40">
                   <span>Phase 2</span>
                   <span>0 st</span>
                 </div>
@@ -170,7 +195,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
                   <input
                     type="range"
                     role="slider"
-                    aria-label={`${mod.name} intensity`}
+                    aria-label={`${getModuleName(mod.id, mod.name)} intensity`}
                     aria-valuenow={Math.round(mod.amount * 100)}
                     aria-valuemin={0}
                     aria-valuemax={100}
@@ -183,7 +208,7 @@ export const EffectsRackStrip: React.FC<EffectsRackStripProps> = ({
                     onChange={(e) =>
                       onAmountChange(mod.id, parseFloat(e.target.value))
                     }
-                    className="flex-1 min-w-0 h-1 bg-border-subtle rounded appearance-none cursor-pointer accent-accent-cyan disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="flex-1 min-w-0 h-1.5 bg-border-subtle rounded appearance-none cursor-pointer accent-accent-cyan disabled:opacity-30 disabled:cursor-not-allowed"
                   />
                   <span
                     className={`text-[10px] font-mono w-7 shrink-0 text-right transition-colors ${

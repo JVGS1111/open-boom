@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from "react";
 import { Compass } from "lucide-react";
+import { useI18n } from "../i18n";
 
 interface SoundstageDialProps {
   enabled: boolean;
@@ -16,6 +17,7 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
   onToggle,
   onOpenConfigurator,
 }) => {
+  const { t } = useI18n();
   const dialRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -74,6 +76,9 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
     { label: "LFE", angle: 180, x: 96, y: 186 },
   ];
 
+  const intensityRef = useRef(clampedIntensity);
+  intensityRef.current = clampedIntensity;
+
   // Polar drag physics: theta = atan2(y - y0, x - x0)
   const handlePointerCoord = useCallback(
     (clientX: number, clientY: number) => {
@@ -98,9 +103,15 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
         nextFraction = deltaAngle / totalSweepDeg;
       } else {
         // In the 60° bottom dead-zone (totalSweepDeg to 360°):
-        // Midpoint of the dead zone is 300° + 30° = 330°
-        const deadZoneMid = totalSweepDeg + (360 - totalSweepDeg) / 2;
-        nextFraction = deltaAngle < deadZoneMid ? 1.0 : 0.0;
+        // Clamp to 0.0 or 1.0 depending on current position to prevent erratic flips
+        nextFraction = intensityRef.current < 0.5 ? 0.0 : 1.0;
+      }
+
+      // Prevent jumping across stops when moving mouse fast near boundaries
+      if (intensityRef.current > 0.75 && nextFraction < 0.25) {
+        nextFraction = 1.0;
+      } else if (intensityRef.current < 0.25 && nextFraction > 0.75) {
+        nextFraction = 0.0;
       }
 
       const rounded = Math.round(nextFraction * 100) / 100;
@@ -291,14 +302,14 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
           }`}
         >
           <span className="text-[10px] font-bold tracking-wider text-text-secondary uppercase">
-            3D SURROUND
+            {t.soundstage.title}
           </span>
           <span
             className={`font-mono text-3xl font-extrabold my-0.5 tracking-tight ${
               enabled ? "text-accent-cyan drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]" : "text-text-muted"
             }`}
           >
-            {enabled ? `${Math.round(clampedIntensity * 100)}%` : "OFF"}
+            {enabled ? `${Math.round(clampedIntensity * 100)}%` : t.common.off.toUpperCase()}
           </span>
           <span className="font-mono text-[9px] text-text-muted font-medium">
             KEMAR 7.1 HRTF
@@ -317,7 +328,7 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
               : "bg-surface-card text-text-muted border-border-subtle hover:text-text-primary"
           }`}
         >
-          {enabled ? "Engaged" : "Bypassed"}
+          {enabled ? t.common.active : t.common.bypassed}
         </button>
 
         <button
@@ -327,7 +338,7 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
           className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium bg-surface-card border border-border-subtle hover:border-accent-cyan/40 hover:text-accent-cyan rounded text-text-secondary transition-all cursor-pointer shadow-sm"
         >
           <Compass className="w-3.5 h-3.5 text-accent-cyan" />
-          <span>Calibrate Soundstage</span>
+          <span>{t.soundstage.calibrateSoundstage}</span>
         </button>
       </div>
     </div>

@@ -17,6 +17,7 @@ release-assets/
 # BMAD artifacts
 .bmad/render/
 _bmad/
+_bmad-output/
 .agent/
 .agents/
 

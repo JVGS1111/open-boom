@@ -7,6 +7,7 @@ import {
   Compass,
   Check,
 } from "lucide-react";
+import { useI18n } from "../i18n";
 
 export interface ChannelSpec {
   index: number;
@@ -52,9 +53,24 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
   onResetPositions,
   onResetAll,
 }) => {
+  const { t } = useI18n();
   const [selectedChannel, setSelectedChannel] = useState<number>(0);
   const [draggingChannel, setDraggingChannel] = useState<number | null>(null);
   const dragTravelRef = useRef<number>(0);
+
+  const getChannelName = (key: string, defaultName: string) => {
+    switch (key) {
+      case "FL": return t.soundstage.channels.l;
+      case "FR": return t.soundstage.channels.r;
+      case "C": return t.soundstage.channels.c;
+      case "LFE": return t.soundstage.channels.lfe;
+      case "RL": return t.soundstage.channels.lsr;
+      case "RR": return t.soundstage.channels.rsr;
+      case "SL": return t.soundstage.channels.ls;
+      case "SR": return t.soundstage.channels.rs;
+      default: return defaultName;
+    }
+  };
 
   // Close on Escape key press
   useEffect(() => {
@@ -136,10 +152,10 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
             </div>
             <div>
               <h2 className="text-base font-semibold tracking-wide">
-                Virtual Soundstage Calibration
+                {t.soundstage.calibrateModalTitle}
               </h2>
               <p className="text-[12px] text-text-muted">
-                7.1 Surround positioning, speaker muting, and per-channel trim (+/-6.0 dB)
+                {t.soundstage.calibrateModalSubtitle}
               </p>
             </div>
           </div>
@@ -161,7 +177,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                 <span className="text-accent-cyan font-semibold flex items-center gap-1">
                   <Compass className="w-3 h-3 animate-spin" />
                   <span>
-                    ORBIT {CHANNELS[draggingChannel].name.toUpperCase()}:{" "}
+                    ORBIT {getChannelName(CHANNELS[draggingChannel].key, CHANNELS[draggingChannel].name).toUpperCase()}:{" "}
                     {(() => {
                       const az =
                         speakerAzimuthsDeg && speakerAzimuthsDeg[draggingChannel] !== undefined
@@ -173,7 +189,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                   </span>
                 </span>
               ) : (
-                <span>LISTENER PERSPECTIVE (TOP-DOWN)</span>
+                <span>{t.soundstage.listener} PERSPECTIVE (TOP-DOWN)</span>
               )}
             </span>
 
@@ -436,7 +452,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                               isMuted ? "text-text-muted line-through" : "text-text-primary"
                             }`}
                           >
-                            {ch.name}
+                            {getChannelName(ch.key, ch.name)}
                           </span>
                           {!ch.isLfe && (
                             <span className="text-[9.5px] font-mono text-text-muted">
@@ -527,7 +543,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-surface-card border border-border-subtle hover:border-border-default rounded-md text-text-secondary hover:text-text-primary transition-all cursor-pointer"
                   >
                     <Compass className="w-3.5 h-3.5 text-accent-cyan" />
-                    <span>Reset Speaker Positions</span>
+                    <span>{t.soundstage.resetSpeakers}</span>
                   </button>
                 )}
               </div>
@@ -538,7 +554,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                 className="flex items-center gap-1.5 px-5 py-1.5 text-[12px] font-semibold bg-accent-cyan text-background hover:bg-accent-cyan/90 rounded-md transition-all shadow-cyan-glow-sm cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>Done</span>
+                <span>{t.common.done}</span>
               </button>
             </div>
           </div>

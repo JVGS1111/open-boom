@@ -2086,7 +2086,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "open-boom"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "open-boom-core",
  "open-boom-storage",
@@ -2099,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "open-boom-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -2107,7 +2107,7 @@ dependencies = [
 
 [[package]]
 name = "open-boom-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "open-boom-core",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "open-boom-wasapi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "open-boom-core",
  "thiserror 2.0.21",

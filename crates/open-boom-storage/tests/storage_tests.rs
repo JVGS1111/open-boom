@@ -32,6 +32,8 @@ fn test_app_config_default_values() {
     assert!(cfg.sweetener_spatial_enabled);
     assert!((cfg.sweetener_spatial_amount - 0.60).abs() < 1e-6);
     assert_eq!(cfg.sweetener_pitch_semitones, 0);
+    assert!(cfg.buffer_guard_enabled);
+    assert_eq!(cfg.language, None);
 }
 
 #[test]

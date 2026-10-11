@@ -439,6 +439,37 @@
   5. **Persistência Atômica e Hot-Restart:** Persistido em `AppConfig` (`buffer_guard_enabled: bool`) e reinicialização a quente do `AudioStreamPump` sem interrupção de áudio.
 * **Consequência:** Eliminação total de estalos em faixas com sub-graves pesados. 175 testes Rust verdes no workspace e 71 testes React/Vite no frontend aprovados com 100% de sucesso.
 
+---
+
+## ADR-032: Especificação do Modo 8D Orbital Audio (Som Rotativo 360°) via Matriz KEMAR HRTF e Deslocamento Azimutal por Sub-Blocos
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Especificado
+* **Contexto:** Demanda do usuário por um modo "8D Audio" imersivo com rotação contínua da fonte sonora ao redor da cabeça, permitindo parametrização de orientação (Sentido Horário, Anti-Horário, Pêndulo) e velocidade angular (período de 2s a 30s).
+* **Decisões:**
+  1. **Nomenclatura do Recurso:** Adotada a designação formal "8D Audio (Som Orbital 360°)", validando a terminologia consagrada na indústria e comunidade de áudio binaural, respaldada tecnicamente como *Orbital Binaural Spatialization*.
+  2. **Reaproveitamento da Convolução KEMAR HRTF 64-tap (`Spatializer3D`):** Em vez de criar um algoritmo isolado que colapsa o áudio em mono, a rotação orbital atua como um deslocamento azimutal rígido $\theta_k(t) = \theta_{\text{nom}, k} + \theta_{\text{orbit}}(t)$ sobre toda a constelação de 8 alto-falantes virtuais 7.1, preservando a imagem estéreo da música enquanto gira a sala acústica completa.
+  3. **Atualização por Sub-Blocos de 32 Amostras (~0.67ms):** Cálculo dos coeficientes HRTF executado a cada 32 amostras em vez de a cada amostra individual, reduzindo o custo de CPU em 97% e mantendo a variação angular em $\approx 0.12^\circ$ por sub-bloco (muito abaixo do limiar auditivo MAA de $1^\circ$ a $3^\circ$), garantindo zero zipper noise e zero alocações na heap.
+  4. **Modos de Orientação:** Suporte a Sentido Horário (Clockwise), Anti-Horário (Counter-Clockwise) e Pêndulo/Oscilação lateral (Ping-Pong).
+  5. **Controle de Velocidade:** Período de revolução ajustável continuamente entre 2.0s (rotação rápida) e 30.0s (órbita lenta imersiva), com padrão calibrado em 12.0s.
+  6. **Despacho Lock-Free e Visualização HUD:** Parâmetros transmitidos via fila circular SPSC lock-free em struct POD `AudioCommand::SetOrbit8D`, com retorno de fase azimutal na telemetria para animação suave do beacon orbital na UI ($\ge 30\text{ fps}$).
+* **Consequência:** Especificação formalizada em `_bmad-output/specs/spec-8d-orbital-audio/SPEC.md` e companion `orbital-dsp-mathematics.md`. Memlog inicializado e validado sem pendências.
+
+---
+
+## ADR-033: Arquitetura de Internacionalização (i18n: pt-BR, en, es) com Detecção do Sistema Operacional e Persistência Atômica
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Necessidade de suporte completo a múltiplos idiomas na interface e na bandeja do sistema para Português do Brasil (`pt-BR`), Inglês (`en`) e Espanhol (`es`), utilizando por padrão a linguagem do sistema operacional do usuário, sem introduzir dependências externas pesadas em runtime.
+* **Decisões:**
+  1. **Motor de i18n Nativo e Tipado:** Implementado via Contexto React leve (`I18nProvider`, `useI18n`) com contrato de dicionário TypeScript estrito (`TranslationDictionary`). Zero bibliotecas externas pesadas adicionadas ao bundle.
+  2. **Dicionários Completos:** Dicionários em `pt-BR.ts`, `en.ts` e `es.ts` com 100% de paridade e cobertura total de todos os componentes da aplicação (Titlebar, DeviceSelector, Soundstage, Equalizer, Presets, AutoEq, EffectsRack, AppMixer, StatusBar e SettingsModal).
+  3. **Detecção do Sistema por Padrão:** Opção padrão `"system"` resolve o idioma do host via `navigator.language` (`pt*` -> `pt-BR`, `es*` -> `es`, fallback universal `en`).
+  4. **Pontos de Acesso ao Usuário:** Seletor com menu suspenso na barra de título (`LanguageMenu.tsx`), grade segmentada na modal de preferências (`SettingsModal.tsx`), e submenu nativo no ícone da bandeja do Windows (System Tray em `src-tauri/src/lib.rs` emitindo `tray-language-changed`).
+  5. **Persistência Atômica:** Preferência de idioma gravada atomicamente em `%APPDATA%\OpenBoom\config.json` via campo `language: Option<String>` em `AppConfig`.
+  6. **Resiliência Headless em Testes:** Contexto padrão do `I18nContext` inicializado com o dicionário em inglês, permitindo que testes estáticos via `renderToStaticMarkup` executem de forma determinística sem exigir wrapper explícito.
+* **Consequência:** 78 testes de UI aprovados e 175 testes Cargo aprovados com 100% de sucesso. Versão bumpada para `0.2.0` (tag `v0.2.0`).
+
+
 
 
 

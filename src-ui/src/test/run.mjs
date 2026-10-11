@@ -40,6 +40,11 @@ const testFiles = [
     entry: path.join(__dirname, "SettingsModal.test.tsx"),
     runnerName: "runSettingsModalTests",
   },
+  {
+    name: "Internationalization (i18n) & Multi-Language System Test Suite",
+    entry: path.join(__dirname, "I18n.test.tsx"),
+    runnerName: "runI18nTests",
+  },
 ];
 
 async function main() {

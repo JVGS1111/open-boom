@@ -21,6 +21,7 @@ import {
   isPresetDirty,
   toPresetSlug,
 } from "./components/PresetSelectorPopover";
+import { I18nProvider, LanguageOption } from "./i18n";
 
 /**
  * Calculates automatic negative preamp attenuation offset from positive filter gains:
@@ -98,6 +99,9 @@ export const App: React.FC = () => {
       is_active: false,
     },
   ]);
+
+  // Language & i18n State
+  const [language, setLanguage] = useState<LanguageOption>("system");
 
   // Sweeteners Rack State (Epic 4, UX-DR6)
   const [effectModules, setEffectModules] = useState<EffectModule[]>([
@@ -220,6 +224,7 @@ export const App: React.FC = () => {
           sweetener_spatial_enabled?: boolean;
           sweetener_spatial_amount?: number;
           buffer_guard_enabled?: boolean;
+          language?: string;
         }>("load_app_config");
 
         if (config) {
@@ -367,6 +372,11 @@ export const App: React.FC = () => {
           const bgEn = config.buffer_guard_enabled ?? true;
           setBufferGuardEnabled(bgEn);
           dispatchCommand({ SetBufferGuard: bgEn });
+
+          // Restore Language Preference
+          if (config.language) {
+            setLanguage(config.language as LanguageOption);
+          }
         }
       } catch {
         // Browser mode fallback
@@ -411,6 +421,7 @@ export const App: React.FC = () => {
     let unlistenPower: (() => void) | undefined;
     let unlistenMute: (() => void) | undefined;
     let unlistenPreset: (() => void) | undefined;
+    let unlistenLanguage: (() => void) | undefined;
 
     const setupListeners = async () => {
       try {
@@ -430,6 +441,9 @@ export const App: React.FC = () => {
           }
           setNotification(`Preset activated: ${event.payload}`);
         });
+        unlistenLanguage = await listen<string>("tray-language-changed", (event) => {
+          setLanguage(event.payload as LanguageOption);
+        });
       } catch {
         // Browser mode fallback
       }
@@ -441,6 +455,7 @@ export const App: React.FC = () => {
       if (unlistenPower) unlistenPower();
       if (unlistenMute) unlistenMute();
       if (unlistenPreset) unlistenPreset();
+      if (unlistenLanguage) unlistenLanguage();
     };
   }, []);
 
@@ -473,8 +488,8 @@ export const App: React.FC = () => {
         master_boost: boost,
         is_muted: isMuted,
         active_output_device: activeDeviceId === "default" ? null : activeDeviceId,
-        window_width: 1000,
-        window_height: 620,
+        window_width: 1040,
+        window_height: 640,
         window_x: windowX,
         window_y: windowY,
         graphic_eq_gains_db: eqGains,
@@ -497,6 +512,7 @@ export const App: React.FC = () => {
         sweetener_spatial_amount: effectModules.find((m) => m.id === 3)?.amount ?? 0.60,
         sweetener_pitch_semitones: 0,
         buffer_guard_enabled: bufferGuardEnabled,
+        language: language,
       };
 
       try {
@@ -529,6 +545,7 @@ export const App: React.FC = () => {
     activeAutoEqProfile,
     activeEqPreset,
     effectModules,
+    language,
   ]);
 
   const handleTogglePower = () => {
@@ -1092,7 +1109,8 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full h-full min-w-[960px] min-h-[580px] bg-background flex flex-col overflow-hidden border border-border-subtle relative select-none">
+    <I18nProvider initialLanguage={language} onLanguageChange={setLanguage}>
+      <div className="w-full h-full min-w-[960px] min-h-[580px] bg-background flex flex-col overflow-hidden border border-border-subtle relative select-none">
       {/* Settings Modal (Story 1.7, FR29) */}
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -1175,9 +1193,9 @@ export const App: React.FC = () => {
           />
         </section>
 
-        {/* Right rack panel: Dual EQ & Effects Rack */}
-        <section className="flex-1 min-w-0 flex flex-col gap-2.5 overflow-hidden">
-          <div className="flex-1 min-h-0">
+        {/* Right rack panel: Dual EQ & Effects Rack (60% EQ / 40% Effects) */}
+        <section className="flex-1 min-w-0 flex flex-col gap-2.5 overflow-hidden h-full">
+          <div className="flex-[6] min-h-0 flex flex-col">
             <EqualizerPreview
               activePreset={activeEqPreset}
               isPresetDirty={presetDirty}
@@ -1189,7 +1207,7 @@ export const App: React.FC = () => {
               onOpenAutoEq={() => setIsAutoEqOpen(true)}
             />
           </div>
-          <div className="shrink-0">
+          <div className="flex-[4] min-h-0 flex flex-col">
             <EffectsRackStrip
               modules={effectModules}
               onToggleModule={handleToggleEffect}
@@ -1243,6 +1261,7 @@ export const App: React.FC = () => {
         usingVirtualBridge={usingVirtualBridge}
       />
     </div>
+  </I18nProvider>
   );
 };
 

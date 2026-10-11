@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 17:15
-* **Sprint Ativa:** **Epic 5 CONCLUÍDO (`done`)** — `Windows Per-Application Audio Session Mixer & Volume Routing`. **TODOS OS 5 ÉPICOS PLANEJADOS DO OPENBOOM (Epics 1 a 5) ESTÃO 100% CONCLUÍDOS!**
-* **Tarefa Atual:** Conclusão formal do Epic 5 (Stories 5.1 a 5.3, ADR-030, 174 testes Cargo e 67 testes UI verdes).
+* **Data/Hora:** 11/10/2026 - 20:30
+* **Sprint Ativa:** **Sprint 6 — Modo 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica)**
+* **Tarefa Atual:** Conclusão da especificação formal `/bmad-spec` (`_bmad-output/specs/spec-8d-orbital-audio/SPEC.md`, ADR-032).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -182,13 +182,31 @@
       - Banner de alerta vermelho proeminente ("Aviso de Risco Acústico & Fadiga Mecânica") exibido caso o usuário desative a proteção (modo 10ms agressivo).
       - Persistência atômica das preferências em `%APPDATA%\OpenBoom\config.json`.
     - **Verificação Completa de Testes:** 175 testes Cargo verdes no workspace total e 71 testes React/Vite verdes no frontend (incluindo `SettingsModal.test.tsx`). ADR-031 registrado no `.bmad/04-DECISION-LOG.md`.
+35. **Refinamento Responsivo, Proporção 60/40 e Estabilidade de Layout na Interface:**
+    - **Proporção Vertical 60/40 no Rack Direito:** O painel direito foi reestruturado com Flexbox proporcional exato: o card de Equalização (`EqualizerPreview`) ocupa `flex-[6] min-h-0` (60% da altura vertical) e o strip de módulos de efeitos (`EffectsRackStrip`) ocupa `flex-[4] min-h-0` (40% da altura vertical), eliminando o aspecto excessivamente espichado dos cards de efeitos e dando destaque adequado ao display do EQ.
+    - **Aumento da Geometria Mínima e Padrão da Janela:** Tamanho mínimo configurado para **1000 × 600 px** e padrão para **1040 × 640 px** (`tauri.conf.json`, `App.tsx`, `preset_store.rs`, e asserções sincronizadas em `lib.rs`), prevenindo compressão excessiva em telas HD.
+    - **Eliminação de Layout Shift no Headroom do StatusBar:** Aplicado `shrink-0`, `whitespace-nowrap` e `min-w-[56px] tabular-nums text-right` no badge de Headroom, eliminando quebras de linha durante a oscilação de telemetria a cada 60ms.
+    - **Física Polar Robusta do SoundstageDial:** Adicionado clamping na dead-zone angular inferior e rastreamento contínuo em `intensityRef`, impedindo que movimentos rápidos do mouse saltem acidentalmente de 0% para 100%.
+    - **Verificação Completa de Qualidade:** Build do frontend (`npm run build`) concluído com 0 erros, todos os 78 testes de UI passando e todos os testes Cargo passando.
+
+36. **Suporte Completo a Internacionalização (i18n: pt-BR, en, es) e Lançamento da Versão v0.2.0:**
+    - **Arquitetura de i18n Tipada e Nativa:** Desenvolvido sistema em Contexto React sem dependências externas (`src-ui/src/i18n/`), com contrato TypeScript estrito (`TranslationDictionary`).
+    - **Dicionários Completos:** Dicionários com 100% de paridade entre Inglês (`en`), Português do Brasil (`pt-BR`) e Espanhol (`es`), abrangendo todos os componentes do app.
+    - **Detecção do Sistema por Padrão:** Opção `"system"` inspeciona o idioma do host (`navigator.language`) e define automaticamente `pt-BR`, `es` ou `en`.
+    - **Acessibilidade & Menus de Troca:**
+      - Popover dropdown na Titlebar com ícone de Globo e badges de idioma (`LanguageMenu.tsx`).
+      - Grade segmentada acessível na modal de preferências (`SettingsModal.tsx`).
+      - Submenu nativo de bandeja do sistema no Windows (System Tray em `src-tauri/src/lib.rs` emitindo `tray-language-changed`).
+    - **Persistência Atômica:** Preferência de idioma salva em `%APPDATA%\OpenBoom\config.json` via campo `language: Option<String>` em `AppConfig`.
+    - **Suíte de Testes & Verificação de Qualidade:**
+      - Nova suíte de testes de i18n (`src-ui/src/test/I18n.test.tsx`) validando mapeamento de locales, paridade estrita dos dicionários e renderização de provedor e badges.
+      - 78 testes de UI do frontend 100% verdes no `npm test`.
+      - 175 testes Cargo 100% verdes no workspace.
+      - Build de produção (`npm run build`) validado sem erros.
+    - **Lançamento & Versionamento:** Bump de versão para `0.2.0` no `package.json`, `src-ui/package.json`, `Cargo.toml`, e `tauri.conf.json`.
 
 ## O que está em andamento agora
-* **PROJETO 100% PRONTO PARA LANÇAMENTO E DISTRIBUIÇÃO PÚBLICA COM ÁUDIO ESTÁVEL E CRISTALINO!**
-* Compilação local de release validada: `target/release/open-boom.exe` e instalador `target/release/bundle/nsis/OpenBoom_0.1.0_x64-setup.exe`.
+* Suporte a internacionalização (i18n) e corte da versão v0.2.0 concluídos com 100% de testes verdes.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 175 testes Cargo do workspace e todos os 71 testes de UI do frontend estão passando com 100% de sucesso.
-
-
-
+* Nenhum bloqueio ativo. Todos os 175 testes Cargo e 78 testes de UI do frontend estão passando com 100% de sucesso.

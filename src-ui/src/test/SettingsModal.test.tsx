@@ -75,11 +75,11 @@ export function runSettingsModalTests(): TestResult[] {
       "Toggle switch should be checked"
     );
     assert(
-      html.includes("Proteção Ativa: Zero Estalos &amp; Transientes Suaves"),
+      html.includes("Proteção Ativa") || html.includes("Active Protection"),
       "Should render active protection badge"
     );
     assert(
-      !html.includes("Aviso de Risco Acústico &amp; Fadiga Mecânica"),
+      !html.includes("Aviso de Risco") && !html.includes("Acoustic Risk"),
       "Should not render warning banner when guard is enabled"
     );
   });
@@ -100,15 +100,15 @@ export function runSettingsModalTests(): TestResult[] {
       "Toggle switch should be unchecked"
     );
     assert(
-      html.includes("Aviso de Risco Acústico &amp; Fadiga Mecânica"),
+      html.includes("Aviso de Risco") || html.includes("Acoustic Risk"),
       "Must render prominent warning header when disabled"
     );
     assert(
-      html.includes("Modo de baixa latência agressivo 10ms"),
+      html.includes("10ms"),
       "Must explain the aggressive 10ms low latency mode risks"
     );
     assert(
-      !html.includes("Proteção Ativa: Zero Estalos &amp; Transientes Suaves"),
+      !html.includes("Proteção Ativa") && !html.includes("Active Protection"),
       "Must not render active badge when disabled"
     );
   });

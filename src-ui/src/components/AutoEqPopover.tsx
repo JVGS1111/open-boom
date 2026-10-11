@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Search, Headphones, Check, X, RotateCcw, Sliders, Volume2 } from "lucide-react";
+import { useI18n } from "../i18n";
 
 export interface AutoEqProfileSummary {
   id: string;
@@ -114,6 +115,7 @@ export const AutoEqPopover: React.FC<AutoEqPopoverProps> = ({
   onClearProfile,
   onSearch,
 }) => {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AutoEqProfileSummary[]>(
     DEFAULT_FALLBACK_RECOMMENDATIONS
@@ -268,10 +270,10 @@ export const AutoEqPopover: React.FC<AutoEqPopoverProps> = ({
               </div>
               <div>
                 <h3 className="text-xs font-bold tracking-wide uppercase text-text-primary">
-                  AutoEq Headphone Profiles
+                  {t.autoEq.modalTitle}
                 </h3>
                 <p className="text-[10px] text-text-muted">
-                  4,000+ calibrated models &bull; Zero network telemetry &bull; Offline
+                  {t.autoEq.modalSubtitle}
                 </p>
               </div>
             </div>
@@ -288,13 +290,13 @@ export const AutoEqPopover: React.FC<AutoEqPopoverProps> = ({
                   title="Clear active calibration profile"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>Reset to Flat</span>
+                  <span>{t.autoEq.clearProfile}</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close AutoEq Popover"
+                aria-label={t.common.close}
                 className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-card border border-transparent hover:border-border-subtle transition-all cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -319,7 +321,7 @@ export const AutoEqPopover: React.FC<AutoEqPopoverProps> = ({
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by brand or model (e.g. HyperX Cloud II, HD 600, XM5)..."
+              placeholder={t.autoEq.searchPlaceholder}
               aria-label="Search headphone models"
               className="w-full pl-9 pr-8 py-2 bg-surface-base border border-border-subtle focus:border-accent-cyan rounded-lg text-xs text-text-primary placeholder:text-text-muted outline-none transition-all shadow-inner"
             />
