@@ -135,10 +135,17 @@
     - **Pipeline e Integração de Sistema:** `AudioProcessor` (`crates/open-boom-core/src/dsp/pipeline.rs`) atualizado com `Stage 4: SweetenersRack` entre Equalizador Gráfico (Stage 3) e Master Limiter (Stage 5); comando lock-free `AudioCommand::SetSweetener` consumido via SPSC queue; persistência atômica dos 5 efeitos em `%APPDATA%\OpenBoom\config.json` via `AppConfig` (`crates/open-boom-storage/src/preset_store.rs`).
     - **Verificação de Testes:** 17 testes de integração/DSP em `sweeteners_tests.rs` (140 testes Cargo verdes no workspace) e 9 testes de UI em `EffectsRack.test.tsx` (56 testes UI verdes no suite `npm test` do `src-ui`).
     - Registro de ADR-027 em `.bmad/04-DECISION-LOG.md`, specs 4.1 a 4.5 marcadas como `done` e sprint atualizado.
+28. **Implementação e Verificação Completa da Story 5.1 (`5-1-windows-core-audio-session-manager-dedicated-com-mta-thread`):**
+    - `crates/open-boom-core/src/types.rs`: Struct `ProcessAudioSession` (`process_id`, `name`, `volume`, `is_muted`, `is_active`) com suporte a serialização `serde`.
+    - `crates/open-boom-wasapi/src/session_manager.rs`: `SessionManager` operando em thread worker dedicada (`"open-boom-session-mgr"`) inicializada com `CoInitializeEx(None, COINIT_MULTITHREADED)`, comunicando via canais `std::sync::mpsc`.
+    - Integração de `IAudioSessionManager2`, `IAudioSessionEnumerator`, `IAudioSessionControl2` e `ISimpleAudioVolume`, inspeção segura de executáveis via `OpenProcess` e `QueryFullProcessImageNameW` com liberação rigorosa de handles, tratamento de sons do sistema (`IsSystemSoundsSession()`), poda de sessões expiradas (`AudioSessionStateExpired`), e modo sintético determinístico (`with_forced_synthetic` e `with_synthetic_fallback`).
+    - `src-tauri/src/lib.rs`: `SessionManager` integrado ao `AppState` de Tauri e comandos IPC `get_audio_sessions`, `set_app_volume` e `set_app_mute` expostos no `invoke_handler`.
+    - `crates/open-boom-wasapi/tests/session_manager_tests.rs` e `src-tauri/src/lib.rs`: 5 testes unitários e teste de integração em `src-tauri` passando com sucesso (146 testes Cargo e 56 testes UI verdes).
+    - Registro do ADR-028 em `.bmad/04-DECISION-LOG.md`, spec 5.1 marcada como `done` e `sprint-status.yaml` atualizado.
 
 ## O que está em andamento agora
-* **Epic 4 Concluído com Sucesso (`done`)!**
-* **Próximo no Backlog:** **Epic 5: Windows Per-Application Audio Session Mixer & Volume Routing** (Stories 5.1 a 5.3).
+* **Story 5.1 Concluída com Sucesso (`done`)!**
+* **Próximo no Backlog:** **Story 5.2: Per-Application Mixer Drawer UI & Individual Process Faders** (`5-2-per-application-mixer-drawer-ui-individual-process-faders`).
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 140 testes Cargo e 56 testes UI estão passando com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 146 testes Cargo e 56 testes UI estão passando com 100% de sucesso.

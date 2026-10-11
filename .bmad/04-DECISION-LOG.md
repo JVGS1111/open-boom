@@ -369,5 +369,20 @@
      - Persistência em `%APPDATA%\OpenBoom\config.json` via campos `sweetener_*` no `AppConfig` com substituição atômica de arquivo.
 * **Consequência:** 17 testes de integração e DSP em `crates/open-boom-core/tests/sweeteners_tests.rs`, 9 testes de UI em `src-ui/src/test/EffectsRack.test.tsx`, elevando o suite total para 140 testes Cargo e 56 testes UI verdes no workspace com zero regressões.
 
+---
+
+## ADR-028: Gerenciador de Sessões de Áudio Windows Core Audio em Thread Dedicada MTA (Story 5.1)
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Story 5.1 (FR21, AD-8). O OpenBoom necessita rastrear e controlar volumes e mudo por aplicativo no Windows via `IAudioSessionManager2` e `ISimpleAudioVolume`. Invocar objetos COM diretamente da thread principal de interface ou de tasks assíncronas do Tokio/Tauri provoca conflitos de apartamento COM (`RPC_E_CHANGED_MODE`, `CO_E_NOTINITIALIZED`), travamentos na interface gráfica ou falhas de concorrência.
+* **Decisões:**
+  1. **Isolamento de Apartamento COM MTA:** Todos os ponteiros e chamadas a `IAudioSessionManager2`, `IAudioSessionEnumerator`, `IAudioSessionControl2` e `ISimpleAudioVolume` executam estritamente em uma thread worker de segundo plano nomeada `"open-boom-session-mgr"`, inicializada com `CoInitializeEx(None, COINIT_MULTITHREADED)`.
+  2. **Comunicação por Mensagens com Zero Locks no Áudio:** Comandos de enumeração e mutação (`Enumerate`, `SetVolume`, `SetMute`, `Shutdown`) transitam por canais `std::sync::mpsc`, retornando resultados através de canais de resposta desacoplados sem bloquear o loop de áudio de baixa latência nem a renderização do frontend.
+  3. **Inspeção Segura de Processos:** Nomes de processos executáveis são resolvidos exclusivamente via `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` e `QueryFullProcessImageNameW`, com liberação obrigatória de handles via `CloseHandle`, sem injeção de DLLs, ganchos (hooks) ou modificação de memória de outros processos. Sessões de sons do sistema (`IsSystemSoundsSession()`) e processos expirados (`AudioSessionStateExpired`) são tratados e podados de forma transparente.
+  4. **Modo Sintético Determinístico:** Implementado modo sintético (`with_forced_synthetic` e fallback gracioso em `with_synthetic_fallback`) simulando sessões ativas (Spotify, Discord, Chrome) e mutações em memória, permitindo execução 100% automatizada e sem falhas em ambientes CI, contêineres e testes headless.
+  5. **Comandos IPC Tauri:** Expostos os comandos `get_audio_sessions`, `set_app_volume` e `set_app_mute` registrados no `AppState` de Tauri.
+* **Consequência:** 5 testes unitários dedicados em `crates/open-boom-wasapi/tests/session_manager_tests.rs` e teste de integração em `src-tauri/src/lib.rs`, elevando o total do workspace para 146 testes Cargo verdes com zero avisos.
+
+
 
 

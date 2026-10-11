@@ -257,6 +257,35 @@ impl AudioDeviceInfo {
     }
 }
 
+/// Information about an enumerated per-process audio session.
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ProcessAudioSession {
+    pub process_id: u32,
+    pub name: String,
+    pub volume: f32,
+    pub is_muted: bool,
+    pub is_active: bool,
+}
+
+impl ProcessAudioSession {
+    pub fn new(
+        process_id: u32,
+        name: impl Into<String>,
+        volume: f32,
+        is_muted: bool,
+        is_active: bool,
+    ) -> Self {
+        Self {
+            process_id,
+            name: name.into(),
+            volume,
+            is_muted,
+            is_active,
+        }
+    }
+}
+
 /// Engine errors conforming to the tagged Result algebra.
 #[derive(Debug, Error)]
 pub enum EngineError {

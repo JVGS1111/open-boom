@@ -1,14 +1,16 @@
 //! Desktop shell runtime and system tray lifecycle manager for OpenBoom.
 
 use open_boom_core::ring_buffer::SpscQueue;
-use open_boom_core::types::{AudioCommand, AudioDeviceInfo, TelemetrySnapshot, GRAPHIC_EQ_BANDS};
+use open_boom_core::types::{
+    AudioCommand, AudioDeviceInfo, ProcessAudioSession, TelemetrySnapshot, GRAPHIC_EQ_BANDS,
+};
 use open_boom_storage::{
     AppConfig, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, EqPreset,
     PresetStore, StartupManager,
 };
 use open_boom_wasapi::{
     AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig,
-    StreamPumpConfig,
+    SessionManager, StreamPumpConfig,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -33,6 +35,7 @@ pub struct AppState {
     pub virtual_device_id: Arc<Mutex<Option<String>>>,
     pub is_routed_to_virtual: Arc<Mutex<bool>>,
     pub auto_route: bool,
+    pub session_manager: Arc<Mutex<SessionManager>>,
 }
 
 impl Default for AppState {
@@ -95,6 +98,7 @@ impl AppState {
         }
 
         let autoeq_db = Arc::new(AutoEqDatabase::default());
+        let session_manager = Arc::new(Mutex::new(SessionManager::with_synthetic_fallback(true)));
 
         Self {
             dispatcher,
@@ -108,6 +112,7 @@ impl AppState {
             virtual_device_id: Arc::new(Mutex::new(virtual_id)),
             is_routed_to_virtual,
             auto_route,
+            session_manager,
         }
     }
 
@@ -461,6 +466,24 @@ fn delete_custom_eq_preset(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_audio_sessions(state: State<'_, AppState>) -> Result<Vec<ProcessAudioSession>, String> {
+    let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    mgr.enumerate_sessions().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_app_volume(process_id: u32, volume: f32, state: State<'_, AppState>) -> Result<(), String> {
+    let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    mgr.set_process_volume(process_id, volume).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_app_mute(process_id: u32, mute: bool, state: State<'_, AppState>) -> Result<(), String> {
+    let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    mgr.set_process_mute(process_id, mute).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new_runtime();
@@ -626,6 +649,9 @@ pub fn run() {
             save_custom_eq_preset,
             rename_custom_eq_preset,
             delete_custom_eq_preset,
+            get_audio_sessions,
+            set_app_volume,
+            set_app_mute,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -956,6 +982,26 @@ mod tests {
         assert_eq!(state.store.list_presets().len(), 15);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_session_manager_ipc_commands_integration() {
+        let state = AppState::new();
+        let mut mgr = state.session_manager.lock().expect("lock session manager");
+
+        let sessions = mgr.enumerate_sessions().expect("enumerate sessions");
+        assert!(!sessions.is_empty());
+        let pid = sessions[0].process_id;
+
+        mgr.set_process_volume(pid, 0.42).expect("set process volume");
+        let updated = mgr.enumerate_sessions().expect("enumerate sessions");
+        let session = updated.iter().find(|s| s.process_id == pid).unwrap();
+        assert!((session.volume - 0.42).abs() < 1e-4);
+
+        mgr.set_process_mute(pid, true).expect("mute process");
+        let updated2 = mgr.enumerate_sessions().expect("enumerate sessions");
+        let session2 = updated2.iter().find(|s| s.process_id == pid).unwrap();
+        assert!(session2.is_muted);
     }
 }
 
