@@ -366,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="flex items-center gap-2 font-mono text-[11px]">
                   <span className="px-2 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-secondary">
-                    {t.settings.currentVersionLabel}: <strong className="text-text-primary">{updateInfo?.currentVersion || "0.3.0"}</strong>
+                    {t.settings.currentVersionLabel}: <strong className="text-text-primary">{updateInfo?.currentVersion || "0.4.0"}</strong>
                   </span>
                   {updateInfo?.latestVersion && (
                     <span className={`px-2 py-0.5 rounded border ${
