@@ -73,20 +73,30 @@ impl VirtualAudioBridge {
         let start_time = Instant::now();
 
         if let Some(forced) = self.config.force_mode {
-            self.active_mode = forced;
             if forced == BridgeMode::VirtualSinkModeA {
-                if self.virtual_device.is_none() {
-                    if let Ok(Some(real_dev)) = device_manager.find_virtual_device() {
-                        self.virtual_device = Some(real_dev);
-                    } else {
-                        self.virtual_device = Some(AudioDeviceManager::synthetic_virtual_device());
-                    }
+                if let Some(ref sim_id) = self.config.simulated_virtual_endpoint {
+                    self.virtual_device = Some(AudioDeviceInfo::new(
+                        sim_id.clone(),
+                        "Simulated Virtual Audio Cable",
+                        false,
+                    ));
+                    self.active_mode = BridgeMode::VirtualSinkModeA;
+                } else if let Ok(Some(real_dev)) = device_manager.find_virtual_device() {
+                    self.virtual_device = Some(real_dev);
+                    self.active_mode = BridgeMode::VirtualSinkModeA;
+                } else if self.config.allow_synthetic_fallback {
+                    self.virtual_device = Some(AudioDeviceManager::synthetic_virtual_device());
+                    self.active_mode = BridgeMode::VirtualSinkModeA;
+                } else {
+                    self.virtual_device = None;
+                    self.active_mode = BridgeMode::LoopbackFallbackModeB;
                 }
             } else {
                 self.virtual_device = None;
+                self.active_mode = BridgeMode::LoopbackFallbackModeB;
             }
             self.last_switch_time = Some(start_time);
-            return Ok(forced);
+            return Ok(self.active_mode);
         }
 
         if let Some(ref sim_id) = self.config.simulated_virtual_endpoint {
@@ -135,9 +145,7 @@ impl VirtualAudioBridge {
         device_manager: &AudioDeviceManager,
     ) -> EngineResult<BridgeMode> {
         self.config.force_mode = force_mode;
-        if force_mode.is_none() {
-            self.virtual_device = None;
-        }
+        self.virtual_device = None;
         self.detect(device_manager)
     }
 

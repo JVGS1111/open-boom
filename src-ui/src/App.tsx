@@ -169,6 +169,7 @@ export const App: React.FC = () => {
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const [bufferGuardEnabled, setBufferGuardEnabled] = useState(true);
   const [audioBridgeMode, setAudioBridgeMode] = useState<AudioBridgeMode>("auto");
+  const [isSwitchingBridge, setIsSwitchingBridge] = useState(false);
   const [checkUpdatesOnStartup, setCheckUpdatesOnStartup] = useState(true);
   const [autoInstallUpdates, setAutoInstallUpdates] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -561,7 +562,7 @@ export const App: React.FC = () => {
 
   // 4. Auto-save configuration to atomic storage on user settings change (FR29, AD-10)
   useEffect(() => {
-    if (!hasLoadedConfig) return;
+    if (!hasLoadedConfig || isSwitchingBridge) return;
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -970,10 +971,19 @@ export const App: React.FC = () => {
   const handleAudioBridgeModeChange = async (mode: AudioBridgeMode) => {
     const sanitized: AudioBridgeMode =
       mode === "virtual" || mode === "loopback" ? mode : "auto";
+    if (sanitized === audioBridgeMode || isSwitchingBridge) {
+      return;
+    }
+
+    const prevMode = audioBridgeMode;
+    const prevUsingVirtual = usingVirtualBridge;
+
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
+
+    setIsSwitchingBridge(true);
     setAudioBridgeMode(sanitized);
     if (sanitized === "loopback") {
       setUsingVirtualBridge(false);
@@ -983,11 +993,14 @@ export const App: React.FC = () => {
 
     try {
       await invoke("set_audio_bridge_mode", { mode: sanitized });
+      await handleRestartApplication();
     } catch (err) {
       console.error("Failed to set audio bridge mode:", err);
+      setAudioBridgeMode(prevMode);
+      setUsingVirtualBridge(prevUsingVirtual);
+      setIsSwitchingBridge(false);
+      setNotification(`Failed to switch audio capture bridge: ${String(err)}`);
     }
-
-    await handleRestartApplication();
   };
 
   // Virtual Soundstage Speaker Handlers (Story 2.3 & 2.4, FR7)
@@ -1445,6 +1458,7 @@ export const App: React.FC = () => {
         onToggleBufferGuard={handleToggleBufferGuard}
         audioBridgeMode={audioBridgeMode}
         usingVirtualBridge={usingVirtualBridge}
+        isSwitchingBridge={isSwitchingBridge}
         onChangeAudioBridgeMode={handleAudioBridgeModeChange}
         initialTab={settingsInitialTab}
         checkUpdatesOnStartup={checkUpdatesOnStartup}

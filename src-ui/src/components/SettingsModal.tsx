@@ -38,6 +38,7 @@ interface SettingsModalProps {
   onToggleBufferGuard?: () => void;
   audioBridgeMode?: AudioBridgeMode;
   usingVirtualBridge?: boolean;
+  isSwitchingBridge?: boolean;
   onChangeAudioBridgeMode?: (mode: AudioBridgeMode) => void;
   storagePath?: string;
   initialTab?: SettingsTab;
@@ -65,6 +66,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleBufferGuard,
   audioBridgeMode = "auto",
   usingVirtualBridge = false,
+  isSwitchingBridge = false,
   onChangeAudioBridgeMode,
   storagePath = "%APPDATA%\\OpenBoom\\config.json",
   initialTab = "general",
@@ -271,15 +273,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               <select
+                data-testid="audio-bridge-mode-select"
                 value={audioBridgeMode}
+                disabled={isSwitchingBridge}
                 aria-label={t.settings.bridgeModeSelectAria}
                 onChange={(e) => {
                   const val = e.target.value as AudioBridgeMode;
+                  if (val === audioBridgeMode) return;
                   if (onChangeAudioBridgeMode) {
                     onChangeAudioBridgeMode(val);
                   }
                 }}
-                className="w-full px-2.5 py-2 rounded-lg bg-surface-elevated border border-border-default text-xs font-medium text-text-primary focus:outline-none focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan/40 transition-colors cursor-pointer"
+                className="w-full px-2.5 py-2 rounded-lg bg-surface-elevated border border-border-default text-xs font-medium text-text-primary focus:outline-none focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan/40 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <option value="auto" className="bg-surface-card text-text-primary">
                   {t.settings.bridgeModeOptionAuto}
@@ -292,8 +297,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </option>
               </select>
 
-              {audioBridgeMode === "loopback" ? (
-                <div className="bg-status-warning/10 border border-status-warning/40 rounded-md p-2.5 flex items-start gap-2 text-status-warning animate-in fade-in duration-200">
+              <div
+                data-testid="audio-bridge-active-badge"
+                className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border ${
+                  usingVirtualBridge && audioBridgeMode !== "loopback"
+                    ? "text-status-online bg-status-online/10 border-status-online/25"
+                    : "text-status-warning bg-status-warning/10 border-status-warning/25"
+                }`}
+              >
+                <CheckCircle2
+                  className={`w-3 h-3 shrink-0 ${
+                    usingVirtualBridge && audioBridgeMode !== "loopback"
+                      ? "text-status-online"
+                      : "text-status-warning"
+                  }`}
+                />
+                <span>
+                  {usingVirtualBridge && audioBridgeMode !== "loopback"
+                    ? t.settings.bridgeModeActiveVirtual
+                    : t.settings.bridgeModeActiveLoopback}
+                </span>
+              </div>
+
+              {(audioBridgeMode === "loopback" || !usingVirtualBridge) && (
+                <div
+                  data-testid="audio-bridge-loopback-warning"
+                  className="bg-status-warning/10 border border-status-warning/40 rounded-md p-2.5 flex items-start gap-2 text-status-warning animate-in fade-in duration-200"
+                >
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-status-warning" />
                   <div className="text-[11px] leading-tight">
                     <span className="font-semibold block text-amber-400 mb-0.5">
@@ -301,25 +331,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </span>
                     {t.settings.bridgeModeLoopbackWarningDesc}
                   </div>
-                </div>
-              ) : (
-                <div
-                  className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border ${
-                    usingVirtualBridge
-                      ? "text-status-online bg-status-online/10 border-status-online/25"
-                      : "text-status-warning bg-status-warning/10 border-status-warning/25"
-                  }`}
-                >
-                  <CheckCircle2
-                    className={`w-3 h-3 shrink-0 ${
-                      usingVirtualBridge ? "text-status-online" : "text-status-warning"
-                    }`}
-                  />
-                  <span>
-                    {usingVirtualBridge
-                      ? t.settings.bridgeModeActiveVirtual
-                      : t.settings.bridgeModeActiveLoopback}
-                  </span>
                 </div>
               )}
 

@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 15:20
-* **Sprint Ativa:** **Sprint 7 — Sincronização Bidirecional de Volume Mestre com o Windows [CONCLUÍDA]**
-* **Tarefa Atual:** Spec 7.1 (`spec-7-1-windows-endpoint-volume-bidirectional-sync.md`) concluída e revisada com 100% de sucesso via `/bmad-build-auto`. Revisão em 4 lentes aplicada, todas as 10 melhorias embarcadas e suítes completas de testes verdes (212 Cargo + 104 UI).
+* **Data/Hora:** 12/10/2026 - 16:40
+* **Sprint Ativa:** **Sprint 8 / Epic 1 — Seletor de Canal de Captura de Áudio (Driver vs. Emulação Loopback) [CONCLUÍDA]**
+* **Tarefa Atual:** Spec 1.9 (`spec-1-9-audio-capture-bridge-mode-selector.md`) concluída e revisada com 100% de sucesso via `/bmad-build-auto`. Revisão em 4 lentes aplicada (`Blind Hunter`, `Edge Case Hunter`, `Verification Gap Reviewer`, `Intent Alignment Auditor`), todas as 12 melhorias/patches embarcadas e suítes completas de testes verdes (214 Cargo + 106 UI).
 
 
 ## O que foi concluído nesta sessão
@@ -300,15 +300,16 @@
     - **Integração no Backend Tauri (`src-tauri/src/lib.rs`):** `AppState::dispatch_audio_command` centraliza a atualização de `AudioCommand::SetMasterVolume` e `AudioCommand::SetMute`, sincronizando a fila SPSC de áudio e o volume escalar do Windows (`v.clamp(0.0, 1.0)`), emitindo eventos `windows-volume-changed` para o frontend quando o volume/mute do Windows é alterado externamente (barra de tarefas ou teclas de mídia do teclado), e executando `rebind_endpoint` em `handle_master_power_toggle`, `set_audio_device` e `trigger_device_fallback`.
     - **Sincronização Reativa na UI (`src-ui/src/App.tsx` e `src-ui/src/components/Titlebar.tsx`):** Listener para `windows-volume-changed` atualizando `masterVolume` e `isMuted` sem re-invocar `set_master_volume` (prevenindo loops IPC), e desbloqueio automático de mudo (`onToggleMute`) ao arrastar o slider de volume para $> 0$ enquanto mutado.
     - **Verificação Completa de Testes:** 9 testes em `crates/open-boom-wasapi/tests/volume_sync_tests.rs`, testes de despacho em `src-tauri/src/lib.rs` e suíte `src-ui/src/test/TitlebarVolumeSync.test.tsx`. Total global: **212 testes Cargo passando (0 falhas)**, **104 testes UI passando (0 falhas)** e build de produção Vite concluído em 1.90s.
-44. **Implementação do Seletor de Canal de Captura de Áudio (Driver Boom Audio vs. Emulação Loopback) com Reinicialização Automática (T8.2 / ADR-040):**
-    - **Persistência Atômica (`crates/open-boom-storage/src/preset_store.rs`):** Adicionado `audio_bridge_mode: String` (`"auto"`, `"virtual"`, `"loopback"`) em `AppConfig` com sanitizador `sanitize_audio_bridge_mode`.
-    - **Controle Dinâmico de Bridge e StreamPump (`crates/open-boom-wasapi`):** Adicionados `VirtualAudioBridge::set_force_mode`, `AudioEngineCoordinator::set_bridge_force_mode` e `StreamPumpConfig::force_loopback` para permitir ignorar drivers virtuais (`Boom Audio`) e forçar captura WASAPI Loopback direto no dispositivo físico (Modo B) ou forçar Virtual Sink (Modo A).
-    - **Comandos Tauri IPC e Restauração Limpa antes do Restart (`src-tauri/src/lib.rs`):** Comandos `set_audio_bridge_mode` e `get_audio_bridge_mode`, restaurando o endpoint físico do Windows antes do restart quando em modo `"loopback"` e encerrando o `AudioStreamPump` em `restart_application` antes de `app.restart()`.
-    - **UI e Internacionalização (`SettingsModal.tsx`, `App.tsx`, `i18n`):** Card dedicado nas configurações gerais com `<select>` acessível para os 3 modos, badge do canal ativo, alerta âmbar de eco no Modo B sem driver, reinicialização automática ao trocar o canal e paridade 100% em `pt-BR`, `en` e `es`.
-    - **Verificação Completa de Testes:** **214 testes Cargo passando (0 falhas)** e **106 testes UI passando (0 falhas)**.
+44. **Implementação e Revisão Completa do Seletor de Canal de Captura de Áudio (Driver Boom Audio vs. Emulação Loopback) com Reinicialização Automática (Spec 1.9 / T8.2 / ADR-040):**
+    - **Artefato de Implementação BMAD (`_bmad-output/implementation-artifacts/spec-1-9-audio-capture-bridge-mode-selector.md`):** Spec completa com `<intent-contract>`, `I/O & Edge-Case Matrix`, `Code Map`, `Tasks & Acceptance`, `Review Triage Log` (12 achados das 4 lentes de review: 1 high, 7 medium, 4 low — 100% patcheados) e `Auto Run Result`, além de atualização de `_bmad-output/implementation-artifacts/sprint-status.yaml`.
+    - **Persistência Atômica (`crates/open-boom-storage/src/preset_store.rs`):** Adicionado `audio_bridge_mode: String` (`"auto"`, `"virtual"`, `"loopback"`) em `AppConfig` com sanitizador `sanitize_audio_bridge_mode` e testes de regressão em `storage_tests.rs`.
+    - **Controle Dinâmico de Bridge e StreamPump (`crates/open-boom-wasapi`):** Adicionados `VirtualAudioBridge::set_force_mode`, `AudioEngineCoordinator::set_bridge_force_mode`, `AudioEngineCoordinator::bridge_force_mode` e `StreamPumpConfig::force_loopback` para permitir ignorar drivers virtuais (`Boom Audio`) e forçar captura WASAPI Loopback direto no dispositivo físico (Modo B) ou forçar Virtual Sink (Modo A) com fallback seguro quando o driver não está instalado no host.
+    - **Comandos Tauri IPC, Inicialização Unificada e Restauração Limpa antes do Restart (`src-tauri/src/lib.rs`):** Construtor unificado `AppState::with_options(store, startup, auto_route)` (roteando o endpoint padrão do Windows antes de iniciar o `AudioStreamPump`), comandos `set_audio_bridge_mode` e `get_audio_bridge_mode`, sincronização de `audio_bridge_mode` em `save_app_config`, e chamada incondicional a `restore_physical_default_device()` e parada do `AudioStreamPump` em `restart_application` antes de `app.restart()`.
+    - **UI e Internacionalização (`SettingsModal.tsx`, `App.tsx`, `i18n`):** Card dedicado nas configurações gerais com `<select>` acessível para os 3 modos, badge permanente do canal ativo (`Mode A` ou `Mode B`), alerta âmbar de eco no Modo B sem driver, guarda de early-return e rollback em caso de erro de IPC, reinicialização automática ao trocar o canal e paridade 100% em `pt-BR`, `en` e `es`.
+    - **Verificação Completa de Testes & Smoke Test Local:** **214 testes Cargo passando (0 falhas)**, **106 testes UI passando (0 falhas)**, build Vite em 1.90s e smoke launch local de `open-boom.exe` verificado com sucesso (`PID=18752`, `Responding=True`).
 
 ## O que está em andamento agora
-* **Todos os épicos planejados (Epics 1 a 8 + T8.2) estão 100% implementados, revisados e testados.**
+* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2) estão 100% implementados, revisados pelo fluxo `/bmad-build-auto` e testados.**
 
 ## Bloqueios / Pendências
 * Nenhum bloqueio. Sistema com 214 testes Cargo verdes e 106 testes UI verdes.

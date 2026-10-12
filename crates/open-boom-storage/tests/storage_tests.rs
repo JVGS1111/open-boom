@@ -151,6 +151,7 @@ fn test_partial_json_field_defaults() {
     assert!((loaded.orbit_depth - 0.85).abs() < 1e-6);
     assert!(loaded.check_updates_on_startup);
     assert!(!loaded.auto_install_updates);
+    assert_eq!(loaded.audio_bridge_mode, "auto");
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -177,6 +178,7 @@ fn test_orbital_config_persistence_and_legacy_json_compatibility() {
     assert_eq!(loaded_legacy.orbit_direction, open_boom_storage::OrbitDirection::Clockwise);
     assert!((loaded_legacy.orbit_period_sec - 12.0).abs() < 1e-6);
     assert!((loaded_legacy.orbit_depth - 0.85).abs() < 1e-6);
+    assert_eq!(loaded_legacy.audio_bridge_mode, "auto");
 
     // 2. Custom 8D settings are saved atomically and reloaded faithfully
     let mut custom_cfg = AppConfig::default();
@@ -184,6 +186,7 @@ fn test_orbital_config_persistence_and_legacy_json_compatibility() {
     custom_cfg.orbit_direction = open_boom_storage::OrbitDirection::CounterClockwise;
     custom_cfg.orbit_period_sec = 6.5;
     custom_cfg.orbit_depth = 0.50;
+    custom_cfg.audio_bridge_mode = "loopback".to_string();
 
     store.save_config(&custom_cfg).expect("save custom orbit config");
 
@@ -192,6 +195,7 @@ fn test_orbital_config_persistence_and_legacy_json_compatibility() {
     assert_eq!(loaded_custom.orbit_direction, open_boom_storage::OrbitDirection::CounterClockwise);
     assert!((loaded_custom.orbit_period_sec - 6.5).abs() < 1e-6);
     assert!((loaded_custom.orbit_depth - 0.50).abs() < 1e-6);
+    assert_eq!(loaded_custom.audio_bridge_mode, "loopback");
 
     // Test PingPong direction persistence as well
     custom_cfg.orbit_direction = open_boom_storage::OrbitDirection::PingPong;
@@ -204,17 +208,26 @@ fn test_orbital_config_persistence_and_legacy_json_compatibility() {
     assert!((loaded_pingpong.orbit_period_sec - 24.0).abs() < 1e-6);
     assert!((loaded_pingpong.orbit_depth - 1.0).abs() < 1e-6);
 
-    // 3. Test defensive sanitization against out-of-bounds numbers and NaN
+    // 3. Test defensive sanitization against out-of-bounds numbers, NaN, and invalid/untrimmed audio_bridge_mode
     let corrupt_bounds_json = r#"{
         "orbit_enabled": true,
         "orbit_direction": "Clockwise",
         "orbit_period_sec": 999.0,
-        "orbit_depth": -0.5
+        "orbit_depth": -0.5,
+        "audio_bridge_mode": "invalid_channel"
     }"#;
     fs::write(store.config_path(), corrupt_bounds_json).unwrap();
     let loaded_sanitized = store.load_config().expect("load corrupt bounds config");
     assert_eq!(loaded_sanitized.orbit_period_sec, 12.0);
     assert_eq!(loaded_sanitized.orbit_depth, 0.85);
+    assert_eq!(loaded_sanitized.audio_bridge_mode, "auto");
+
+    let untrimmed_bridge_json = r#"{
+        "audio_bridge_mode": "  VIRTUAL  "
+    }"#;
+    fs::write(store.config_path(), untrimmed_bridge_json).unwrap();
+    let loaded_untrimmed = store.load_config().expect("load untrimmed bridge mode config");
+    assert_eq!(loaded_untrimmed.audio_bridge_mode, "virtual");
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

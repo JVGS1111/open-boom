@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-10-2026 13:25
-last_updated: 10-10-2026 16:15
+last_updated: 12-10-2026 16:38
 project: open-boom
 project_key: NOKEY
 tracking_system: file-system
@@ -45,6 +45,7 @@ development_status:
   1-6-phase-continuous-instant-a-b-bypass: done
   1-7-application-preferences-window-geometry-system-startup-persi: done
   1-8-virtual-audio-device-bridge-rea-reverse-engineering: done
+  1-9-audio-capture-bridge-mode-selector: done
   epic-1-retrospective: optional
 
   epic-2: done
@@ -86,5 +87,6 @@ development_status:
   7-1-windows-endpoint-volume-bidirectional-sync: done
   epic-7-retrospective: optional
 
-
-
+  epic-8: done
+  8-1-in-app-auto-update-mechanism: done
+  epic-8-retrospective: optional

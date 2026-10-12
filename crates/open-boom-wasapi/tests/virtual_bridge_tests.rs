@@ -207,7 +207,9 @@ fn test_dynamic_set_force_mode_switching() {
         .set_bridge_force_mode(Some(BridgeMode::VirtualSinkModeA))
         .expect("force Mode A");
     assert_eq!(mode_a, BridgeMode::VirtualSinkModeA);
+    assert_eq!(coordinator.bridge_force_mode(), Some(BridgeMode::VirtualSinkModeA));
     assert!(coordinator.is_using_virtual_bridge());
+    assert!(coordinator.bridge().virtual_device().is_some());
     assert!(coordinator.telemetry_snapshot().using_virtual_bridge);
 
     // Force Mode B (Loopback Fallback without driver)
@@ -215,7 +217,9 @@ fn test_dynamic_set_force_mode_switching() {
         .set_bridge_force_mode(Some(BridgeMode::LoopbackFallbackModeB))
         .expect("force Mode B");
     assert_eq!(mode_b, BridgeMode::LoopbackFallbackModeB);
+    assert_eq!(coordinator.bridge_force_mode(), Some(BridgeMode::LoopbackFallbackModeB));
     assert!(!coordinator.is_using_virtual_bridge());
+    assert!(coordinator.bridge().virtual_device().is_none());
     assert!(!coordinator.telemetry_snapshot().using_virtual_bridge);
 
     // Return to Auto (None)
@@ -224,5 +228,27 @@ fn test_dynamic_set_force_mode_switching() {
         .expect("restore Auto mode");
     assert_eq!(mode_auto, BridgeMode::LoopbackFallbackModeB);
     assert_eq!(coordinator.bridge().force_mode(), None);
+    assert!(coordinator.bridge().virtual_device().is_none());
+
+    // Verify Mode B overrides a present virtual device, and Mode A without synthetic fallback falls back safely when driver is absent
+    let mgr_with_virtual = AudioDeviceManager::with_forced_synthetic_and_virtual(true, true);
+    let mut bridge = VirtualAudioBridge::new(VirtualBridgeConfig {
+        allow_synthetic_fallback: false,
+        ..Default::default()
+    });
+    assert_eq!(bridge.detect(&mgr_with_virtual).unwrap(), BridgeMode::VirtualSinkModeA);
+    assert!(bridge.virtual_device().is_some());
+    assert_eq!(
+        bridge.set_force_mode(Some(BridgeMode::LoopbackFallbackModeB), &mgr_with_virtual).unwrap(),
+        BridgeMode::LoopbackFallbackModeB
+    );
+    assert!(bridge.virtual_device().is_none());
+
+    let mgr_without_virtual = AudioDeviceManager::with_forced_synthetic_and_virtual(true, false);
+    assert_eq!(
+        bridge.set_force_mode(Some(BridgeMode::VirtualSinkModeA), &mgr_without_virtual).unwrap(),
+        BridgeMode::LoopbackFallbackModeB
+    );
+    assert!(bridge.virtual_device().is_none());
 }
 

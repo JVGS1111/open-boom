@@ -249,6 +249,11 @@ impl AudioEngineCoordinator {
         self.bridge.set_force_mode(force_mode, &self.device_manager)
     }
 
+    /// Returns the currently configured forced operating mode on the virtual audio bridge, if any.
+    pub fn bridge_force_mode(&self) -> Option<BridgeMode> {
+        self.bridge.force_mode()
+    }
+
     /// Handles loss or invalidation of the virtual device endpoint within 500ms.
     ///
     /// Transitions capture smoothly from Mode A to driverless loopback fallback (Mode B).

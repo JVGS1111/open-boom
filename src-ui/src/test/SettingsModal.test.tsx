@@ -113,7 +113,7 @@ export function runSettingsModalTests(): TestResult[] {
     );
   });
 
-  test("Audio Capture Bridge Mode selector renders options and active virtual channel status", () => {
+  test("Audio Capture Bridge Mode selector renders options, selected value, and active Mode A virtual status badge", () => {
     const html = renderToStaticMarkup(
       <SettingsModal
         isOpen={true}
@@ -131,13 +131,21 @@ export function runSettingsModalTests(): TestResult[] {
       "Should render all three audio bridge mode select options (auto, virtual, loopback)"
     );
     assert(
-      html.includes("Mode A") || html.includes("Modo A"),
-      "Should display active Mode A virtual sink status"
+      /<option[^>]*value="virtual"[^>]*selected=""/.test(html),
+      "Should mark the virtual option as selected when audioBridgeMode is virtual"
+    );
+    assert(
+      html.includes("Active Channel: Mode A") || html.includes("Canal Ativo: Modo A"),
+      "Should display the exact Active Channel: Mode A virtual sink status badge"
+    );
+    assert(
+      !html.includes("data-testid=\"audio-bridge-loopback-warning\""),
+      "Should not render loopback warning banner when virtual bridge is active in Mode A"
     );
   });
 
-  test("Audio Capture Bridge Mode selector displays amber warning banner when loopback is selected", () => {
-    const html = renderToStaticMarkup(
+  test("Audio Capture Bridge Mode selector displays both Mode B badge and amber warning banner when loopback is selected or active", () => {
+    const htmlLoopback = renderToStaticMarkup(
       <SettingsModal
         isOpen={true}
         onClose={() => {}}
@@ -148,9 +156,43 @@ export function runSettingsModalTests(): TestResult[] {
       />
     );
     assert(
-      html.includes("Mode B (Driverless Loopback)") ||
-        html.includes("Modo B (Emulação Loopback Sem Driver)"),
+      /<option[^>]*value="loopback"[^>]*selected=""/.test(htmlLoopback),
+      "Should mark the loopback option as selected when audioBridgeMode is loopback"
+    );
+    assert(
+      htmlLoopback.includes("Active Channel: Mode B") ||
+        htmlLoopback.includes("Canal Ativo: Modo B"),
+      "Should display Active Channel: Mode B badge when loopback is selected"
+    );
+    assert(
+      htmlLoopback.includes("Mode B (Driverless Loopback)") ||
+        htmlLoopback.includes("Modo B (Emulação Loopback Sem Driver)"),
       "Should display Mode B driverless loopback warning banner when loopback mode is selected"
+    );
+
+    const htmlAutoFallback = renderToStaticMarkup(
+      <SettingsModal
+        isOpen={true}
+        onClose={() => {}}
+        launchOnStartup={false}
+        onToggleStartup={() => {}}
+        audioBridgeMode="auto"
+        usingVirtualBridge={false}
+        isSwitchingBridge={true}
+      />
+    );
+    assert(
+      htmlAutoFallback.includes("Active Channel: Mode B") ||
+        htmlAutoFallback.includes("Canal Ativo: Modo B"),
+      "Should display Active Channel: Mode B badge when auto mode falls back to loopback"
+    );
+    assert(
+      htmlAutoFallback.includes("data-testid=\"audio-bridge-loopback-warning\""),
+      "Should display warning banner when auto mode falls back to Mode B loopback"
+    );
+    assert(
+      htmlAutoFallback.includes("disabled=\"\""),
+      "Should disable select control while bridge mode switch/restart is in flight"
     );
   });
 
