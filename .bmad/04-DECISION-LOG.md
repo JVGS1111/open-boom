@@ -551,3 +551,28 @@
 
 
 
+
+---
+
+## ADR-037: Arquitetura Hexagonal Multi-Plataforma de Áudio (Linux & macOS Cross-Platform Engine)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Registrado
+* **Contexto:** Com a consolidação bem-sucedida de todos os 6 Épicos no Windows (v0.3.0), o OpenBoom expande seu escopo para suporte estável multi-plataforma (Linux e macOS). Era necessário desacoplar o motor de DSP das APIs de áudio nativas do Windows sem degradar o desempenho em tempo real, mantendo zero alocações na heap, latência < 15ms e sem duplicação de lógica de processamento acústico.
+* **Decisões:**
+  1. **Adoção do Paradigma Hexagonal (Ports and Adapters):**
+     - **Core de Domínio (`crates/open-boom-core`):** 100% puro e agnóstico de plataforma. Mantém todo o DSP matemático (KEMAR HRTF, EQ 31 bandas, Reverb FDN, Exciter, DRC, Limiter, 8D Orbit) e filas circulares SPSC lock-free.
+     - **Port Primário (`AudioHostBackend` Trait):** Define a abstração padrão de ciclo de vida (`start`, `stop`), envio de comandos POD, consulta de telemetria, enumeração/seleção de dispositivos e guarda de estabilidade de buffer (`set_buffer_guard`).
+     - **Port Secundário (`SessionManager` Trait):** Abstrai o mixer de volume e mute por aplicação.
+  2. **Adapters por Plataforma:**
+     - **Windows (`crates/open-boom-wasapi`):** Continua consumindo WASAPI Loopback, driver virtual SYSVAD (`boomvad.sys`) e `IAudioSessionManager2` em thread COM MTA sob MMCSS.
+     - **Linux (`crates/open-boom-pipewire`):** Cria um nó de processamento virtual sink (`OpenBoom Sink`) no grafo nativo do PipeWire via `libpipewire`/`pw-filter` com `PW_KEY_NODE_DONT_RECONNECT = true` e prioridade em tempo real via D-Bus RTKit (`org.freedesktop.RealtimeKit1`).
+     - **macOS (`crates/open-boom-coreaudio`):** Ingestão via Virtual Audio Device (driver CoreAudio HAL `OpenBoom.driver` ou compatível com BlackHole), agendado sob `THREAD_TIME_CONSTRAINT_POLICY`.
+     - **Mock Backend (`crates/open-boom-core::mock`):** Permite execução de testes automatizados e suítes headless em qualquer plataforma sem necessidade de servidor de áudio ativo.
+  3. **Isolamento de Crates e Compilação Condicional:**
+     - O container Tauri (`src-tauri`) utiliza `#[cfg(target_os = "...")]` para instanciar dinamicamente o adapter de áudio apropriado no `AppState`. Nenhuma dependência nativa de C/Windows é compilada no Linux ou Mac.
+  4. **Padronização de Diretórios de Configuração e Autostart:**
+     - Persistência desacoplada via `dirs::config_dir()` (`%APPDATA%` no Windows, `~/.config/openboom/` no Linux, `~/Library/Application Support/OpenBoom/` no macOS).
+     - Autostart gerenciado por SO (`HKCU\Run` no Windows, `.desktop` em `~/.config/autostart/` no Linux, e `LaunchAgents` plist no macOS).
+  5. **CI/CD Matrix no GitHub Actions:**
+     - Pipeline estendido para `windows-latest`, `ubuntu-latest` e `macos-latest`, gerando executáveis e instaladores nativos para cada sistema.
+* **Consequência:** A espinha de arquitetura multi-plataforma está documentada e finalizada em `_bmad-output/planning-artifacts/architecture/architecture-open-boom-2026-10-12/ARCHITECTURE-SPINE.md`.

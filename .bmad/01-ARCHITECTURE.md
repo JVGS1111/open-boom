@@ -7,33 +7,35 @@
                       |   OpenBoom Frontend (Desktop UI)  |
                       |   Dark Theme Fluent / Controls    |
                       +-----------------+-----------------+
-                                        | IPC / State
+                                        | IPC / State (Tauri v2)
                                         v
-+-------------------------------------------------------------------------+
-|                        OpenBoom Audio Engine Core                       |
-|                                                                         |
-|  [ Ingestão de Áudio ]                                                  |
-|     ├─ Modo Primário: Virtual Audio Device Sink (PortCls / SYSVAD / boomvad) |
-|     │    └─ Captura transparente multi-canal (até 7.1) sem duplicação acústica |
-|     ├─ Modo Fallback: WASAPI Process-Loopback Capture (Modo Driverless) |
-|     └─ IAudioSessionManager2 (Mixer por aplicação individual no Virtual Sink) |
-|                                                                         |
-|  [ Pipeline de DSP em Tempo Real (Buffers PCM Float32) ]               |
-|     ├─ 1. Pré-Amp & Gain Staging                                        |
-|     ├─ 2. 3D Spatializer (HRTF Convolution / Virtual 5.1/7.1 Matrix)    |
-|     ├─ 3. Equalizer Multibanda (Filtros Biquad Peaking/Shelving)        |
-|     ├─ 4. AutoEq Headphone Profile Calibration                          |
-|     ├─ 5. Dynamic Effects:                                              |
-|     │    ├─ Ambience (Stereo Delay & Convolution Reverb)                |
-|     │    ├─ Fidelity (Odd/Even Harmonic Distortion Exciter)             |
-|     │    ├─ Night Mode (Fast Attack / Soft Knee Dynamic Compressor)     |
-|     │    ├─ Spatial (Mid/Side Stereo Expander & Crossfeed)              |
-|     │    └─ Pitch Shifter (Phase Vocoder / Delay Modulation)            |
-|     └─ 6. Master Limiter (Lookahead Peak Limiter para evitar clipping)  |
-|                                                                         |
-|  [ Saída de Áudio ]                                                     |
-|     └─ WASAPI Shared / Exclusive Low-Latency Render (Dispositivo Físico)|
-+-------------------------------------------------------------------------+
++-----------------------------------------------------------------------------+
+|               Platform Audio Host Adapter (Trait: AudioHostBackend)         |
+|   ├─ Windows Adapter (open-boom-wasapi): WASAPI Loopback / boomvad.sys      |
+|   ├─ Linux Adapter (open-boom-pipewire): PipeWire Graph Node / pw-filter    |
+|   ├─ macOS Adapter (open-boom-coreaudio): CoreAudio HAL Virtual Driver      |
+|   └─ Mock Adapter (crates/open-boom-core::mock): Headless CI & Testing      |
++---------------------------------------+-------------------------------------+
+                                        |
+                   Lock-Free SPSC Queue | Float32 48kHz PCM
+                                        v
++-----------------------------------------------------------------------------+
+|               OpenBoom Pure DSP Engine Core (open-boom-core)                |
+|                                                                             |
+|  [ Pipeline de DSP em Tempo Real (Buffers PCM Float32 @ 48,000 Hz) ]        |
+|     ├─ 1. Pré-Amp & Gain Staging                                            |
+|     ├─ 2. 3D Spatializer (HRTF KEMAR 64-tap SSE2 / 8D Orbital Modulation)   |
+|     ├─ 3. Equalizer Multibanda (31 bandas ISO 1/3-oitava Direct Form II T)   |
+|     ├─ 4. AutoEq Headphone Profile Calibration (Parametric Auto-Gain)       |
+|     ├─ 5. Dynamic Effects Rack:                                             |
+|     │    ├─ Ambience (Stereo Delay & Schroeder-Moorer FDN Reverb)           |
+|     │    ├─ Fidelity (Odd/Even Harmonic Distortion Exciter)                 |
+|     │    ├─ Night Mode (Fast Attack / Soft Knee Dynamic Compressor)         |
+|     │    ├─ Spatial (Mid/Side Stereo Expander & Sub-Bass Centering)         |
+|     │    └─ Pitch Shifter (Fase 2)                                          |
+|     └─ 6. Master Lookahead Peak Limiter (Brickwall -0.2 dBFS com Peak-Hold) |
++-----------------------------------------------------------------------------+
+
 ```
 
 ## 2. Camadas do Projeto

@@ -281,13 +281,20 @@
 40. **Validação de Execução ao Vivo, Lançamento da Versão v0.3.0 & Publicação no GitHub:**
     - **Teste de Inicialização do Executável (`open-boom.exe`):** Compilação de produção (`cargo build --release -p open-boom`) concluída em 26.6s. Teste de execução ao vivo via PowerShell confirmando que o processo inicia de forma saudável, sem falhas de apartamentos COM, sem crashes de acesso e com alocação e carregamento perfeitos.
     - **Versionamento & Bump para v0.3.0:** Versão incrementada para `0.3.0` em `Cargo.toml`, `package.json`, `src-tauri/tauri.conf.json`, `src-ui/package.json` e `Cargo.lock`.
-    - **Tag & Publicação no Repositório Remoto:** Criada a tag anotada `v0.3.0` e efetuado o `git push origin main` e `git push origin v0.3.0`. Pipeline CI/CD GitHub Actions (`.github/workflows/release.yml`) acionado para compilar os instaladores NSIS e executáveis portáteis.
+41. **Execução e Conclusão do Workflow de Arquitetura Multi-Plataforma (`/bmad-architecture`):**
+    - Executado workflow em Fast Path para definição da arquitetura de suporte estável a **Linux (PipeWire)** e **macOS (CoreAudio)**.
+    - Definido o padrão Hexagonal (Ports and Adapters) desacoplando `open-boom-core` (DSP puro) das APIs nativas de áudio via trait `AudioHostBackend` e trait `SessionManager`.
+    - Especificadas as decisões arquiteturais `AD-37` (Trait Abstraction & Adapters), `AD-38` (PipeWire Graph Node & RTKit no Linux), `AD-39` (CoreAudio HAL Virtual Device no macOS), `AD-40` (Session Mixer Multiplataforma), `AD-41` (Resolução de Diretórios e Autostart) e `AD-42` (Matrix CI/CD GitHub Actions).
+    - Linter `lint_spine.py` executado com 0 avisos, revisões de Tech Stack e Adversarial concluídas e arquivadas em `reviews/`.
+    - Documento `ARCHITECTURE-SPINE.md` finalizado em `_bmad-output/planning-artifacts/architecture/architecture-open-boom-2026-10-12/`.
+    - Registro do **ADR-037** no `.bmad/04-DECISION-LOG.md`.
 
 ## O que está em andamento agora
-* **Épico 6 e Versão v0.3.0 Concluídos e Publicados:** Épicos 1 a 6 100% finalizados, tag `v0.3.0` publicada no GitHub e pipeline de release gerando os artefatos de distribuição.
+* **Arquitetura Multi-Plataforma Concluída:** Pronto para avançar para a decomposição em Épicos e Histórias (`/bmad-create-epics-and-stories`) para o porte de Linux e Mac.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema estável, testado e publicado.
+* Nenhum bloqueio. Sistema com base Windows 100% verde (v0.3.0) e arquitetura de expansão multi-plataforma formalizada.
+
 
 
 
