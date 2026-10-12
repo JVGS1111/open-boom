@@ -31,6 +31,8 @@ export interface TranslationDictionary {
     appVolumesTooltip: string;
     settingsTooltip: string;
     languageTooltip: string;
+    updateAvailable: string;
+    updateTooltip: string;
     minimizeTooltip: string;
     closeTooltip: string;
   };
@@ -169,5 +171,25 @@ export interface TranslationDictionary {
     windowGeometryDesc: string;
     realTimeSafety: string;
     realTimeSafetyDesc: string;
+    generalTab: string;
+    updatesTitle: string;
+    updatesSubtitle: string;
+    updateReadyMessage: string;
+    checkUpdatesOnStartupTitle: string;
+    checkUpdatesOnStartupDesc: string;
+    autoInstallUpdatesTitle: string;
+    autoInstallUpdatesDesc: string;
+    checkForUpdatesButton: string;
+    checkingForUpdates: string;
+    downloadAndInstallButton: string;
+    downloadingUpdate: string;
+    restartApplicationButton: string;
+    upToDateMessage: string;
+    updateAvailableMessage: string;
+    updateFailedMessage: string;
+    publishedOn: string;
+    releaseNotesTitle: string;
+    currentVersionLabel: string;
+    latestVersionLabel: string;
   };
 }

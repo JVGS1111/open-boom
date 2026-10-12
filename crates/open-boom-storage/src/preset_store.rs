@@ -116,6 +116,10 @@ pub struct AppConfig {
     pub orbit_depth: f32,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default = "default_true")]
+    pub check_updates_on_startup: bool,
+    #[serde(default)]
+    pub auto_install_updates: bool,
 }
 
 fn default_orbit_direction() -> OrbitDirection {
@@ -167,6 +171,8 @@ impl Default for AppConfig {
             orbit_period_sec: 12.0,
             orbit_depth: 0.85,
             language: None,
+            check_updates_on_startup: true,
+            auto_install_updates: false,
         }
     }
 }

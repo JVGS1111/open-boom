@@ -576,3 +576,25 @@
   5. **CI/CD Matrix no GitHub Actions:**
      - Pipeline estendido para `windows-latest`, `ubuntu-latest` e `macos-latest`, gerando executáveis e instaladores nativos para cada sistema.
 * **Consequência:** A espinha de arquitetura multi-plataforma está documentada e finalizada em `_bmad-output/planning-artifacts/architecture/architecture-open-boom-2026-10-12/ARCHITECTURE-SPINE.md`.
+
+---
+
+## ADR-038: Sistema de Atualização In-App a Custo Zero via GitHub Releases API (Spec 8.1)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** O usuário solicitou um mecanismo de atualização integrado ao OpenBoom que funcione sem necessidade de servidores pagos ou infraestrutura de terceiros, verificando atualizações ao abrir o aplicativo, exibindo um botão indicador de destaque no cabeçalho quando houver nova versão, levando direto para `Configurações -> Atualizações`, e oferecendo switches de verificação automática na abertura e atualização automática com botão de reinicialização no mesmo slot de ação.
+* **Decisões:**
+  1. **Integração Direta com GitHub Releases (`check_for_updates`, `download_and_install_update`, `restart_application`):**
+     - Consulta assíncrona ao endpoint público `https://api.github.com/repos/JVGS1111/open-boom/releases/latest` sem custo de hospedagem.
+     - Comparador SemVer (`is_version_newer`) que analisa tuplas numéricas `(major, minor, patch)` e trata versões estáveis como mais recentes que pre-releases de mesma versão base (`0.3.0 > 0.3.0-beta.1`).
+     - Execução de subprocessos PowerShell no Windows configurada com `CREATE_NO_WINDOW` (`0x08000000`) para impedir qualquer piscar de janela de terminal e saída de erro explícita (`[Console]::Error.WriteLine` + `exit 1`).
+     - Download em `%TEMP%\OpenBoom-Update-{pid}.exe` e execução silenciosa (`/S`) de instaladores NSIS.
+  2. **Persistência Atômica de Preferências (`AppConfig`):**
+     - Adicionados `check_updates_on_startup: bool` (default `true`) e `auto_install_updates: bool` (default `false`) em `crates/open-boom-storage/src/preset_store.rs` com `#[serde(default = "...")]` para total retrocompatibilidade.
+  3. **UX e Navegação Integrada (`Titlebar.tsx` & `SettingsModal.tsx`):**
+     - Botão de destaque âmbar pulsante (`<ArrowUpCircle />`) exibido na `Titlebar` exclusivamente quando `hasUpdate === true`, abrindo `SettingsModal` diretamente na aba `"updates"`.
+     - `SettingsModal` organizado em abas (`Geral` e `Atualizações`) com chips de versão atual vs. disponível, caixa de notas de lançamento, switches de preferências e botão de ação unificado no mesmo slot (`Verificar Atualizações` / `Baixar e Instalar` / `Reiniciar Aplicação`).
+  4. **Internacionalização 100% Paritária (`en`, `pt-BR`, `es`):**
+     - Todas as strings do fluxo de atualização e abas foram adicionadas em `types.ts`, `en.ts`, `pt-BR.ts` e `es.ts`.
+* **Consequência:** 9 novos testes unitários em `Updater.test.tsx` (104 testes UI verdes) e novos testes Rust de SemVer e persistência (194+ testes Cargo verdes).
+

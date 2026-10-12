@@ -1,5 +1,4 @@
-import React from "react";
-import { Sliders, Volume2, VolumeX, Minus, X, Settings, Layers } from "lucide-react";
+import { Sliders, Volume2, VolumeX, Minus, X, Settings, Layers, ArrowUpCircle } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MasterPowerSwitch } from "./MasterPowerSwitch";
 import { DeviceSelector, AudioDeviceInfo } from "./DeviceSelector";
@@ -16,9 +15,11 @@ interface TitlebarProps {
   devices: AudioDeviceInfo[];
   activeDeviceId: string;
   onSelectDevice: (deviceId: string) => void;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (initialTab?: "general" | "updates") => void;
   onToggleAppMixer?: () => void;
   isAppMixerOpen?: boolean;
+  hasUpdate?: boolean;
+  onOpenUpdates?: () => void;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
@@ -34,6 +35,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   onOpenSettings,
   onToggleAppMixer,
   isAppMixerOpen,
+  hasUpdate = false,
+  onOpenUpdates,
 }) => {
   const { t } = useI18n();
 
@@ -186,9 +189,25 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         {/* Dedicated Language Menu Dropdown */}
         <LanguageMenu />
 
+        {/* Update Notification Action Badge */}
+        {hasUpdate && (
+          <button
+            type="button"
+            onClick={onOpenUpdates || (() => onOpenSettings?.("updates"))}
+            className="h-7 px-2 rounded flex items-center gap-1.5 text-amber-400 bg-amber-400/15 border border-amber-400/40 hover:bg-amber-400/25 transition-all shadow-[0_0_10px_rgba(251,191,36,0.25)] animate-pulse cursor-pointer mr-0.5"
+            title={t.titlebar.updateTooltip}
+            aria-label={t.titlebar.updateAvailable}
+          >
+            <ArrowUpCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[10px] font-bold tracking-wider uppercase font-mono hidden sm:inline">
+              Update
+            </span>
+          </button>
+        )}
+
         <button
           type="button"
-          onClick={onOpenSettings}
+          onClick={() => onOpenSettings?.("general")}
           className="w-8 h-8 rounded flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-card transition-colors cursor-pointer mr-0.5"
           title={t.titlebar.settingsTooltip}
           aria-label={t.titlebar.settingsTooltip}

@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 11:15
-* **Sprint Ativa:** **Sprint 6 — Modo 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica) [CONCLUÍDA]**
-* **Tarefa Atual:** Épico 6 e Story 6.3 concluídos e revisados com 100% de sucesso. Revisão adversarial em 4 camadas concluída, correções aplicadas, e suítes completas de testes verdes (194 Cargo + 95 UI).
+* **Data/Hora:** 12/10/2026 - 15:16
+* **Sprint Ativa:** **Sprint 8 — Experiência de Distribuição & Auto-Update In-App [CONCLUÍDA]**
+* **Tarefa Atual:** Spec 8.1 (`spec-8-1-in-app-auto-update-mechanism.md`) concluída e revisada com 100% de sucesso via `/bmad-build-auto`. Revisão em 4 lentes aplicada, correções embarcadas e suítes completas de testes verdes (194+ Cargo + 104 UI).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -288,12 +288,18 @@
     - Linter `lint_spine.py` executado com 0 avisos, revisões de Tech Stack e Adversarial concluídas e arquivadas em `reviews/`.
     - Documento `ARCHITECTURE-SPINE.md` finalizado em `_bmad-output/planning-artifacts/architecture/architecture-open-boom-2026-10-12/`.
     - Registro do **ADR-037** no `.bmad/04-DECISION-LOG.md`.
+42. **Implementação e Verificação Completa do Sistema de Auto-Update In-App a Custo Zero (Spec 8.1 / ADR-038):**
+    - **Persistência Atômica (`crates/open-boom-storage/src/preset_store.rs`):** Adicionados `check_updates_on_startup: bool` (default `true`) e `auto_install_updates: bool` (default `false`) em `AppConfig` com retrocompatibilidade total via `#[serde(default = "...")]`.
+    - **Comandos Tauri IPC (`src-tauri/src/lib.rs`):** Implementados `check_for_updates`, `download_and_install_update` e `restart_application` consumindo a API pública do GitHub Releases (`https://api.github.com/repos/JVGS1111/open-boom/releases/latest`), com comparador SemVer sensível a pre-releases (`is_version_newer`), subprocessos PowerShell silenciosos (`CREATE_NO_WINDOW = 0x08000000`) sem janela piscando, saída de erro explícita (`exit 1`) e download temporário isolado por PID (`OpenBoom-Update-{pid}.exe`).
+    - **Indicador na Barra de Título (`src-ui/src/components/Titlebar.tsx`):** Botão âmbar pulsante com ícone `<ArrowUpCircle />` exibido quando `hasUpdate === true`, abrindo diretamente `Configurações -> Atualizações`.
+    - **Painel de Atualizações (`src-ui/src/components/SettingsModal.tsx`):** Navegação por abas (`Geral` e `Atualizações`), chips de versão atual vs. disponível, caixa de notas de versão, switches de checagem na abertura e atualização automática, e botão de ação unificado no mesmo slot (`Verificar Atualizações`, `Baixar e Instalar` e `Reiniciar Aplicação`).
+    - **Internacionalização & Testes (`src-ui/src/i18n/` & `Updater.test.tsx`):** Paridade 100% entre `en`, `pt-BR` e `es`; 104 testes de UI verdes e 194+ testes Cargo verdes.
 
 ## O que está em andamento agora
-* **Arquitetura Multi-Plataforma Concluída:** Pronto para avançar para a decomposição em Épicos e Histórias (`/bmad-create-epics-and-stories`) para o porte de Linux e Mac.
+* **Auto-Update In-App Concluído (Spec 8.1):** Sistema 100% funcional, testado e pronto para uso em produção.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com base Windows 100% verde (v0.3.0) e arquitetura de expansão multi-plataforma formalizada.
+* Nenhum bloqueio. Sistema com base Windows 100% verde (v0.3.0), atualizador in-app integrado ao GitHub Releases e arquitetura de expansão multi-plataforma formalizada.
 
 
 

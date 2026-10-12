@@ -57,3 +57,7 @@
 - [X] **T6.3**: Botão Rápido 8D Orbit & Indicador Trajetória Neon no SoundstageDial (Toggle 8D no HUD, comando Tauri IPC `set_orbit_8d`, projeção polar azimutal e cometa orbital neon $\ge 30\text{ fps}$ via telemetria - Story 6.2, ADR-035).
 - [X] **T6.4**: Painel Completo de Parâmetros Orbitais no Modal de Calibração & Persistência Atômica (Controles detalhados de direção, sliders de período e profundidade no SoundstageConfiguratorModal e persistência em `AppConfig` - Story 6.3, ADR-036).
 
+### Sprint 8: Experiência de Distribuição & Auto-Update In-App
+- [X] **T8.1**: Mecanismo de Auto-Update In-App a Custo Zero via GitHub Releases (Verificação automática na abertura do app, badge âmbar pulsante na Titlebar levando direto para `Configurações -> Atualizações`, painel completo com notas de versão, switches de checagem ao iniciar e instalação automática, e botão de `Reiniciar Aplicação` no mesmo slot de ação - Spec 8.1, ADR-038).
+
+

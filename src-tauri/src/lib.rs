@@ -179,7 +179,32 @@ impl AppState {
                 }
             }
         }
+        let _ = self.volume_sync.rebind_endpoint(None);
         Ok(())
+    }
+
+    pub fn dispatch_audio_command(&self, cmd: AudioCommand) -> Result<(), String> {
+        match &cmd {
+            AudioCommand::SetMasterPower(power) => {
+                let _ = self.handle_master_power_toggle(*power);
+            }
+            AudioCommand::SetBypass(bypassed) => {
+                let _ = self.handle_master_power_toggle(!*bypassed);
+            }
+            AudioCommand::SetMasterVolume { volume, boost } => {
+                let slider_vol = if *boost > 1.0 {
+                    *boost
+                } else {
+                    volume.max(0.0).sqrt()
+                };
+                let _ = self.volume_sync.set_master_volume(slider_vol);
+            }
+            AudioCommand::SetMute(muted) => {
+                let _ = self.volume_sync.set_mute(*muted);
+            }
+            _ => {}
+        }
+        self.dispatcher.send(cmd).map_err(|e| e.to_string())
     }
 
     pub fn restore_physical_default_device(&self) {
@@ -222,41 +247,23 @@ impl Drop for AppState {
 
 #[tauri::command]
 fn dispatch_command(cmd: AudioCommand, state: State<'_, AppState>) -> Result<(), String> {
-    match &cmd {
-        AudioCommand::SetMasterPower(power) => {
-            let _ = state.handle_master_power_toggle(*power);
-        }
-        AudioCommand::SetBypass(bypassed) => {
-            let _ = state.handle_master_power_toggle(!*bypassed);
-        }
-        AudioCommand::SetMasterVolume { volume, boost } => {
-            let slider_vol = if *boost > 1.0 { *boost } else { volume.max(0.0).sqrt() };
-            let _ = state.volume_sync.set_master_volume(slider_vol);
-        }
-        AudioCommand::SetMute(muted) => {
-            let _ = state.volume_sync.set_mute(*muted);
-        }
-        _ => {}
-    }
-    state.dispatcher.send(cmd).map_err(|e| e.to_string())
+    state.dispatch_audio_command(cmd)
 }
 
 #[tauri::command]
 fn set_master_volume(volume: f32, state: State<'_, AppState>) -> Result<(), String> {
-    let clamped = volume.clamp(0.0, 1.5);
+    let clamped = if volume.is_nan() { 0.0 } else { volume.clamp(0.0, 1.5) };
     let linear_vol = if clamped <= 1.0 { clamped * clamped } else { 1.0 };
     let boost = if clamped > 1.0 { clamped } else { 1.0 };
-    let _ = state.volume_sync.set_master_volume(clamped);
-    state.dispatcher.send(AudioCommand::SetMasterVolume {
+    state.dispatch_audio_command(AudioCommand::SetMasterVolume {
         volume: linear_vol,
         boost,
-    }).map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 fn set_mute(muted: bool, state: State<'_, AppState>) -> Result<(), String> {
-    let _ = state.volume_sync.set_mute(muted);
-    state.dispatcher.send(AudioCommand::SetMute(muted)).map_err(|e| e.to_string())
+    state.dispatch_audio_command(AudioCommand::SetMute(muted))
 }
 
 #[tauri::command]
@@ -651,6 +658,186 @@ fn reset_app_volume_profile(process_name: String, state: State<'_, AppState>) ->
     Ok(removed_from_mgr || removed_from_store)
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UpdateCheckResult {
+    pub is_available: bool,
+    pub current_version: String,
+    pub latest_version: String,
+    pub release_notes: Option<String>,
+    pub published_at: Option<String>,
+    pub html_url: Option<String>,
+    pub download_url: Option<String>,
+}
+
+#[tauri::command]
+async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateCheckResult, String> {
+    let current_version = app.package_info().version.to_string();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let ps_cmd = r#"
+            $ErrorActionPreference = 'Stop'
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                $headers = @{ "User-Agent" = "OpenBoom-Desktop-App" }
+                $res = Invoke-RestMethod -Uri "https://api.github.com/repos/JVGS1111/open-boom/releases/latest" -Headers $headers -TimeoutSec 10
+                $res | ConvertTo-Json -Depth 4
+            } catch {
+                [Console]::Error.WriteLine($_.Exception.Message)
+                exit 1
+            }
+        "#;
+
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(["-NoProfile", "-NonInteractive", "-Command", ps_cmd]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let output = cmd.output().map_err(|e| format!("Failed to query GitHub update API: {}", e))?;
+
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Update check failed: {}", err.trim()));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let json: serde_json::Value = serde_json::from_str(&stdout)
+            .map_err(|e| format!("Failed to parse release metadata: {}", e))?;
+
+        let tag_name = json["tag_name"]
+            .as_str()
+            .unwrap_or("")
+            .trim_start_matches('v')
+            .to_string();
+
+        let latest_version = if tag_name.is_empty() {
+            current_version.clone()
+        } else {
+            tag_name
+        };
+
+        let is_available = is_version_newer(&latest_version, &current_version);
+        let release_notes = json["body"].as_str().map(|s| s.to_string());
+        let published_at = json["published_at"].as_str().map(|s| s.to_string());
+        let html_url = json["html_url"].as_str().map(|s| s.to_string());
+
+        let mut download_url = None;
+        if let Some(assets) = json["assets"].as_array() {
+            for asset in assets {
+                if let Some(name) = asset["name"].as_str() {
+                    let lower = name.to_lowercase();
+                    if lower.ends_with(".exe") && (lower.contains("setup") || lower.contains("installer") || lower.contains("openboom")) {
+                        download_url = asset["browser_download_url"].as_str().map(|s| s.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if download_url.is_none() {
+            download_url = html_url.clone();
+        }
+
+        Ok(UpdateCheckResult {
+            is_available,
+            current_version,
+            latest_version,
+            release_notes,
+            published_at,
+            html_url,
+            download_url,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Helper to semantically compare two version strings (e.g., "0.4.0" > "0.3.0").
+pub fn is_version_newer(latest: &str, current: &str) -> bool {
+    let parse_version = |v: &str| -> (Vec<u32>, bool) {
+        let is_prerelease = v.contains('-');
+        let main_part = v.split('-').next().unwrap_or(v);
+        let parts = main_part
+            .split('.')
+            .filter_map(|s| s.parse::<u32>().ok())
+            .collect();
+        (parts, is_prerelease)
+    };
+
+    let (latest_parts, latest_pre) = parse_version(latest);
+    let (current_parts, current_pre) = parse_version(current);
+
+    let max_len = latest_parts.len().max(current_parts.len());
+    for i in 0..max_len {
+        let l = latest_parts.get(i).copied().unwrap_or(0);
+        let c = current_parts.get(i).copied().unwrap_or(0);
+        if l > c {
+            return true;
+        } else if l < c {
+            return false;
+        }
+    }
+
+    // If main numbers are equal, stable release is newer than pre-release of the same version
+    current_pre && !latest_pre
+}
+
+#[tauri::command]
+async fn download_and_install_update(download_url: String) -> Result<(), String> {
+    if !download_url.starts_with("https://github.com/") && !download_url.starts_with("https://objects.githubusercontent.com/") {
+        return Err("Update URL must originate from GitHub".to_string());
+    }
+    if !download_url.to_lowercase().ends_with(".exe") {
+        return Err("Update package does not contain an executable installer".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = std::process::Command::new("powershell");
+        let ps_cmd = r#"
+            $ErrorActionPreference = 'Stop'
+            $url = $env:OPENBOOM_UPDATE_URL
+            try {
+                $pid_str = $PID.ToString()
+                $dest = Join-Path $env:TEMP ("OpenBoom_Setup_Update_" + $pid_str + ".exe")
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 90
+                # Launch silent installer
+                Start-Process -FilePath $dest -ArgumentList "/S"
+            } catch {
+                [Console]::Error.WriteLine($_.Exception.Message)
+                exit 1
+            }
+        "#;
+
+        cmd.env("OPENBOOM_UPDATE_URL", &download_url)
+            .args(["-NoProfile", "-NonInteractive", "-Command", ps_cmd]);
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let output = cmd.output().map_err(|e| format!("Failed to initiate update install: {}", e))?;
+
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Update download error: {}", err.trim()));
+        }
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn restart_application(app: tauri::AppHandle) -> Result<(), String> {
+    app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let state = AppState::new_runtime();
@@ -854,6 +1041,9 @@ pub fn run() {
             set_orbit_8d,
             set_master_volume,
             set_mute,
+            check_for_updates,
+            download_and_install_update,
+            restart_application,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -1363,22 +1553,43 @@ mod tests {
     fn test_dispatch_command_syncs_to_windows_endpoint() {
         let state = AppState::new();
 
-        // 1. Set volume 80% (linear 0.64, boost 1.0)
-        let _ = state.volume_sync.set_master_volume(0.80);
+        // 1. Dispatch SetMasterVolume 80% (linear 0.64, boost 1.0) through unified command ingress
+        let res1 = state.dispatch_audio_command(AudioCommand::SetMasterVolume {
+            volume: 0.64,
+            boost: 1.0,
+        });
+        assert!(res1.is_ok());
         let vol = state.volume_sync.get_master_volume().unwrap();
         assert!((vol - 0.80).abs() < 1e-4);
 
-        // 2. Set boost 135% (boost 1.35) -> Windows master volume clamped to 1.0 (100%)
-        let _ = state.volume_sync.set_master_volume(1.35);
+        // 2. Dispatch SetMasterVolume 135% (boost 1.35) -> Windows master volume clamped to 1.0 (100%)
+        let res2 = state.dispatch_audio_command(AudioCommand::SetMasterVolume {
+            volume: 1.0,
+            boost: 1.35,
+        });
+        assert!(res2.is_ok());
         let vol_boost = state.volume_sync.get_master_volume().unwrap();
         assert!((vol_boost - 1.0).abs() < 1e-4, "Boost > 100% must clamp Windows endpoint to 1.0");
 
-        // 3. Set mute
-        let _ = state.volume_sync.set_mute(true);
+        // 3. Dispatch SetMute through unified command ingress
+        let res3 = state.dispatch_audio_command(AudioCommand::SetMute(true));
+        assert!(res3.is_ok());
         assert!(state.volume_sync.is_muted().unwrap());
 
-        let _ = state.volume_sync.set_mute(false);
+        let res4 = state.dispatch_audio_command(AudioCommand::SetMute(false));
+        assert!(res4.is_ok());
         assert!(!state.volume_sync.is_muted().unwrap());
+    }
+
+    #[test]
+    fn test_version_comparison_logic() {
+        assert!(is_version_newer("0.4.0", "0.3.0"));
+        assert!(is_version_newer("1.0.0", "0.3.0"));
+        assert!(is_version_newer("0.3.1", "0.3.0"));
+        assert!(!is_version_newer("0.3.0", "0.3.0"));
+        assert!(!is_version_newer("0.2.9", "0.3.0"));
+        assert!(is_version_newer("0.3.0", "0.3.0-beta.1"));
+        assert!(!is_version_newer("0.3.0-beta.1", "0.3.0"));
     }
 }
 

@@ -60,6 +60,11 @@ const testFiles = [
     entry: path.join(__dirname, "TitlebarVolumeSync.test.tsx"),
     runnerName: "runTitlebarVolumeSyncTests",
   },
+  {
+    name: "In-App Auto-Update Mechanism & Settings Controls Test Suite",
+    entry: path.join(__dirname, "Updater.test.tsx"),
+    runnerName: "runUpdaterTests",
+  },
 ];
 
 async function main() {

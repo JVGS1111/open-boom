@@ -36,7 +36,7 @@ export function runTitlebarVolumeSyncTests(): TestResult[] {
 
   test("1. Renders Titlebar with 45% volume (0.45) reflecting OS volume adjustment", () => {
     const html = renderToStaticMarkup(
-      <I18nProvider locale="en">
+      <I18nProvider initialLanguage="en">
         <Titlebar
           masterPower={true}
           onTogglePower={() => {}}
@@ -59,7 +59,7 @@ export function runTitlebarVolumeSyncTests(): TestResult[] {
 
   test("2. Renders 100% volume at unity gain (0.0 dB)", () => {
     const html = renderToStaticMarkup(
-      <I18nProvider locale="en">
+      <I18nProvider initialLanguage="en">
         <Titlebar
           masterPower={true}
           onTogglePower={() => {}}
@@ -80,7 +80,7 @@ export function runTitlebarVolumeSyncTests(): TestResult[] {
 
   test("3. Renders 135% boost volume (+2.6 dB)", () => {
     const html = renderToStaticMarkup(
-      <I18nProvider locale="en">
+      <I18nProvider initialLanguage="en">
         <Titlebar
           masterPower={true}
           onTogglePower={() => {}}
@@ -101,7 +101,7 @@ export function runTitlebarVolumeSyncTests(): TestResult[] {
 
   test("4. Muted state displays -inf dB and 0 scalar value", () => {
     const html = renderToStaticMarkup(
-      <I18nProvider locale="en">
+      <I18nProvider initialLanguage="en">
         <Titlebar
           masterPower={true}
           onTogglePower={() => {}}

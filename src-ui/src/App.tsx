@@ -9,7 +9,7 @@ import { EffectsRackStrip, EffectModule } from "./components/EffectsRackStrip";
 import { StatusBar } from "./components/StatusBar";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
-import { SettingsModal } from "./components/SettingsModal";
+import { SettingsModal, UpdateInfo, SettingsTab } from "./components/SettingsModal";
 import {
   SoundstageConfiguratorModal,
   OrbitDirection,
@@ -165,10 +165,19 @@ export const App: React.FC = () => {
 
   // Settings Modal & Windows Startup State (Story 1.7)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("general");
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const [bufferGuardEnabled, setBufferGuardEnabled] = useState(true);
+  const [checkUpdatesOnStartup, setCheckUpdatesOnStartup] = useState(true);
+  const [autoInstallUpdates, setAutoInstallUpdates] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [isUpdateReadyToRestart, setIsUpdateReadyToRestart] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [hasLoadedConfig, setHasLoadedConfig] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasRunStartupCheckRef = useRef(false);
 
   // Soundstage Configurator Modal State (Story 2.3 & 2.4, FR7)
   const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false);
@@ -239,6 +248,8 @@ export const App: React.FC = () => {
           orbit_period_sec?: number;
           orbit_depth?: number;
           language?: string;
+          check_updates_on_startup?: boolean;
+          auto_install_updates?: boolean;
         }>("load_app_config");
 
         if (config) {
@@ -434,6 +445,14 @@ export const App: React.FC = () => {
           if (config.language) {
             setLanguage(config.language as LanguageOption);
           }
+
+          // Restore Updater Preferences
+          if (typeof config.check_updates_on_startup === "boolean") {
+            setCheckUpdatesOnStartup(config.check_updates_on_startup);
+          }
+          if (typeof config.auto_install_updates === "boolean") {
+            setAutoInstallUpdates(config.auto_install_updates);
+          }
         }
       } catch {
         // Browser mode fallback
@@ -588,6 +607,8 @@ export const App: React.FC = () => {
         orbit_period_sec: orbitPeriodSec,
         orbit_depth: orbitDepth,
         language: language,
+        check_updates_on_startup: checkUpdatesOnStartup,
+        auto_install_updates: autoInstallUpdates,
       };
 
       try {
@@ -625,7 +646,88 @@ export const App: React.FC = () => {
     activeEqPreset,
     effectModules,
     language,
+    checkUpdatesOnStartup,
+    autoInstallUpdates,
   ]);
+
+  // Updater Handlers & State Machine
+  const handleCheckForUpdates = async (isBackgroundStartup = false) => {
+    setIsCheckingUpdates(true);
+    setUpdateError(null);
+    try {
+      const res = await invoke<{
+        is_available: boolean;
+        current_version: string;
+        latest_version: string;
+        release_notes: string | null;
+        published_at: string | null;
+        html_url: string | null;
+        download_url: string | null;
+      }>("check_for_updates");
+
+      if (res) {
+        const info: UpdateInfo = {
+          isAvailable: res.is_available,
+          currentVersion: res.current_version,
+          latestVersion: res.latest_version,
+          releaseNotes: res.release_notes ?? undefined,
+          publishedAt: res.published_at ?? undefined,
+          downloadUrl: res.download_url ?? undefined,
+        };
+        setUpdateInfo(info);
+
+        // If background startup check with auto_install_updates enabled:
+        if (isBackgroundStartup && res.is_available && autoInstallUpdates && res.download_url) {
+          triggerAutoInstall(res.download_url);
+        }
+      }
+    } catch (err) {
+      if (!isBackgroundStartup) {
+        setUpdateError(String(err) || "Failed to check for updates");
+      }
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  };
+
+  const triggerAutoInstall = async (downloadUrl: string) => {
+    setIsDownloadingUpdate(true);
+    setUpdateError(null);
+    try {
+      await invoke("download_and_install_update", { downloadUrl });
+      setIsUpdateReadyToRestart(true);
+    } catch (err) {
+      setUpdateError(String(err) || "Failed to download update");
+    } finally {
+      setIsDownloadingUpdate(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!updateInfo?.downloadUrl) return;
+    await triggerAutoInstall(updateInfo.downloadUrl);
+  };
+
+  const handleRestartApplication = async () => {
+    try {
+      await invoke("restart_application");
+    } catch {
+      // Browser fallback
+      window.location.reload();
+    }
+  };
+
+  // Run startup update check once config is loaded (if enabled, exactly once per session)
+  useEffect(() => {
+    if (hasLoadedConfig && checkUpdatesOnStartup && !hasRunStartupCheckRef.current) {
+      hasRunStartupCheckRef.current = true;
+      // Small delay so it never competes with initial audio pump startup
+      const timer = setTimeout(() => {
+        handleCheckForUpdates(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasLoadedConfig, checkUpdatesOnStartup]);
 
   const handleTogglePower = () => {
     const nextPower = !masterPower;
@@ -638,6 +740,7 @@ export const App: React.FC = () => {
     setVolume(clampedSlider);
     if (isMuted && clampedSlider > 0) {
       setIsMuted(false);
+      dispatchCommand({ SetMute: false });
     }
     const linearVol = clampedSlider <= 1.0 ? clampedSlider * clampedSlider : 1.0;
     const boost = clampedSlider > 1.0 ? clampedSlider : 1.0;
@@ -1297,7 +1400,7 @@ export const App: React.FC = () => {
   return (
     <I18nProvider initialLanguage={language} onLanguageChange={setLanguage}>
       <div className="w-full h-full min-w-[960px] min-h-[580px] bg-background flex flex-col overflow-hidden border border-border-subtle relative select-none">
-      {/* Settings Modal (Story 1.7, FR29) */}
+      {/* Settings Modal (Story 1.7, FR29, In-App Updates) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -1305,6 +1408,19 @@ export const App: React.FC = () => {
         onToggleStartup={handleToggleStartup}
         bufferGuardEnabled={bufferGuardEnabled}
         onToggleBufferGuard={handleToggleBufferGuard}
+        initialTab={settingsInitialTab}
+        checkUpdatesOnStartup={checkUpdatesOnStartup}
+        onToggleCheckUpdatesOnStartup={() => setCheckUpdatesOnStartup((prev) => !prev)}
+        autoInstallUpdates={autoInstallUpdates}
+        onToggleAutoInstallUpdates={() => setAutoInstallUpdates((prev) => !prev)}
+        updateInfo={updateInfo}
+        isCheckingUpdates={isCheckingUpdates}
+        isDownloadingUpdate={isDownloadingUpdate}
+        isUpdateReadyToRestart={isUpdateReadyToRestart}
+        updateError={updateError}
+        onCheckForUpdates={() => handleCheckForUpdates(false)}
+        onInstallUpdate={handleInstallUpdate}
+        onRestartApplication={handleRestartApplication}
       />
 
       {/* 8-Channel Virtual Speaker Configurator Modal (Story 2.3 & 2.4, FR7) */}
@@ -1369,9 +1485,17 @@ export const App: React.FC = () => {
         devices={devices}
         activeDeviceId={activeDeviceId}
         onSelectDevice={handleSelectDevice}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={(tab = "general") => {
+          setSettingsInitialTab(tab);
+          setIsSettingsOpen(true);
+        }}
         onToggleAppMixer={() => setIsAppMixerOpen((prev) => !prev)}
         isAppMixerOpen={isAppMixerOpen}
+        hasUpdate={updateInfo?.isAvailable ?? false}
+        onOpenUpdates={() => {
+          setSettingsInitialTab("updates");
+          setIsSettingsOpen(true);
+        }}
       />
 
       {/* 2. Main Studio Content Area */}

@@ -38,6 +38,8 @@ fn test_app_config_default_values() {
     assert!((cfg.orbit_period_sec - 12.0).abs() < 1e-6);
     assert!((cfg.orbit_depth - 0.85).abs() < 1e-6);
     assert_eq!(cfg.language, None);
+    assert!(cfg.check_updates_on_startup);
+    assert!(!cfg.auto_install_updates);
 }
 
 #[test]
@@ -147,6 +149,8 @@ fn test_partial_json_field_defaults() {
     assert_eq!(loaded.orbit_direction, open_boom_storage::OrbitDirection::Clockwise);
     assert!((loaded.orbit_period_sec - 12.0).abs() < 1e-6);
     assert!((loaded.orbit_depth - 0.85).abs() < 1e-6);
+    assert!(loaded.check_updates_on_startup);
+    assert!(!loaded.auto_install_updates);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
