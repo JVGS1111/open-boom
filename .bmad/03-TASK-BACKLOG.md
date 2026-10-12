@@ -55,5 +55,5 @@
 - [X] **T6.1**: Motor DSP de Modulação Azimutal Orbital & Rotação Contínua 7.1 em Sub-Blocos (Extensão de `Spatializer3D` com cálculo dinâmico $\theta_k(t)$ a cada 32 frames, interpolação suave KEMAR e zero alocações na heap - CAP-1, ADR-032).
 - [X] **T6.2**: Controle de Orientação e Velocidade Angular (Suporte a Sentido Horário, Anti-Horário e Pêndulo; período de 2s a 30s; comando `AudioCommand::SetOrbit8D` lock-free - CAP-2, CAP-3).
 - [X] **T6.3**: Botão Rápido 8D Orbit & Indicador Trajetória Neon no SoundstageDial (Toggle 8D no HUD, comando Tauri IPC `set_orbit_8d`, projeção polar azimutal e cometa orbital neon $\ge 30\text{ fps}$ via telemetria - Story 6.2, ADR-035).
-- [ ] **T6.4**: Painel Completo de Parâmetros Orbitais no Modal de Calibração & Persistência Atômica (Controles detalhados de direção, sliders de período e profundidade no SoundstageConfiguratorModal e persistência em `AppConfig` - Story 6.3).
+- [X] **T6.4**: Painel Completo de Parâmetros Orbitais no Modal de Calibração & Persistência Atômica (Controles detalhados de direção, sliders de período e profundidade no SoundstageConfiguratorModal e persistência em `AppConfig` - Story 6.3, ADR-036).
 

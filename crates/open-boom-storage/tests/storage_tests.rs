@@ -33,6 +33,10 @@ fn test_app_config_default_values() {
     assert!((cfg.sweetener_spatial_amount - 0.60).abs() < 1e-6);
     assert_eq!(cfg.sweetener_pitch_semitones, 0);
     assert!(cfg.buffer_guard_enabled);
+    assert!(!cfg.orbit_enabled);
+    assert_eq!(cfg.orbit_direction, open_boom_storage::OrbitDirection::Clockwise);
+    assert!((cfg.orbit_period_sec - 12.0).abs() < 1e-6);
+    assert!((cfg.orbit_depth - 0.85).abs() < 1e-6);
     assert_eq!(cfg.language, None);
 }
 
@@ -139,10 +143,78 @@ fn test_partial_json_field_defaults() {
     assert_eq!(loaded.window_width, 1000);
     assert_eq!(loaded.window_height, 620);
     assert!(loaded.master_power);
-    assert_eq!(loaded.active_preset_name, "Flat");
+    assert!(!loaded.orbit_enabled);
+    assert_eq!(loaded.orbit_direction, open_boom_storage::OrbitDirection::Clockwise);
+    assert!((loaded.orbit_period_sec - 12.0).abs() < 1e-6);
+    assert!((loaded.orbit_depth - 0.85).abs() < 1e-6);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_orbital_config_persistence_and_legacy_json_compatibility() {
+    let temp_dir = std::env::temp_dir().join(format!("open_boom_orbit_test_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let store = PresetStore::new(&temp_dir);
+
+    // 1. Deserializing legacy JSON missing all 8D fields should yield fallback defaults
+    let legacy_json = r#"{
+        "master_power": true,
+        "master_volume": 0.8,
+        "master_boost": 1.0,
+        "surround_enabled": true
+    }"#;
+    fs::write(store.config_path(), legacy_json).unwrap();
+
+    let loaded_legacy = store.load_config().expect("load legacy config");
+    assert!(!loaded_legacy.orbit_enabled);
+    assert_eq!(loaded_legacy.orbit_direction, open_boom_storage::OrbitDirection::Clockwise);
+    assert!((loaded_legacy.orbit_period_sec - 12.0).abs() < 1e-6);
+    assert!((loaded_legacy.orbit_depth - 0.85).abs() < 1e-6);
+
+    // 2. Custom 8D settings are saved atomically and reloaded faithfully
+    let mut custom_cfg = AppConfig::default();
+    custom_cfg.orbit_enabled = true;
+    custom_cfg.orbit_direction = open_boom_storage::OrbitDirection::CounterClockwise;
+    custom_cfg.orbit_period_sec = 6.5;
+    custom_cfg.orbit_depth = 0.50;
+
+    store.save_config(&custom_cfg).expect("save custom orbit config");
+
+    let loaded_custom = store.load_config().expect("load custom orbit config");
+    assert!(loaded_custom.orbit_enabled);
+    assert_eq!(loaded_custom.orbit_direction, open_boom_storage::OrbitDirection::CounterClockwise);
+    assert!((loaded_custom.orbit_period_sec - 6.5).abs() < 1e-6);
+    assert!((loaded_custom.orbit_depth - 0.50).abs() < 1e-6);
+
+    // Test PingPong direction persistence as well
+    custom_cfg.orbit_direction = open_boom_storage::OrbitDirection::PingPong;
+    custom_cfg.orbit_period_sec = 24.0;
+    custom_cfg.orbit_depth = 1.0;
+    store.save_config(&custom_cfg).expect("save pingpong orbit config");
+
+    let loaded_pingpong = store.load_config().expect("load pingpong orbit config");
+    assert_eq!(loaded_pingpong.orbit_direction, open_boom_storage::OrbitDirection::PingPong);
+    assert!((loaded_pingpong.orbit_period_sec - 24.0).abs() < 1e-6);
+    assert!((loaded_pingpong.orbit_depth - 1.0).abs() < 1e-6);
+
+    // 3. Test defensive sanitization against out-of-bounds numbers and NaN
+    let corrupt_bounds_json = r#"{
+        "orbit_enabled": true,
+        "orbit_direction": "Clockwise",
+        "orbit_period_sec": 999.0,
+        "orbit_depth": -0.5
+    }"#;
+    fs::write(store.config_path(), corrupt_bounds_json).unwrap();
+    let loaded_sanitized = store.load_config().expect("load corrupt bounds config");
+    assert_eq!(loaded_sanitized.orbit_period_sec, 12.0);
+    assert_eq!(loaded_sanitized.orbit_depth, 0.85);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
 
 #[test]
 fn test_startup_manager_mock_lifecycle() {

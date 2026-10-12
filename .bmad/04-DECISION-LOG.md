@@ -519,6 +519,31 @@
      - Taxa de polling de `get_telemetry` aumentada para 33ms (~30.3 fps), sincronizando o cometa orbital com total fluidez sem introduzir carga perceptível de CPU ou atraso no áudio.
 * **Consequência:** 7 novos testes de UI em `SoundstageDial.test.tsx` (total de 85 testes UI verdes no `npm test`) e teste de integração SPSC no Tauri aprovados. Total de 192 testes Cargo aprovados no workspace.
 
+---
+
+## ADR-036: Painel Completo de Parâmetros Orbitais 8D no Modal de Calibração e Persistência Atômica (Story 6.3)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Necessidade de permitir personalização completa dos parâmetros orbitais 8D (direção horária, anti-horária e pêndulo; período de revolução de 2.0s a 30.0s; profundidade espacial de 0% a 100%) através do modal de calibração espacial (`SoundstageConfiguratorModal`), sincronizar o toggle com o HUD e persistir atomicamente todas as preferências no `%APPDATA%\OpenBoom\config.json` sem quebras de compatibilidade com arquivos legados.
+* **Decisões:**
+  1. **Extensão do Esquema `AppConfig` com Retrocompatibilidade Garantida:**
+     - Adicionados campos `orbit_enabled: bool` (default `false`), `orbit_direction: OrbitDirection` (default `Clockwise`), `orbit_period_sec: f32` (default `12.0`) e `orbit_depth: f32` (default `0.85`) em `crates/open-boom-storage/src/preset_store.rs`.
+     - Decorados com `#[serde(default = "...")]` garantindo que arquivos `config.json` existentes sem essas chaves continuem desserializando perfeitamente sem falhas.
+  2. **Persistência Atômica via Staging `.tmp` e `MoveFileExW`:**
+     - A integridade do arquivo `config.json` é preservada usando o padrão existente de staging em arquivo temporário único por PID/thread com substituição atômica, eliminando perda de dados sob encerramento repentino ou concorrência.
+  3. **Painel de Controle Acessível no `SoundstageConfiguratorModal.tsx`:**
+     - Seletor direcional de 3 segmentos (Horário, Anti-Horário, Pêndulo) com ícones e realce ativo neon ciano (`bg-accent-cyan/25`).
+     - Slider de período: 2.0s a 30.0s (passo 0.5s), display monospaçado `XX.Xs`, duplo-clique para redefinir para 12.0s.
+     - Slider de profundidade: 0% a 100% (passo 1%), display monospaçado `XX%`, duplo-clique para redefinir para 85%.
+     - Botão de toggle mestre 8D dentro da modal sincronizado com o HUD e indicação luminosa de estado ligado/desligado.
+     - Controles e botões direcionais desabilitados visual e funcionalmente quando o modo 8D estiver inativo.
+  4. **Internacionalização Rigorosa com 100% de Paridade:**
+     - Adicionadas chaves de títulos, descrições, opções direcionais e tooltips nos dicionários de Inglês (`en`), Português (`pt-BR`) e Espanhol (`es`) em `src-ui/src/i18n/`.
+  5. **Despacho Imediato SPSC e Sincronização em `App.tsx`:**
+     - Sincronização em tempo real de `orbitDirection`, `orbitPeriodSec` e `orbitDepth`, com despacho lock-free do comando `AudioCommand::SetOrbit8D` e salvamento automático debounced em 250ms.
+* **Consequência:** 9 novos testes de UI em `SoundstageConfiguratorModal.test.tsx` (totalizando 94 testes UI verdes no workspace frontend) e 2 novos testes de armazenamento em `crates/open-boom-storage/tests/storage_tests.rs` (totalizando 194 testes Cargo verdes no workspace backend). Zero falhas e build Vite de produção validado em 4.55s.
+
+
 
 
 

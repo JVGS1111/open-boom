@@ -52,6 +52,7 @@ export interface TranslationDictionary {
     listener: string;
     front: string;
     resetSpeakers: string;
+    resetTrims: string;
     gain: string;
     channels: {
       c: string;
@@ -63,6 +64,17 @@ export interface TranslationDictionary {
       lsr: string;
       rsr: string;
     };
+    orbitSectionTitle: string;
+    orbitSectionSubtitle: string;
+    orbitToggleAria: string;
+    orbitDirectionLabel: string;
+    orbitClockwise: string;
+    orbitCounterClockwise: string;
+    orbitPingPong: string;
+    orbitPeriodLabel: string;
+    orbitPeriodResetTooltip: string;
+    orbitDepthLabel: string;
+    orbitDepthResetTooltip: string;
   };
   equalizer: {
     dualStageTitle: string;

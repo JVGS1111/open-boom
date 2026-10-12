@@ -10,7 +10,10 @@ import { StatusBar } from "./components/StatusBar";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
 import { SettingsModal } from "./components/SettingsModal";
-import { SoundstageConfiguratorModal } from "./components/SoundstageConfiguratorModal";
+import {
+  SoundstageConfiguratorModal,
+  OrbitDirection,
+} from "./components/SoundstageConfiguratorModal";
 import { EqualizerStudioDrawer } from "./components/EqualizerStudioDrawer";
 import { AutoEqPopover, AutoEqProfileSummary } from "./components/AutoEqPopover";
 import { AppMixerDrawer, ProcessAudioSession } from "./components/AppMixerDrawer";
@@ -61,8 +64,11 @@ export const App: React.FC = () => {
   const [surroundEnabled, setSurroundEnabled] = useState(true);
   const [surroundIntensity, setSurroundIntensity] = useState(0.72);
 
-  // 8D Orbital Audio State (Story 6.2, CAP-4, CAP-5)
+  // 8D Orbital Audio State (Story 6.2 & 6.3, CAP-2, CAP-3, CAP-4, CAP-5)
   const [orbitEnabled, setOrbitEnabled] = useState(false);
+  const [orbitDirection, setOrbitDirection] = useState<OrbitDirection>("Clockwise");
+  const [orbitPeriodSec, setOrbitPeriodSec] = useState(12.0);
+  const [orbitDepth, setOrbitDepth] = useState(0.85);
   const [orbitPhaseDeg, setOrbitPhaseDeg] = useState(0.0);
 
   // Equalizer State (31 Bands), Presets & Studio Drawer (Story 3.1, 3.2 & 3.5, FR9, FR11, FR12, UX-DR7)
@@ -228,6 +234,10 @@ export const App: React.FC = () => {
           sweetener_spatial_enabled?: boolean;
           sweetener_spatial_amount?: number;
           buffer_guard_enabled?: boolean;
+          orbit_enabled?: boolean;
+          orbit_direction?: OrbitDirection;
+          orbit_period_sec?: number;
+          orbit_depth?: number;
           language?: string;
         }>("load_app_config");
 
@@ -377,6 +387,49 @@ export const App: React.FC = () => {
           setBufferGuardEnabled(bgEn);
           dispatchCommand({ SetBufferGuard: bgEn });
 
+          // Restore 8D Orbital Audio Parameters (Story 6.3, CAP-2, CAP-3, CAP-4, CAP-5)
+          const orbEn = config.orbit_enabled ?? false;
+          const orbDir: OrbitDirection =
+            config.orbit_direction === "CounterClockwise" || config.orbit_direction === "PingPong"
+              ? config.orbit_direction
+              : "Clockwise";
+          const rawPeriod = config.orbit_period_sec ?? 12.0;
+          const orbPeriod = isNaN(rawPeriod) ? 12.0 : Math.min(30.0, Math.max(2.0, rawPeriod));
+          const rawDepth = config.orbit_depth ?? 0.85;
+          const orbDepth = isNaN(rawDepth) ? 0.85 : Math.min(1.0, Math.max(0.0, rawDepth));
+
+          setOrbitEnabled(orbEn);
+          setOrbitDirection(orbDir);
+          setOrbitPeriodSec(orbPeriod);
+          setOrbitDepth(orbDepth);
+
+          // Auto-engage surround if 8D mode is enabled on boot (CAP-4)
+          if (orbEn && !config.surround_enabled) {
+            setSurroundEnabled(true);
+            dispatchCommand({
+              SetSurround3D: { enabled: true, intensity: config.surround_intensity ?? 0.72 },
+            });
+          }
+
+          // Always synchronize 8D parameters to backend DSP engine on startup
+          try {
+            await invoke("set_orbit_8d", {
+              enabled: orbEn,
+              direction: orbDir,
+              periodSec: orbPeriod,
+              depth: orbDepth,
+            });
+          } catch {
+            dispatchCommand({
+              SetOrbit8D: {
+                enabled: orbEn,
+                direction: orbDir,
+                period_sec: orbPeriod,
+                depth: orbDepth,
+              },
+            });
+          }
+
           // Restore Language Preference
           if (config.language) {
             setLanguage(config.language as LanguageOption);
@@ -516,6 +569,10 @@ export const App: React.FC = () => {
         sweetener_spatial_amount: effectModules.find((m) => m.id === 3)?.amount ?? 0.60,
         sweetener_pitch_semitones: 0,
         buffer_guard_enabled: bufferGuardEnabled,
+        orbit_enabled: orbitEnabled,
+        orbit_direction: orbitDirection,
+        orbit_period_sec: orbitPeriodSec,
+        orbit_depth: orbitDepth,
         language: language,
       };
 
@@ -545,6 +602,10 @@ export const App: React.FC = () => {
     bypassActive,
     launchOnStartup,
     bufferGuardEnabled,
+    orbitEnabled,
+    orbitDirection,
+    orbitPeriodSec,
+    orbitDepth,
     eqGains,
     activeAutoEqProfile,
     activeEqPreset,
@@ -610,8 +671,8 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleToggleOrbit = async () => {
-    const nextOrbit = !orbitEnabled;
+  const handleToggleOrbit = async (targetEnabled?: boolean) => {
+    const nextOrbit = typeof targetEnabled === "boolean" ? targetEnabled : !orbitEnabled;
     setOrbitEnabled(nextOrbit);
 
     // Auto-engage 3D spatializer if disabled (CAP-4, Story 6.2 Edge Case Matrix)
@@ -623,15 +684,87 @@ export const App: React.FC = () => {
     }
 
     try {
-      await invoke("set_orbit_8d", { enabled: nextOrbit });
+      await invoke("set_orbit_8d", {
+        enabled: nextOrbit,
+        direction: orbitDirection,
+        periodSec: orbitPeriodSec,
+        depth: orbitDepth,
+      });
     } catch {
       // Browser preview fallback
       dispatchCommand({
         SetOrbit8D: {
           enabled: nextOrbit,
-          direction: "Clockwise",
-          period_sec: 12.0,
-          depth: 0.85,
+          direction: orbitDirection,
+          period_sec: orbitPeriodSec,
+          depth: orbitDepth,
+        },
+      });
+    }
+  };
+
+  const handleOrbitDirectionChange = async (dir: OrbitDirection) => {
+    const safeDir: OrbitDirection =
+      dir === "CounterClockwise" || dir === "PingPong" ? dir : "Clockwise";
+    setOrbitDirection(safeDir);
+    try {
+      await invoke("set_orbit_8d", {
+        enabled: orbitEnabled,
+        direction: safeDir,
+        periodSec: orbitPeriodSec,
+        depth: orbitDepth,
+      });
+    } catch {
+      dispatchCommand({
+        SetOrbit8D: {
+          enabled: orbitEnabled,
+          direction: safeDir,
+          period_sec: orbitPeriodSec,
+          depth: orbitDepth,
+        },
+      });
+    }
+  };
+
+  const handleOrbitPeriodChange = async (period: number) => {
+    const clampedPeriod = isNaN(period) ? 12.0 : Math.min(30.0, Math.max(2.0, period));
+    setOrbitPeriodSec(clampedPeriod);
+    try {
+      await invoke("set_orbit_8d", {
+        enabled: orbitEnabled,
+        direction: orbitDirection,
+        periodSec: clampedPeriod,
+        depth: orbitDepth,
+      });
+    } catch {
+      dispatchCommand({
+        SetOrbit8D: {
+          enabled: orbitEnabled,
+          direction: orbitDirection,
+          period_sec: clampedPeriod,
+          depth: orbitDepth,
+        },
+      });
+    }
+  };
+
+  const handleOrbitDepthChange = async (depth: number) => {
+    const clampedDepth = isNaN(depth) ? 0.85 : Math.min(1.0, Math.max(0.0, depth));
+    setOrbitDepth(clampedDepth);
+    try {
+      await invoke("set_orbit_8d", {
+        enabled: orbitEnabled,
+        direction: orbitDirection,
+        periodSec: orbitPeriodSec,
+        depth: clampedDepth,
+      });
+    } catch {
+      dispatchCommand({
+        SetOrbit8D: {
+          enabled: orbitEnabled,
+          direction: orbitDirection,
+          period_sec: orbitPeriodSec,
+          depth: clampedDepth,
         },
       });
     }
@@ -1172,6 +1305,14 @@ export const App: React.FC = () => {
         onAzimuthChange={handleSpeakerAzimuthChange}
         onResetPositions={handleResetSpeakerPositions}
         onResetAll={handleResetAllSpeakers}
+        orbitEnabled={orbitEnabled}
+        orbitDirection={orbitDirection}
+        orbitPeriodSec={orbitPeriodSec}
+        orbitDepth={orbitDepth}
+        onToggleOrbit={handleToggleOrbit}
+        onOrbitDirectionChange={handleOrbitDirectionChange}
+        onOrbitPeriodChange={handleOrbitPeriodChange}
+        onOrbitDepthChange={handleOrbitDepthChange}
       />
 
       {/* AutoEq Headphone Profile Search Popover (Story 3.3, UX-DR8) */}

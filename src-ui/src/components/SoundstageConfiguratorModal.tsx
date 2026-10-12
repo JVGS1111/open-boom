@@ -6,8 +6,14 @@ import {
   VolumeX,
   Compass,
   Check,
+  Orbit,
+  ArrowRight,
+  ArrowLeft,
+  Repeat,
 } from "lucide-react";
 import { useI18n } from "../i18n";
+
+export type OrbitDirection = "Clockwise" | "CounterClockwise" | "PingPong";
 
 export interface ChannelSpec {
   index: number;
@@ -39,6 +45,15 @@ interface SoundstageConfiguratorModalProps {
   onAzimuthChange?: (channelIndex: number, azimuthDeg: number) => void;
   onResetPositions?: () => void;
   onResetAll: () => void;
+  // 8D Orbital Audio Parameters (Story 6.3, CAP-2, CAP-3, CAP-4)
+  orbitEnabled?: boolean;
+  orbitDirection?: OrbitDirection;
+  orbitPeriodSec?: number;
+  orbitDepth?: number;
+  onToggleOrbit?: (enabled?: boolean) => void;
+  onOrbitDirectionChange?: (direction: OrbitDirection) => void;
+  onOrbitPeriodChange?: (periodSec: number) => void;
+  onOrbitDepthChange?: (depth: number) => void;
 }
 
 export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalProps> = ({
@@ -52,6 +67,14 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
   onAzimuthChange,
   onResetPositions,
   onResetAll,
+  orbitEnabled = false,
+  orbitDirection = "Clockwise",
+  orbitPeriodSec = 12.0,
+  orbitDepth = 0.85,
+  onToggleOrbit,
+  onOrbitDirectionChange,
+  onOrbitPeriodChange,
+  onOrbitDepthChange,
 }) => {
   const { t } = useI18n();
   const [selectedChannel, setSelectedChannel] = useState<number>(0);
@@ -524,6 +547,189 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
               </div>
             </div>
 
+            {/* 8D Orbital Audio Parameters Panel (Story 6.3, CAP-2, CAP-3, CAP-4, CAP-5) */}
+            <div className="mt-4 p-3.5 bg-surface-base/90 border border-border-subtle rounded-xl flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1 rounded-md border transition-all ${
+                    orbitEnabled
+                      ? "bg-accent-cyan/20 text-accent-cyan border-accent-cyan/40 shadow-[0_0_8px_rgba(56,189,248,0.3)]"
+                      : "bg-surface-elevated text-text-muted border-border-subtle"
+                  }`}>
+                    <Orbit className={`w-3.5 h-3.5 ${orbitEnabled ? "animate-spin" : ""}`} style={{ animationDuration: "6s" }} />
+                  </div>
+                  <div>
+                    <h3 className="text-[11.5px] font-semibold text-text-primary uppercase tracking-wider">
+                      {t.soundstage.orbitSectionTitle}
+                    </h3>
+                    <p className="text-[10px] text-text-muted">
+                      {t.soundstage.orbitSectionSubtitle}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 8D Orbit Master Toggle */}
+                {onToggleOrbit && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleOrbit(!orbitEnabled)}
+                    aria-label={t.soundstage.orbitToggleAria}
+                    aria-pressed={orbitEnabled}
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-md border transition-all flex items-center gap-1.5 cursor-pointer ${
+                      orbitEnabled
+                        ? "bg-accent-cyan/20 border-accent-cyan text-accent-cyan shadow-[0_0_10px_rgba(56,189,248,0.35)]"
+                        : "bg-surface-card border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-default"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${orbitEnabled ? "bg-accent-cyan shadow-[0_0_6px_#38bdf8]" : "bg-text-muted"}`} />
+                    <span>{t.soundstage.orbit8D} {orbitEnabled ? t.common.on : t.common.off}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* 3-Way Directional Segmented Selector */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10.5px] font-medium text-text-secondary">
+                  {t.soundstage.orbitDirectionLabel}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-label={t.soundstage.orbitDirectionLabel}
+                  className="grid grid-cols-3 gap-1.5 bg-surface-elevated/70 p-1 rounded-lg border border-border-subtle"
+                >
+                  {/* Clockwise */}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={orbitDirection === "Clockwise"}
+                    aria-label={t.soundstage.orbitClockwise}
+                    onClick={() => onOrbitDirectionChange?.("Clockwise")}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                      orbitDirection === "Clockwise"
+                        ? "bg-accent-cyan/25 border border-accent-cyan text-accent-cyan shadow-[0_0_8px_rgba(56,189,248,0.35)] font-semibold"
+                        : "border border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-card"
+                    }`}
+                  >
+                    <ArrowRight className="w-3 h-3" />
+                    <span>{t.soundstage.orbitClockwise}</span>
+                  </button>
+
+                  {/* Counter-Clockwise */}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={orbitDirection === "CounterClockwise"}
+                    aria-label={t.soundstage.orbitCounterClockwise}
+                    onClick={() => onOrbitDirectionChange?.("CounterClockwise")}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                      orbitDirection === "CounterClockwise"
+                        ? "bg-accent-cyan/25 border border-accent-cyan text-accent-cyan shadow-[0_0_8px_rgba(56,189,248,0.35)] font-semibold"
+                        : "border border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-card"
+                    }`}
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    <span>{t.soundstage.orbitCounterClockwise}</span>
+                  </button>
+
+                  {/* Ping-Pong */}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={orbitDirection === "PingPong"}
+                    aria-label={t.soundstage.orbitPingPong}
+                    onClick={() => onOrbitDirectionChange?.("PingPong")}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                      orbitDirection === "PingPong"
+                        ? "bg-accent-cyan/25 border border-accent-cyan text-accent-cyan shadow-[0_0_8px_rgba(56,189,248,0.35)] font-semibold"
+                        : "border border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-card"
+                    }`}
+                  >
+                    <Repeat className="w-3 h-3" />
+                    <span>{t.soundstage.orbitPingPong}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sliders: Period (Speed) & Depth */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Revolution Period Slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10.5px] font-medium text-text-secondary">
+                      {t.soundstage.orbitPeriodLabel}
+                    </span>
+                    <span
+                      title={t.soundstage.orbitPeriodResetTooltip}
+                      onDoubleClick={() => onOrbitPeriodChange?.(12.0)}
+                      className="text-[11px] font-mono font-bold text-accent-cyan cursor-pointer hover:underline"
+                    >
+                      {orbitPeriodSec.toFixed(1)}s
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="2.0"
+                    max="30.0"
+                    step="0.5"
+                    aria-label={t.soundstage.orbitPeriodLabel}
+                    aria-valuetext={`${orbitPeriodSec.toFixed(1)}s`}
+                    value={orbitPeriodSec}
+                    title={t.soundstage.orbitPeriodResetTooltip}
+                    onDoubleClick={() => onOrbitPeriodChange?.(12.0)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      const safeVal = isNaN(val) ? 12.0 : Math.min(30.0, Math.max(2.0, val));
+                      onOrbitPeriodChange?.(safeVal);
+                    }}
+                    className="w-full h-1 bg-border-subtle rounded appearance-none cursor-pointer accent-accent-cyan"
+                  />
+                  <div className="flex justify-between text-[9px] font-mono text-text-muted">
+                    <span>2.0s</span>
+                    <span>12.0s</span>
+                    <span>30.0s</span>
+                  </div>
+                </div>
+
+                {/* Orbital Depth Slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10.5px] font-medium text-text-secondary">
+                      {t.soundstage.orbitDepthLabel}
+                    </span>
+                    <span
+                      title={t.soundstage.orbitDepthResetTooltip}
+                      onDoubleClick={() => onOrbitDepthChange?.(0.85)}
+                      className="text-[11px] font-mono font-bold text-accent-cyan cursor-pointer hover:underline"
+                    >
+                      {Math.round(orbitDepth * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    aria-label={t.soundstage.orbitDepthLabel}
+                    aria-valuetext={`${Math.round(orbitDepth * 100)}%`}
+                    value={Math.round(orbitDepth * 100)}
+                    title={t.soundstage.orbitDepthResetTooltip}
+                    onDoubleClick={() => onOrbitDepthChange?.(0.85)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      const safeVal = isNaN(val) ? 0.85 : Math.min(1.0, Math.max(0.0, val / 100));
+                      onOrbitDepthChange?.(safeVal);
+                    }}
+                    className="w-full h-1 bg-border-subtle rounded appearance-none cursor-pointer accent-accent-cyan"
+                  />
+                  <div className="flex justify-between text-[9px] font-mono text-text-muted">
+                    <span>0%</span>
+                    <span>85%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Quick Action Buttons */}
             <div className="flex items-center justify-between pt-3 border-t border-border-subtle mt-3">
               <div className="flex items-center gap-2">
@@ -533,7 +739,7 @@ export const SoundstageConfiguratorModal: React.FC<SoundstageConfiguratorModalPr
                   className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-surface-card border border-border-subtle hover:border-border-default rounded-md text-text-secondary hover:text-text-primary transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset Trims & Mutes</span>
+                  <span>{t.soundstage.resetTrims}</span>
                 </button>
 
                 {onResetPositions && (

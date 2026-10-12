@@ -76,9 +76,9 @@ development_status:
   5-3-persistent-application-volume-preferences-automatic-session: done
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-motor-dsp-de-modulacao-azimutal-orbital-rotacao-continua-7-1-em-sub-blocos: done
   6-2-botao-rapido-8d-orbit-indicador-trajetoria-neon-no-soundstagedial: done
-  6-3-painel-completo-de-parametros-orbitais-no-modal-de-calibracao-persistencia-atomica: backlog
+  6-3-painel-completo-de-parametros-orbitais-no-modal-de-calibracao-persistencia-atomica: done
   epic-6-retrospective: optional
 

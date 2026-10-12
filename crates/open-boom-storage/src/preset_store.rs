@@ -1,9 +1,9 @@
 //! Atomic JSON preset and configuration persistence in %APPDATA%/OpenBoom/.
 
 use open_boom_core::types::{
-    GRAPHIC_EQ_BANDS, ITU_R_7_1_DEFAULT_AZIMUTHS, SURROUND_7_1_CHANNELS,
+    GRAPHIC_EQ_BANDS, ITU_R_7_1_DEFAULT_AZIMUTHS, OrbitDirection, SURROUND_7_1_CHANNELS,
 };
-pub use open_boom_core::types::AppVolumeProfile;
+pub use open_boom_core::types::{AppVolumeProfile, OrbitDirection as CoreOrbitDirection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -107,7 +107,27 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub buffer_guard_enabled: bool,
     #[serde(default)]
+    pub orbit_enabled: bool,
+    #[serde(default = "default_orbit_direction")]
+    pub orbit_direction: OrbitDirection,
+    #[serde(default = "default_orbit_period_sec")]
+    pub orbit_period_sec: f32,
+    #[serde(default = "default_orbit_depth")]
+    pub orbit_depth: f32,
+    #[serde(default)]
     pub language: Option<String>,
+}
+
+fn default_orbit_direction() -> OrbitDirection {
+    OrbitDirection::Clockwise
+}
+
+fn default_orbit_period_sec() -> f32 {
+    12.0
+}
+
+fn default_orbit_depth() -> f32 {
+    0.85
 }
 
 impl Default for AppConfig {
@@ -142,6 +162,10 @@ impl Default for AppConfig {
             sweetener_spatial_amount: 0.60,
             sweetener_pitch_semitones: 0,
             buffer_guard_enabled: true,
+            orbit_enabled: false,
+            orbit_direction: OrbitDirection::Clockwise,
+            orbit_period_sec: 12.0,
+            orbit_depth: 0.85,
             language: None,
         }
     }
@@ -748,7 +772,19 @@ impl PresetStore {
         };
 
         match serde_json::from_str::<AppConfig>(&content) {
-            Ok(cfg) => Ok(cfg),
+            Ok(mut cfg) => {
+                // Defensive sanitization of orbital configuration bounds
+                if cfg.orbit_period_sec.is_nan()
+                    || cfg.orbit_period_sec < 2.0
+                    || cfg.orbit_period_sec > 30.0
+                {
+                    cfg.orbit_period_sec = 12.0;
+                }
+                if cfg.orbit_depth.is_nan() || cfg.orbit_depth < 0.0 || cfg.orbit_depth > 1.0 {
+                    cfg.orbit_depth = 0.85;
+                }
+                Ok(cfg)
+            }
             Err(e) => {
                 eprintln!(
                     "Warning: Failed to parse OpenBoom config.json ({:?}): {}. Falling back to default configuration.",

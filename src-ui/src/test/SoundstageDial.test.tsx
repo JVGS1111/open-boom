@@ -163,7 +163,7 @@ export function runSoundstageDialTests(): TestResult[] {
       />
     );
 
-    assert(dial.props.onToggleOrbit !== undefined);
+    assert(dial.props.onToggleOrbit !== undefined, "onToggleOrbit must be defined");
     dial.props.onToggleOrbit();
     assert(toggleCalled, "onToggleOrbit must be bound to SoundstageDial and trigger state update");
   });

@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 00:45
-* **Sprint Ativa:** **Sprint 6 — Modo 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica)**
-* **Tarefa Atual:** Stories 6.1 e 6.2 finalizadas com 100% de sucesso. Execução pausada após Story 6.2 a pedido do usuário (pronto para retomar na Story 6.3).
+* **Data/Hora:** 12/10/2026 - 11:15
+* **Sprint Ativa:** **Sprint 6 — Modo 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica) [CONCLUÍDA]**
+* **Tarefa Atual:** Épico 6 e Story 6.3 concluídos e revisados com 100% de sucesso. Revisão adversarial em 4 camadas concluída, correções aplicadas, e suítes completas de testes verdes (194 Cargo + 95 UI).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -248,9 +248,41 @@
       - Build Vite de produção concluído em 1.82s com zero erros.
       - ADR-035 registrado no `.bmad/04-DECISION-LOG.md`.
 
+39. **Implementação do Painel Completo de Parâmetros Orbitais 8D no Modal de Calibração & Persistência Atômica (Story 6.3):**
+    - **Extensão do Esquema `AppConfig` com Retrocompatibilidade (`preset_store.rs`):**
+      - Adicionados campos `orbit_enabled: bool` (default `false`), `orbit_direction: OrbitDirection` (default `Clockwise`), `orbit_period_sec: f32` (default `12.0`) e `orbit_depth: f32` (default `0.85`) com atributos `#[serde(default = "...")]` e `AppConfig::default()`.
+      - Re-exportado `OrbitDirection` em `open_boom_storage`.
+      - Testes em `storage_tests.rs` validando que JSONs legados sem chaves orbitais desserializam para defaults e que configurações 8D customizadas são salvas e restauradas atomicamente.
+    - **Internacionalização Rigorosa com 100% de Paridade (`types.ts`, `en.ts`, `pt-BR.ts`, `es.ts`):**
+      - Dicionários estendidos com todas as chaves de seletor direcional, rótulos de sliders de período e profundidade, tooltips e acessibilidade ARIA.
+    - **Painel de Controle no `SoundstageConfiguratorModal.tsx`:**
+      - Card dedicado com seletor direcional de 3 segmentos (Horário, Anti-Horário, Pêndulo) com realce ciano neon.
+      - Slider de período de revolução de 2.0s a 30.0s com passo 0.5s, duplo-clique no slider e no badge para resetar em 12.0s e display `XX.Xs`.
+      - Slider de profundidade orbital de 0% a 100% com passo 1%, duplo-clique no slider e no badge para resetar em 85% e display `XX%`.
+      - Controles habilitados para pré-configuração direta de parâmetros antes da ativação do modo 8D, garantindo UX flexível.
+      - Acessibilidade WAI-ARIA completa (`role="radiogroup"`, `role="radio"`, `aria-checked`, `aria-label`, `aria-valuetext`).
+      - Localização estrita de todos os elementos, incluindo `resetTrims` no footer do modal com 100% de paridade (pt-BR, en, es).
+    - **Integração de Estado e Despacho em `App.tsx`:**
+      - Sincronização em tempo real de `orbitDirection`, `orbitPeriodSec` e `orbitDepth`, restauração em `load_app_config` com despacho de parâmetros no boot para o motor de áudio e auto-engajamento de surround se o modo 8D estiver ativo.
+      - Correção crítica no `handleToggleOrbit`: validação com `typeof targetEnabled === "boolean"` prevenindo que eventos React `MouseEvent` do HUD corrompam o estado e impeçam o desligamento do modo 8D.
+      - Sanitização em tempo de execução de `handleOrbitDirectionChange` com fallback seguro para `"Clockwise"`.
+      - Auto-save debounced em 250ms em `save_app_config` e repasse para o modal.
+    - **Suíte de Testes UI (`SoundstageConfiguratorModal.test.tsx`):**
+      - 10 testes unitários cobrindo renderização, botões de direção com semântica de rádio e classes ativas `bg-accent-cyan/25`, sliders com acessibilidade ARIA, toggle, callbacks, pre-configuração e duplo-clique de reset.
+    - **Sanitização Defensiva no Backend (`preset_store.rs`):**
+      - `load_config` sanitiza e faz clamp defensivo de `orbit_period_sec` em `[2.0, 30.0]` e `orbit_depth` em `[0.0, 1.0]` contra valores corrompidos ou NaN.
+    - **Verificação de Qualidade Global:**
+      - 194 testes Cargo passando no workspace com 100% de sucesso e zero warnings.
+      - 95 testes UI passando no `npm test` do `src-ui` (10 suítes de teste).
+      - Build Vite de produção validado em 2.27s com zero erros.
+      - ADR-036 registrado no `.bmad/04-DECISION-LOG.md`.
+      - Épico 6 marcado como `done` no `sprint-status.yaml`.
+
 ## O que está em andamento agora
-* Stories 6.1 e 6.2 finalizadas com 100% dos testes verdes. Execução interrompida ordenadamente a pedido do usuário após a Story 6.2. Pronto para prosseguir para a Story 6.3 (`6-3-painel-completo-de-parametros-orbitais-no-modal-de-calibracao-persistencia-atomica`).
+* **Épico 6 (Modo 8D Orbital Audio) — CONCLUÍDO:** Stories 6.1, 6.2 e 6.3 concluídas, revisadas por 4 camadas de agentes avaliadores (Blind Hunter, Edge Case Hunter, Verification Gap Reviewer, Acceptance Auditor), com 100% de testes verdes e sem pendências.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 193 testes Cargo no backend e 85 testes UI no frontend passam com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 194 testes Cargo no backend e 95 testes UI no frontend passam com 100% de sucesso.
+
+
 

@@ -50,6 +50,11 @@ const testFiles = [
     entry: path.join(__dirname, "SoundstageDial.test.tsx"),
     runnerName: "runSoundstageDialTests",
   },
+  {
+    name: "SoundstageConfiguratorModal 8D Orbital Parameters & Persistence Test Suite",
+    entry: path.join(__dirname, "SoundstageConfiguratorModal.test.tsx"),
+    runnerName: "runSoundstageConfiguratorModalTests",
+  },
 ];
 
 async function main() {
