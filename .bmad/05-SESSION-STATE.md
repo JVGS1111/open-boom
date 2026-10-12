@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 20:30
+* **Data/Hora:** 11/10/2026 - 23:30
 * **Sprint Ativa:** **Sprint 6 — Modo 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica)**
-* **Tarefa Atual:** Conclusão da especificação formal `/bmad-spec` (`_bmad-output/specs/spec-8d-orbital-audio/SPEC.md`, ADR-032).
+* **Tarefa Atual:** Execução do `/bmad-build-auto` para Story 6.1 (`6-1-motor-dsp-de-modulacao-azimutal-orbital-rotacao-continua-7-1-em-sub-blocos`).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
