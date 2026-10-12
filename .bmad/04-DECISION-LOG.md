@@ -598,3 +598,26 @@
      - Todas as strings do fluxo de atualização e abas foram adicionadas em `types.ts`, `en.ts`, `pt-BR.ts` e `es.ts`.
 * **Consequência:** 9 novos testes unitários em `Updater.test.tsx` (104 testes UI verdes) e novos testes Rust de SemVer e persistência (194+ testes Cargo verdes).
 
+---
+
+## ADR-039: Sincronização Bidirecional em Tempo Real com `IAudioEndpointVolume` do Windows (Spec 7.1)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Quando o OpenBoom está ativo, o áudio do sistema é redirecionado para o sink virtual `Boom Audio` (driver SYSVAD) ou capturado via WASAPI Loopback antes do atenuador de hardware do endpoint. Como o `AUDCLNT_STREAMFLAGS_LOOPBACK` captura o mix digital pré-atenuação de endpoint, alterar o volume na barra de tarefas do Windows ou pressionar as teclas multimídia do teclado (`Vol+`, `Vol-`, `Mute`) alterava apenas os metadados de `IAudioEndpointVolume` do endpoint padrão sem produzir qualquer variação acústica no `AudioStreamPump` ou refletir no slider do OpenBoom.
+* **Decisões:**
+  1. **Serviço COM MTA Dedicado (`EndpointVolumeSync` em `crates/open-boom-wasapi/src/volume_sync.rs`):**
+     - Worker thread dedicada `"open-boom-volume-sync"` inicializada com `CoInitializeEx(None, COINIT_MULTITHREADED)` e desinicialização determinística no `Drop` após `UnregisterControlChangeNotify`.
+     - Implementação COM nativa de `IAudioEndpointVolumeCallback` via `#[windows_core::implement(IAudioEndpointVolumeCallback)]`.
+  2. **Prevenção Dupla contra Loops de Realimentação (Feedback Echo Suppression):**
+     - **Nível 1 (GUID de Contexto COM):** Toda chamada originada pelo OpenBoom (`SetMasterVolumeLevelScalar` e `SetMute`) passa o `OPEN_BOOM_VOLUME_CONTEXT_GUID` (`{0x8b4c9e2a, 0x5f1d, 0x4e8b, ...}`). No callback `OnNotify`, notificações com `guidEventContext == OPEN_BOOM_VOLUME_CONTEXT_GUID` são descartadas imediatamente.
+     - **Nível 2 (Flag Atômica de Guarda):** Como drivers de áudio de terceiros podem zerar o `guidEventContext`, um `AtomicBool` (`is_syncing_to_windows`) é ativado em torno das chamadas COM originadas pelo OpenBoom para suprimir callbacks concorrentes espúrios.
+  3. **Mapeamento Assimétrico 0%–100% vs. Faixa Boost 101%–150%:**
+     - **UI $\to$ Windows:** Posições $v \in [0.0, 1.0]$ atualizam o scalar do Windows para $v$ e aplicam o ganho correspondente no DSP; posições na zona Boost $v \in (1.0, 1.5]$ fixam o volume do Windows em `1.0` (`100%`) e aplicam o ganho preamp adicional no `AudioProcessor` sob proteção do `MasterLimiter`.
+     - **Windows $\to$ OpenBoom:** Quando o usuário move o volume pelo Windows/teclado e o OpenBoom estava em Boost ($> 1.0$), reduções abaixo de `0.99` trazem o volume de volta à escala linear $[0.0, 1.0]$, enquanto notificações em `1.0` preservam o nível de Boost atual sem achatá-lo.
+  4. **Rebind Automático em Mudança de Topologia e Master Power:**
+     - Como alternar o Master Power comuta o dispositivo padrão do Windows entre `Boom Audio` e o DAC físico, `AppState::handle_master_power_toggle`, `set_audio_device` e `trigger_device_fallback` invocam `volume_sync.rebind_endpoint(...)` para manter o callback registrado no endpoint ativo.
+  5. **Auto-Unmute ao Arrastar o Slider da UI:**
+     - Arrastar o slider da `Titlebar` para um valor $> 0$ enquanto `isMuted == true` desativa automaticamente o mudo tanto no DSP quanto no Windows (`set_mute(false)`), espelhando o comportamento nativo do mixer do Windows 11.
+* **Consequência:** Sincronização bidirecional instantânea e livre de loops entre o Windows (barra de tarefas, teclas multimídia, roda de volume do teclado/headset) e o OpenBoom, validada por 9 novos testes de integração em `volume_sync_tests.rs` e suíte `TitlebarVolumeSync.test.tsx` (totalizando 212 testes Cargo verdes e 104 testes UI verdes).
+
+

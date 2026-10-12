@@ -1,9 +1,10 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 15:16
-* **Sprint Ativa:** **Sprint 8 — Experiência de Distribuição & Auto-Update In-App [CONCLUÍDA]**
-* **Tarefa Atual:** Spec 8.1 (`spec-8-1-in-app-auto-update-mechanism.md`) concluída e revisada com 100% de sucesso via `/bmad-build-auto`. Revisão em 4 lentes aplicada, correções embarcadas e suítes completas de testes verdes (194+ Cargo + 104 UI).
+* **Data/Hora:** 12/10/2026 - 15:20
+* **Sprint Ativa:** **Sprint 7 — Sincronização Bidirecional de Volume Mestre com o Windows [CONCLUÍDA]**
+* **Tarefa Atual:** Spec 7.1 (`spec-7-1-windows-endpoint-volume-bidirectional-sync.md`) concluída e revisada com 100% de sucesso via `/bmad-build-auto`. Revisão em 4 lentes aplicada, todas as 10 melhorias embarcadas e suítes completas de testes verdes (212 Cargo + 104 UI).
+
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -294,12 +295,18 @@
     - **Indicador na Barra de Título (`src-ui/src/components/Titlebar.tsx`):** Botão âmbar pulsante com ícone `<ArrowUpCircle />` exibido quando `hasUpdate === true`, abrindo diretamente `Configurações -> Atualizações`.
     - **Painel de Atualizações (`src-ui/src/components/SettingsModal.tsx`):** Navegação por abas (`Geral` e `Atualizações`), chips de versão atual vs. disponível, caixa de notas de versão, switches de checagem na abertura e atualização automática, e botão de ação unificado no mesmo slot (`Verificar Atualizações`, `Baixar e Instalar` e `Reiniciar Aplicação`).
     - **Internacionalização & Testes (`src-ui/src/i18n/` & `Updater.test.tsx`):** Paridade 100% entre `en`, `pt-BR` e `es`; 104 testes de UI verdes e 194+ testes Cargo verdes.
+43. **Implementação e Verificação Completa da Sincronização Bidirecional de Volume com o Windows (Spec 7.1 / ADR-039):**
+    - **Serviço COM MTA `EndpointVolumeSync` (`crates/open-boom-wasapi/src/volume_sync.rs`):** Thread dedicada `"open-boom-volume-sync"` gerenciando `IAudioEndpointVolume` e callback `IAudioEndpointVolumeCallback` (`#[windows_core::implement(IAudioEndpointVolumeCallback)]`), com supressão dupla de feedback loop (`OPEN_BOOM_VOLUME_CONTEXT_GUID` + `is_syncing_to_windows: AtomicBool`), caches atômicos lock-free (`cached_volume_bits`, `cached_muted`), resolução de `"default"` para o endpoint de console do Windows e modo sintético para testes headless.
+    - **Integração no Backend Tauri (`src-tauri/src/lib.rs`):** `AppState::dispatch_audio_command` centraliza a atualização de `AudioCommand::SetMasterVolume` e `AudioCommand::SetMute`, sincronizando a fila SPSC de áudio e o volume escalar do Windows (`v.clamp(0.0, 1.0)`), emitindo eventos `windows-volume-changed` para o frontend quando o volume/mute do Windows é alterado externamente (barra de tarefas ou teclas de mídia do teclado), e executando `rebind_endpoint` em `handle_master_power_toggle`, `set_audio_device` e `trigger_device_fallback`.
+    - **Sincronização Reativa na UI (`src-ui/src/App.tsx` e `src-ui/src/components/Titlebar.tsx`):** Listener para `windows-volume-changed` atualizando `masterVolume` e `isMuted` sem re-invocar `set_master_volume` (prevenindo loops IPC), e desbloqueio automático de mudo (`onToggleMute`) ao arrastar o slider de volume para $> 0$ enquanto mutado.
+    - **Verificação Completa de Testes:** 9 testes em `crates/open-boom-wasapi/tests/volume_sync_tests.rs`, testes de despacho em `src-tauri/src/lib.rs` e suíte `src-ui/src/test/TitlebarVolumeSync.test.tsx`. Total global: **212 testes Cargo passando (0 falhas)**, **104 testes UI passando (0 falhas)** e build de produção Vite concluído em 1.90s.
 
 ## O que está em andamento agora
-* **Auto-Update In-App Concluído (Spec 8.1):** Sistema 100% funcional, testado e pronto para uso em produção.
+* **Sincronização Bidirecional de Volume com o Windows (Spec 7.1) & Auto-Update In-App (Spec 8.1) Concluídos:** Todos os épicos planejados (Epics 1 a 8) estão 100% implementados, revisados e testados.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com base Windows 100% verde (v0.3.0), atualizador in-app integrado ao GitHub Releases e arquitetura de expansão multi-plataforma formalizada.
+* Nenhum bloqueio. Sistema com 212 testes Cargo verdes e 104 testes UI verdes.
+
 
 
 

@@ -57,7 +57,11 @@
 - [X] **T6.3**: Botão Rápido 8D Orbit & Indicador Trajetória Neon no SoundstageDial (Toggle 8D no HUD, comando Tauri IPC `set_orbit_8d`, projeção polar azimutal e cometa orbital neon $\ge 30\text{ fps}$ via telemetria - Story 6.2, ADR-035).
 - [X] **T6.4**: Painel Completo de Parâmetros Orbitais no Modal de Calibração & Persistência Atômica (Controles detalhados de direção, sliders de período e profundidade no SoundstageConfiguratorModal e persistência em `AppConfig` - Story 6.3, ADR-036).
 
+### Sprint 7: Integração com Controle de Volume Mestre do Windows (Epic 7)
+- [X] **T7.1**: Sincronização Bidirecional em Tempo Real com `IAudioEndpointVolume` do Windows (Worker thread COM MTA dedicada `open-boom-volume-sync`, callback `IAudioEndpointVolumeCallback::OnNotify`, supressão de eco por GUID `OPEN_BOOM_VOLUME_CONTEXT_GUID` + flag atômica `is_syncing_to_windows`, rebind automático em troca de Master Power/dispositivos, preservação da faixa Boost 101%–150%, auto-unmute em arrasto do slider da UI e eventos IPC `windows-volume-changed` - Spec 7.1, ADR-039).
+
 ### Sprint 8: Experiência de Distribuição & Auto-Update In-App
 - [X] **T8.1**: Mecanismo de Auto-Update In-App a Custo Zero via GitHub Releases (Verificação automática na abertura do app, badge âmbar pulsante na Titlebar levando direto para `Configurações -> Atualizações`, painel completo com notas de versão, switches de checagem ao iniciar e instalação automática, e botão de `Reiniciar Aplicação` no mesmo slot de ação - Spec 8.1, ADR-038).
+
 
 

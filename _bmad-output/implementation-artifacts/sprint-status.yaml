@@ -82,8 +82,9 @@ development_status:
   6-3-painel-completo-de-parametros-orbitais-no-modal-de-calibracao-persistencia-atomica: done
   epic-6-retrospective: optional
 
-  epic-7: in-progress
-  7-1-windows-endpoint-volume-bidirectional-sync: in-progress
+  epic-7: done
+  7-1-windows-endpoint-volume-bidirectional-sync: done
   epic-7-retrospective: optional
+
 
 
