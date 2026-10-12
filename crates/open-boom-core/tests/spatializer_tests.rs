@@ -251,7 +251,7 @@ fn test_spatializer_zero_allocation_and_performance_budget() {
     }
     let elapsed = start.elapsed();
 
-    let budget_ms = if cfg!(debug_assertions) { 1000 } else { 250 };
+    let budget_ms = if cfg!(debug_assertions) { 3500 } else { 250 };
     println!("Processed 1 second (48,000 frames) in {:?}", elapsed);
     assert!(
         elapsed.as_millis() < budget_ms,

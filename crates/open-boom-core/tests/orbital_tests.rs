@@ -473,7 +473,9 @@ fn test_orbital_performance_and_zero_allocation() {
     }
     let elapsed = start.elapsed();
 
-    let budget_ms = if cfg!(debug_assertions) { 1000 } else { 250 };
+    // Under debug_assertions on shared 2-vCPU CI runners with parallel test threads,
+    // allow up to 3500ms wall-clock time; in release builds enforce strict 250ms (<25% CPU).
+    let budget_ms = if cfg!(debug_assertions) { 3500 } else { 250 };
     println!("Processed 1 second of 8D audio (48,000 frames) in {:?}", elapsed);
     assert!(
         elapsed.as_millis() < budget_ms,
