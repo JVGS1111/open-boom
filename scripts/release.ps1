@@ -7,6 +7,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+function Write-Utf8NoBom([string]$RelativePath, [string]$Text) {
+    $fullPath = Join-Path (Get-Location).Path $RelativePath
+    [System.IO.File]::WriteAllText($fullPath, $Text, $utf8NoBom)
+}
 
 # 1. Read current version from package.json
 $pkgJsonPath = "package.json"
@@ -64,44 +70,51 @@ if ($existingTag) {
 }
 
 if ($rawVersion -ne $currentVersion) {
-    Write-Host "[1/5] Bumping version to $rawVersion across workspace manifests..." -ForegroundColor Green
+    Write-Host "[1/6] Bumping version to $rawVersion across workspace manifests (UTF-8 no BOM)..." -ForegroundColor Green
 
     # Update package.json
     $pkgRaw = Get-Content -Raw -Path "package.json"
     $pkgRaw = [regex]::Replace($pkgRaw, '"version":\s*"[^"]+"', "`"version`": `"$rawVersion`"", 1)
-    Set-Content -Path "package.json" -Value $pkgRaw -NoNewline -Encoding UTF8
+    Write-Utf8NoBom "package.json" $pkgRaw
 
     # Update src-ui/package.json
     $uiPkgRaw = Get-Content -Raw -Path "src-ui/package.json"
     $uiPkgRaw = [regex]::Replace($uiPkgRaw, '"version":\s*"[^"]+"', "`"version`": `"$rawVersion`"", 1)
-    Set-Content -Path "src-ui/package.json" -Value $uiPkgRaw -NoNewline -Encoding UTF8
+    Write-Utf8NoBom "src-ui/package.json" $uiPkgRaw
 
     # Update src-tauri/tauri.conf.json
     $tauriConfRaw = Get-Content -Raw -Path "src-tauri/tauri.conf.json"
     $tauriConfRaw = [regex]::Replace($tauriConfRaw, '"version":\s*"[^"]+"', "`"version`": `"$rawVersion`"", 1)
-    Set-Content -Path "src-tauri/tauri.conf.json" -Value $tauriConfRaw -NoNewline -Encoding UTF8
+    Write-Utf8NoBom "src-tauri/tauri.conf.json" $tauriConfRaw
 
     # Update root Cargo.toml ([workspace.package] version)
     $cargoTomlRaw = Get-Content -Raw -Path "Cargo.toml"
     $cargoTomlRaw = [regex]::Replace($cargoTomlRaw, '(?m)^version\s*=\s*"[^"]+"', "version = `"$rawVersion`"", 1)
-    Set-Content -Path "Cargo.toml" -Value $cargoTomlRaw -NoNewline -Encoding UTF8
+    Write-Utf8NoBom "Cargo.toml" $cargoTomlRaw
 
     # Update fallback version string in src-ui/src/components/SettingsModal.tsx
     $settingsModalPath = "src-ui/src/components/SettingsModal.tsx"
     if (Test-Path $settingsModalPath) {
         $settingsModalRaw = Get-Content -Raw -Path $settingsModalPath
         $settingsModalRaw = $settingsModalRaw -replace 'updateInfo\?\.currentVersion \|\| "[^"]+"', "updateInfo?.currentVersion || `"$rawVersion`""
-        Set-Content -Path $settingsModalPath -Value $settingsModalRaw -NoNewline -Encoding UTF8
+        Write-Utf8NoBom $settingsModalPath $settingsModalRaw
     }
 
-    Write-Host "[2/5] Synchronizing Cargo.lock with workspace version $rawVersion..." -ForegroundColor Green
+    Write-Host "[2/6] Synchronizing Cargo.lock with workspace version $rawVersion..." -ForegroundColor Green
     cargo update -w
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to update Cargo.lock"
         exit 1
     }
 
-    Write-Host "[3/5] Committing version bump (chore(release): bump version to $tag)..." -ForegroundColor Green
+    Write-Host "[3/6] Verifying workspace compilation (cargo check --workspace --locked)..." -ForegroundColor Green
+    cargo check --workspace --locked
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Workspace check failed after version bump"
+        exit 1
+    }
+
+    Write-Host "[4/6] Committing version bump (chore(release): bump version to $tag)..." -ForegroundColor Green
     git add package.json src-ui/package.json src-tauri/tauri.conf.json Cargo.toml Cargo.lock src-ui/src/components/SettingsModal.tsx
     git commit -m "chore(release): bump version to $tag"
     if ($LASTEXITCODE -ne 0) {
@@ -109,10 +122,10 @@ if ($rawVersion -ne $currentVersion) {
         exit 1
     }
 } else {
-    Write-Host "[1/5] Version is already $rawVersion, skipping manifest edits..." -ForegroundColor Yellow
+    Write-Host "[1/6] Version is already $rawVersion, skipping manifest edits..." -ForegroundColor Yellow
 }
 
-Write-Host "[4/5] Creating annotated Git tag: $tag..." -ForegroundColor Green
+Write-Host "[5/6] Creating annotated Git tag: $tag..." -ForegroundColor Green
 git tag -a $tag -m "OpenBoom Release $tag"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to create tag $tag"
@@ -120,7 +133,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if (-not $NoPush) {
-    Write-Host "[5/5] Pushing main branch and tag $tag to origin..." -ForegroundColor Green
+    Write-Host "[6/6] Pushing main branch and tag $tag to origin..." -ForegroundColor Green
     git push origin main
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to push main branch to origin"
@@ -135,5 +148,5 @@ if (-not $NoPush) {
     Write-Host ""
     Write-Host "Release $tag published successfully! GitHub Actions (.github/workflows/release.yml) is now building the release assets." -ForegroundColor Cyan
 } else {
-    Write-Host "[5/5] Skipping git push (-NoPush specified)." -ForegroundColor Yellow
+    Write-Host "[6/6] Skipping git push (-NoPush specified)." -ForegroundColor Yellow
 }
