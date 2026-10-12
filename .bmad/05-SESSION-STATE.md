@@ -278,11 +278,16 @@
       - ADR-036 registrado no `.bmad/04-DECISION-LOG.md`.
       - Épico 6 marcado como `done` no `sprint-status.yaml`.
 
+40. **Validação de Execução ao Vivo, Lançamento da Versão v0.3.0 & Publicação no GitHub:**
+    - **Teste de Inicialização do Executável (`open-boom.exe`):** Compilação de produção (`cargo build --release -p open-boom`) concluída em 26.6s. Teste de execução ao vivo via PowerShell confirmando que o processo inicia de forma saudável, sem falhas de apartamentos COM, sem crashes de acesso e com alocação e carregamento perfeitos.
+    - **Versionamento & Bump para v0.3.0:** Versão incrementada para `0.3.0` em `Cargo.toml`, `package.json`, `src-tauri/tauri.conf.json`, `src-ui/package.json` e `Cargo.lock`.
+    - **Tag & Publicação no Repositório Remoto:** Criada a tag anotada `v0.3.0` e efetuado o `git push origin main` e `git push origin v0.3.0`. Pipeline CI/CD GitHub Actions (`.github/workflows/release.yml`) acionado para compilar os instaladores NSIS e executáveis portáteis.
+
 ## O que está em andamento agora
-* **Épico 6 (Modo 8D Orbital Audio) — CONCLUÍDO:** Stories 6.1, 6.2 e 6.3 concluídas, revisadas por 4 camadas de agentes avaliadores (Blind Hunter, Edge Case Hunter, Verification Gap Reviewer, Acceptance Auditor), com 100% de testes verdes e sem pendências.
+* **Épico 6 e Versão v0.3.0 Concluídos e Publicados:** Épicos 1 a 6 100% finalizados, tag `v0.3.0` publicada no GitHub e pipeline de release gerando os artefatos de distribuição.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 194 testes Cargo no backend e 95 testes UI no frontend passam com 100% de sucesso.
+* Nenhum bloqueio. Sistema estável, testado e publicado.
 
 
 
