@@ -44,6 +44,7 @@ export interface TranslationDictionary {
     title: string;
     immersion: string;
     calibrateSoundstage: string;
+    orbit8D: string;
     doubleClickReset: string;
     calibrateModalTitle: string;
     calibrateModalSubtitle: string;

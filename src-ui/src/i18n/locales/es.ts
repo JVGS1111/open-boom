@@ -43,6 +43,7 @@ export const es: TranslationDictionary = {
     title: "SURROUND 3D",
     immersion: "INMERSIÓN",
     calibrateSoundstage: "CALIBRAR ESCENARIO",
+    orbit8D: "8D Orbit",
     doubleClickReset: "Doble clic para restablecer al 50%",
     calibrateModalTitle: "Calibración Espacial y Altavoces Virtuales",
     calibrateModalSubtitle: "Escenario Sonoro Binaural 7.1 ITU-R BS.775 KEMAR",

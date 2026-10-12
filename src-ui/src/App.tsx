@@ -61,6 +61,10 @@ export const App: React.FC = () => {
   const [surroundEnabled, setSurroundEnabled] = useState(true);
   const [surroundIntensity, setSurroundIntensity] = useState(0.72);
 
+  // 8D Orbital Audio State (Story 6.2, CAP-4, CAP-5)
+  const [orbitEnabled, setOrbitEnabled] = useState(false);
+  const [orbitPhaseDeg, setOrbitPhaseDeg] = useState(0.0);
+
   // Equalizer State (31 Bands), Presets & Studio Drawer (Story 3.1, 3.2 & 3.5, FR9, FR11, FR12, UX-DR7)
   const [eqPresets, setEqPresets] = useState<EqPreset[]>(FACTORY_EQ_PRESETS);
   const [activeEqPreset, setActiveEqPreset] = useState("Flat");
@@ -606,6 +610,33 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleToggleOrbit = async () => {
+    const nextOrbit = !orbitEnabled;
+    setOrbitEnabled(nextOrbit);
+
+    // Auto-engage 3D spatializer if disabled (CAP-4, Story 6.2 Edge Case Matrix)
+    if (nextOrbit && !surroundEnabled) {
+      setSurroundEnabled(true);
+      dispatchCommand({
+        SetSurround3D: { enabled: true, intensity: surroundIntensity },
+      });
+    }
+
+    try {
+      await invoke("set_orbit_8d", { enabled: nextOrbit });
+    } catch {
+      // Browser preview fallback
+      dispatchCommand({
+        SetOrbit8D: {
+          enabled: nextOrbit,
+          direction: "Clockwise",
+          period_sec: 12.0,
+          depth: 0.85,
+        },
+      });
+    }
+  };
+
   const handleToggleEffect = (id: number) => {
     if (id >= 4) return; // Pitch is Phase 2 Coming Soon (FR20)
     setEffectModules((prev) =>
@@ -1067,7 +1098,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [bypassActive, masterPower]);
 
-  // Poll real-time telemetry from Tauri core
+  // Poll real-time telemetry from Tauri core at >= 30 fps (Story 6.2, CAP-5)
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -1080,6 +1111,8 @@ export const App: React.FC = () => {
           bit_depth: number;
           limiter_active: boolean;
           using_virtual_bridge: boolean;
+          orbit_phase_deg?: number;
+          orbit_enabled?: boolean;
         }>("get_telemetry");
         if (snapshot) {
           setLatencyMs(snapshot.round_trip_latency_ms);
@@ -1099,11 +1132,17 @@ export const App: React.FC = () => {
           if (typeof snapshot.using_virtual_bridge === "boolean") {
             setUsingVirtualBridge(snapshot.using_virtual_bridge);
           }
+          if (typeof snapshot.orbit_phase_deg === "number") {
+            setOrbitPhaseDeg(snapshot.orbit_phase_deg);
+          }
+          if (typeof snapshot.orbit_enabled === "boolean") {
+            setOrbitEnabled(snapshot.orbit_enabled);
+          }
         }
       } catch {
         // Fallback for browser mode
       }
-    }, 60);
+    }, 33);
 
     return () => clearInterval(interval);
   }, []);
@@ -1190,6 +1229,9 @@ export const App: React.FC = () => {
             onIntensityChange={handleSurroundIntensityChange}
             onToggle={handleToggleSurround}
             onOpenConfigurator={() => setIsConfiguratorOpen(true)}
+            orbitEnabled={masterPower && !bypassActive && surroundEnabled && orbitEnabled}
+            orbitPhaseDeg={orbitPhaseDeg}
+            onToggleOrbit={handleToggleOrbit}
           />
         </section>
 

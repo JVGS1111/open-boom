@@ -2,7 +2,7 @@
 
 use open_boom_core::ring_buffer::SpscQueue;
 use open_boom_core::types::{
-    AudioCommand, AudioDeviceInfo, ProcessAudioSession, TelemetrySnapshot, GRAPHIC_EQ_BANDS,
+    AudioCommand, AudioDeviceInfo, OrbitDirection, ProcessAudioSession, TelemetrySnapshot, GRAPHIC_EQ_BANDS,
 };
 use open_boom_storage::{
     AppConfig, AppVolumeProfile, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats,
@@ -345,6 +345,35 @@ fn set_buffer_guard(enabled: bool, state: State<'_, AppState>) -> Result<(), Str
     Ok(())
 }
 
+fn resolve_orbit_params(
+    direction: Option<OrbitDirection>,
+    period_sec: Option<f32>,
+    depth: Option<f32>,
+) -> (OrbitDirection, f32, f32) {
+    (
+        direction.unwrap_or(OrbitDirection::Clockwise),
+        period_sec.unwrap_or(12.0),
+        depth.unwrap_or(0.85),
+    )
+}
+
+#[tauri::command]
+fn set_orbit_8d(
+    enabled: bool,
+    direction: Option<OrbitDirection>,
+    period_sec: Option<f32>,
+    depth: Option<f32>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (dir, period, d) = resolve_orbit_params(direction, period_sec, depth);
+
+    state.dispatcher.send(AudioCommand::SetOrbit8D {
+        enabled,
+        direction: dir,
+        period_sec: period,
+        depth: d,
+    }).map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 fn minimize_window(app_handle: AppHandle) -> Result<(), String> {
@@ -756,6 +785,7 @@ pub fn run() {
             get_app_volume_profiles,
             reset_app_volume_profile,
             set_buffer_guard,
+            set_orbit_8d,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -1150,6 +1180,60 @@ mod tests {
         assert!(state.store.load_app_volume_list().unwrap().is_empty());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_set_orbit_8d_command_dispatch() {
+        let state = AppState::new();
+
+        // 1. Dispatch 8D Orbit command through dispatcher
+        let res = state.dispatcher.send(AudioCommand::SetOrbit8D {
+            enabled: true,
+            direction: OrbitDirection::Clockwise,
+            period_sec: 12.0,
+            depth: 0.85,
+        });
+        assert!(res.is_ok(), "Dispatching SetOrbit8D must succeed");
+
+        // 2. Allow background dispatcher thread to process the channel and verify command popped
+        let mut cmd = None;
+        for _ in 0..20 {
+            if let Some(c) = state.command_queue.pop() {
+                cmd = Some(c);
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        assert_eq!(
+            cmd,
+            Some(AudioCommand::SetOrbit8D {
+                enabled: true,
+                direction: OrbitDirection::Clockwise,
+                period_sec: 12.0,
+                depth: 0.85,
+            }),
+            "SPSC queue must receive SetOrbit8D POD command without corruption"
+        );
+    }
+
+    #[test]
+    fn test_resolve_orbit_params_defaults_and_overrides() {
+        // Defaults when None is passed
+        let (dir, period, depth) = resolve_orbit_params(None, None, None);
+        assert_eq!(dir, OrbitDirection::Clockwise);
+        assert_eq!(period, 12.0);
+        assert_eq!(depth, 0.85);
+
+        // Custom parameters preserved
+        let (dir2, period2, depth2) = resolve_orbit_params(
+            Some(OrbitDirection::PingPong),
+            Some(6.5),
+            Some(1.0),
+        );
+        assert_eq!(dir2, OrbitDirection::PingPong);
+        assert_eq!(period2, 6.5);
+        assert_eq!(depth2, 1.0);
     }
 }
 

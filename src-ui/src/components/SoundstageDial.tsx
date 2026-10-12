@@ -1,13 +1,45 @@
 import React, { useRef, useState, useCallback } from "react";
-import { Compass } from "lucide-react";
+import { Compass, Orbit } from "lucide-react";
 import { useI18n } from "../i18n";
 
-interface SoundstageDialProps {
+/**
+ * Maps standard acoustic azimuth degrees to SVG Cartesian coordinates on the dial.
+ *
+ * Polar coordinates convention:
+ * 0°    = North / Center (x = cx, y = cy - R)
+ * +45°  = Front-Right (x = cx + R * sin(45°), y = cy - R * cos(45°))
+ * +90°  = East / Right / Surround-Right (x = cx + R, y = cy)
+ * +135° = Rear-Right
+ * ±180° = South / Rear / LFE (x = cx, y = cy + R)
+ * -90°  = West / Left / Surround-Left (x = cx - R, y = cy)
+ * -45°  = Front-Left
+ */
+export const azimuthToCartesian = (
+  azimuthDeg: number,
+  r: number,
+  originX: number = 96,
+  originY: number = 96
+) => {
+  const safeAngle =
+    typeof azimuthDeg === "number" && !isNaN(azimuthDeg) && isFinite(azimuthDeg)
+      ? azimuthDeg
+      : 0.0;
+  const rad = (safeAngle * Math.PI) / 180.0;
+  return {
+    x: originX + r * Math.sin(rad),
+    y: originY - r * Math.cos(rad),
+  };
+};
+
+export interface SoundstageDialProps {
   enabled: boolean;
   intensity: number;
   onIntensityChange: (intensity: number) => void;
   onToggle: () => void;
   onOpenConfigurator?: () => void;
+  orbitEnabled?: boolean;
+  orbitPhaseDeg?: number;
+  onToggleOrbit?: () => void;
 }
 
 export const SoundstageDial: React.FC<SoundstageDialProps> = ({
@@ -16,6 +48,9 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
   onIntensityChange,
   onToggle,
   onOpenConfigurator,
+  orbitEnabled = false,
+  orbitPhaseDeg = 0.0,
+  onToggleOrbit,
 }) => {
   const { t } = useI18n();
   const dialRef = useRef<HTMLDivElement>(null);
@@ -284,6 +319,95 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
               />
             );
           })}
+
+          {/* Luminous Neon 8D Orbital Trajectory Comet / Beacon */}
+          {orbitEnabled && (
+            <g data-testid="orbital-comet" className="orbital-comet pointer-events-none">
+              {/* Planetary Orbital Guide Ring */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={radius}
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth="1.5"
+                strokeDasharray="3 4"
+                opacity="0.35"
+              />
+
+              {/* Luminous Comet Tail Trail (Fading particles trailing behind) */}
+              {(() => {
+                const pHead = azimuthToCartesian(orbitPhaseDeg, radius, cx, cy);
+                const pTail1 = azimuthToCartesian(orbitPhaseDeg - 7, radius, cx, cy);
+                const pTail2 = azimuthToCartesian(orbitPhaseDeg - 14, radius, cx, cy);
+                const pTail3 = azimuthToCartesian(orbitPhaseDeg - 21, radius, cx, cy);
+
+                return (
+                  <>
+                    <circle
+                      data-testid="comet-tail-3"
+                      cx={pTail3.x.toFixed(2)}
+                      cy={pTail3.y.toFixed(2)}
+                      r="2"
+                      fill="#38bdf8"
+                      opacity="0.25"
+                      className="drop-shadow-[0_0_4px_rgba(56,189,248,0.3)]"
+                    />
+                    <circle
+                      data-testid="comet-tail-2"
+                      cx={pTail2.x.toFixed(2)}
+                      cy={pTail2.y.toFixed(2)}
+                      r="3"
+                      fill="#38bdf8"
+                      opacity="0.5"
+                      className="drop-shadow-[0_0_6px_rgba(56,189,248,0.5)]"
+                    />
+                    <circle
+                      data-testid="comet-tail-1"
+                      cx={pTail1.x.toFixed(2)}
+                      cy={pTail1.y.toFixed(2)}
+                      r="4"
+                      fill="#38bdf8"
+                      opacity="0.75"
+                      className="drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]"
+                    />
+
+                    {/* Outer Pulsing Halo */}
+                    <circle
+                      data-testid="comet-beacon-halo"
+                      cx={pHead.x.toFixed(2)}
+                      cy={pHead.y.toFixed(2)}
+                      r="7.5"
+                      fill="#38bdf8"
+                      opacity="0.35"
+                      className="animate-pulse"
+                    />
+
+                    {/* Luminous Neon Beacon Disc */}
+                    <circle
+                      data-testid="comet-beacon-disc"
+                      cx={pHead.x.toFixed(2)}
+                      cy={pHead.y.toFixed(2)}
+                      r="5.5"
+                      fill="#06b6d4"
+                      stroke="#38bdf8"
+                      strokeWidth="1.5"
+                      className="drop-shadow-[0_0_12px_rgba(56,189,248,0.95)]"
+                    />
+
+                    {/* Intense Core Beacon Spark */}
+                    <circle
+                      data-testid="comet-beacon-head"
+                      cx={pHead.x.toFixed(2)}
+                      cy={pHead.y.toFixed(2)}
+                      r="2.8"
+                      fill="#ffffff"
+                    />
+                  </>
+                );
+              })()}
+            </g>
+          )}
         </svg>
 
         {/* 144px Inner Machined Rotary Knob */}
@@ -311,31 +435,60 @@ export const SoundstageDial: React.FC<SoundstageDialProps> = ({
           >
             {enabled ? `${Math.round(clampedIntensity * 100)}%` : t.common.off.toUpperCase()}
           </span>
-          <span className="font-mono text-[9px] text-text-muted font-medium">
-            KEMAR 7.1 HRTF
+          <span
+            className={`font-mono text-[9px] font-medium tracking-wide ${
+              orbitEnabled
+                ? "text-accent-cyan font-bold drop-shadow-[0_0_6px_rgba(56,189,248,0.5)]"
+                : "text-text-muted"
+            }`}
+          >
+            {orbitEnabled ? "8D ORBIT ACTIVE" : "KEMAR 7.1 HRTF"}
           </span>
         </div>
       </div>
 
       {/* Control Actions & Soundstage Configurator launcher */}
-      <div className="flex items-center gap-3 mt-3">
-        <button
-          type="button"
-          onClick={onToggle}
-          className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition-colors cursor-pointer ${
-            enabled
-              ? "bg-accent-cyan/15 text-accent-cyan border-accent-cyan/40 hover:bg-accent-cyan/25"
-              : "bg-surface-card text-text-muted border-border-subtle hover:text-text-primary"
-          }`}
-        >
-          {enabled ? t.common.active : t.common.bypassed}
-        </button>
+      <div className="flex flex-col items-center gap-2 mt-3 w-full">
+        <div className="flex items-center justify-center gap-2 w-full">
+          <button
+            type="button"
+            onClick={onToggle}
+            className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition-colors cursor-pointer ${
+              enabled
+                ? "bg-accent-cyan/15 text-accent-cyan border-accent-cyan/40 hover:bg-accent-cyan/25"
+                : "bg-surface-card text-text-muted border-border-subtle hover:text-text-primary"
+            }`}
+          >
+            {enabled ? t.common.active : t.common.bypassed}
+          </button>
+
+          <button
+            type="button"
+            data-testid="orbit-8d-button"
+            aria-pressed={orbitEnabled}
+            aria-label={t.soundstage.orbit8D || "8D Orbit"}
+            onClick={onToggleOrbit}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded border transition-all duration-150 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan/60 ${
+              orbitEnabled
+                ? "bg-accent-cyan/20 text-accent-cyan border-accent-cyan shadow-[0_0_12px_rgba(56,189,248,0.45)] ring-1 ring-accent-cyan/40"
+                : "bg-surface-card text-text-muted border-border-subtle hover:text-text-primary hover:border-border-default"
+            }`}
+          >
+            <Orbit
+              className={`w-3.5 h-3.5 ${
+                orbitEnabled ? "text-accent-cyan animate-spin" : "text-text-muted"
+              }`}
+              style={{ animationDuration: "6s" }}
+            />
+            <span>{t.soundstage.orbit8D || "8D Orbit"}</span>
+          </button>
+        </div>
 
         <button
           type="button"
           onClick={onOpenConfigurator}
           title="Open 8-Channel Polar Soundstage Configurator (Ctrl + Shift + S)"
-          className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium bg-surface-card border border-border-subtle hover:border-accent-cyan/40 hover:text-accent-cyan rounded text-text-secondary transition-all cursor-pointer shadow-sm"
+          className="flex items-center justify-center gap-1.5 px-3 py-1 text-[11px] font-medium bg-surface-card border border-border-subtle hover:border-accent-cyan/40 hover:text-accent-cyan rounded text-text-secondary transition-all cursor-pointer shadow-sm w-full max-w-[200px]"
         >
           <Compass className="w-3.5 h-3.5 text-accent-cyan" />
           <span>{t.soundstage.calibrateSoundstage}</span>

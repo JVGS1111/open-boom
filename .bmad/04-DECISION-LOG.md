@@ -495,6 +495,30 @@
      - Ao desativar o modo 8D, `restore_static_hrtfs` recalcula imediatamente os coeficientes HRTF estáticos para os azimutes nominais configurados sem zerar buffers de histórico, prevenindo descontinuidades DC.
 * **Consequência:** 13 novos testes de integração em `crates/open-boom-core/tests/orbital_tests.rs` e teste de desserialização serde no `src-tauri` aprovados com 100% de sucesso. Total de 188 testes Cargo passando no workspace com zero warnings.
 
+---
+
+## ADR-035: Botão Rápido 8D Orbit, Projeção Polar e Indicador de Trajetória Neon no SoundstageDial (Story 6.2)
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Necessidade de disponibilizar ativação direta do modo 8D Orbital Audio no HUD principal (`SoundstageDial`) sem obrigar abertura de modais secundárias, e fornecer feedback visual contínuo e em tempo real ($\ge 30\text{ fps}$) da rotação do palco sonoro 3D através de um cometa orbital neon projetado na pista circular SVG do dial.
+* **Decisões:**
+  1. **Mapeamento de Azimute Acústico para Coordenadas Polares SVG:**
+     - Convenção acústica ITU-R: $0^\circ = \text{Frente/Centro}$ (Norte), $+90^\circ = \text{Direita}$ (Leste), $-90^\circ = \text{Esquerda}$ (Oeste), $\pm 180^\circ = \text{Traseira/LFE}$ (Sul).
+     - Projeção cartesiana implementada em `azimuthToCartesian(azimuthDeg, r)` com $x = c_x + r \cdot \sin(\theta)$ e $y = c_y - r \cdot \cos(\theta)$, alinhando o cometa perfeitamente à pista de raio $R = 84\text{ px}$ e centro $(96, 96)$ sem desvios ou clipping.
+     - Sanitização defensiva de NaN e Inf com fallback automático para $0^\circ$ (Norte).
+  2. **Renderização do Cometa Orbital Neon no SVG do SoundstageDial:**
+     - Quando `orbitEnabled == true`, renderiza um anel guia planetário sutil e um cometa luminoso com núcleo branco quente (`#ffffff`), disco ciano neon (`#06b6d4`), halo pulsante e três partículas de rastro desvanecente ($\theta - 7^\circ, \theta - 14^\circ, \theta - 21^\circ$), contidos rigidamente na `viewBox="0 0 192 192"` com zero layout shift.
+     - Subtítulo do botão giratório usinado atualizado dinamicamente para `"8D ORBIT ACTIVE"` em destaque ciano neon.
+  3. **Botão Rápido 8D Orbit Acessível:**
+     - Adicionado botão pill `"8D Orbit"` com ícone rotativo `<Orbit />` animado (6s de rotação), `aria-pressed`, `role="button"`, suporte a teclado (Enter/Space) e brilho neon ciano intenso quando ativo (`shadow-[0_0_12px_rgba(56,189,248,0.45)]`).
+     - Reestruturação do strip de controles em layout de duas linhas (Linha 1: Active/Bypassed e 8D Orbit; Linha 2: Calibrate Soundstage), garantindo zero aperto e zero overflow na largura mínima de 280px.
+  4. **Comando IPC Tauri `set_orbit_8d` e Auto-Engajamento do Spatializer:**
+     - Exposto comando Tauri `set_orbit_8d(enabled, direction, period_sec, depth)` despachando `AudioCommand::SetOrbit8D` lock-free pela fila circular SPSC.
+     - Ao ligar o modo 8D com o spatializer 3D desativado, `handleToggleOrbit` auto-engaja o spatializer para experiência contínua sem cliques extras.
+  5. **Telemetria de Fase a $\ge 30\text{ fps}$:**
+     - Taxa de polling de `get_telemetry` aumentada para 33ms (~30.3 fps), sincronizando o cometa orbital com total fluidez sem introduzir carga perceptível de CPU ou atraso no áudio.
+* **Consequência:** 7 novos testes de UI em `SoundstageDial.test.tsx` (total de 85 testes UI verdes no `npm test`) e teste de integração SPSC no Tauri aprovados. Total de 192 testes Cargo aprovados no workspace.
+
 
 
 

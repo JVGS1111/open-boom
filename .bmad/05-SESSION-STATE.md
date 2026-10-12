@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 11/10/2026 - 23:30
+* **Data/Hora:** 12/10/2026 - 00:45
 * **Sprint Ativa:** **Sprint 6 — Modo 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica)**
-* **Tarefa Atual:** Execução do `/bmad-build-auto` para Story 6.1 (`6-1-motor-dsp-de-modulacao-azimutal-orbital-rotacao-continua-7-1-em-sub-blocos`).
+* **Tarefa Atual:** Stories 6.1 e 6.2 finalizadas com 100% de sucesso. Execução pausada após Story 6.2 a pedido do usuário (pronto para retomar na Story 6.3).
 
 ## O que foi concluído nesta sessão
 1. Localização e engenharia reversa do Boom 3D instalado no sistema (identificado como app MSIX em .NET/WPF com driver SYSVAD `boomvad.sys`, motor DSP C++ SSE e banco AutoEq).
@@ -225,8 +225,32 @@
       - 188 testes Cargo passando no workspace com 100% de sucesso e zero warnings.
       - ADR-034 registrado no `.bmad/04-DECISION-LOG.md`.
 
+38. **Implementação do Botão Rápido 8D Orbit & Indicador Trajetória Neon no SoundstageDial (Story 6.2):**
+    - **Projeção Polar e Mapeamento de Azimute Acústico (`SoundstageDial.tsx`):**
+      - Função `azimuthToCartesian(azimuthDeg, r, cx, cy)` mapeando coordenadas acústicas ($0^\circ = \text{Norte/Frente}$, $+90^\circ = \text{Leste/Direita}$, $-90^\circ = \text{Oeste/Esquerda}$, $\pm 180^\circ = \text{Sul/Traseira}$) perfeitamente à pista de raio $R = 84\text{ px}$ do dial SVG ($192 \times 192\text{ px}$) com sanitização rigorosa de NaN e Inf.
+      - Cometa orbital neon desenhado com núcleo branco quente, disco ciano neon (`#06b6d4`), halo pulsante e 3 partículas de rastro desvanecente ($\theta - 7^\circ, \theta - 14^\circ, \theta - 21^\circ$), acompanhado por anel orbital guia pontilhado.
+      - Subtítulo do botão usinado central comutado para `"8D ORBIT ACTIVE"` em destaque ciano neon.
+    - **Botão Rápido Acessível e Reorganização do Strip de Controles (`SoundstageDial.tsx`):**
+      - Botão pill `"8D Orbit"` com ícone `<Orbit />` animado (6s de rotação), `aria-pressed`, `role="button"`, suporte a teclado (Enter/Space) e brilho neon ciano (`shadow-[0_0_12px_rgba(56,189,248,0.45)]`).
+      - Grid de controles balanceado em 2 linhas (Linha 1: Active/Bypassed e 8D Orbit; Linha 2: Calibrate Soundstage), eliminando qualquer aperto ou overflow na largura de 280px.
+    - **Comando IPC Tauri e Despacho Lock-Free (`src-tauri/src/lib.rs`):**
+      - Comando `set_orbit_8d(enabled, direction, period_sec, depth)` exposto no Tauri e registrado em `generate_handler!`, despachando `AudioCommand::SetOrbit8D` pela fila SPSC lock-free com defaults calibrados (Clockwise, 12.0s, 0.85 depth).
+      - Teste de integração `test_set_orbit_8d_command_dispatch` validando consumo na fila SPSC.
+    - **Sincronização de Telemetria e Auto-Engajamento (`App.tsx`):**
+      - Taxa de polling de `get_telemetry` aumentada para 33ms (~30.3 fps), sincronizando o cometa em tempo real a $\ge 30\text{ fps}$.
+      - Auto-engajamento do spatializer 3D ao ligar 8D orbit com surround desativado.
+    - **Internacionalização e Suíte de Testes UI (`SoundstageDial.test.tsx`):**
+      - Chave `orbit8D` registrada em `types.ts`, `en.ts`, `pt-BR.ts` e `es.ts` mantendo 100% de paridade nos dicionários.
+      - Nova suíte de testes `SoundstageDial.test.tsx` com 7 asserções cobrindo projeção polar, sanitização, renderização do cometa, acessibilidade, handlers e contenção na `viewBox="0 0 192 192"`.
+    - **Verificação de Qualidade Global:**
+      - 193 testes Cargo passando no workspace com 100% de sucesso e zero warnings.
+      - 85 testes UI passando no `npm test` do `src-ui`.
+      - Build Vite de produção concluído em 1.82s com zero erros.
+      - ADR-035 registrado no `.bmad/04-DECISION-LOG.md`.
+
 ## O que está em andamento agora
-* Story 6.1 concluída com 100% de sucesso. Pronto para Story 6.2 / 6.3 (Integração HUD/UI do Modo 8D).
+* Stories 6.1 e 6.2 finalizadas com 100% dos testes verdes. Execução interrompida ordenadamente a pedido do usuário após a Story 6.2. Pronto para prosseguir para a Story 6.3 (`6-3-painel-completo-de-parametros-orbitais-no-modal-de-calibracao-persistencia-atomica`).
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 188 testes Cargo no backend e testes do frontend passam com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 193 testes Cargo no backend e 85 testes UI no frontend passam com 100% de sucesso.
+

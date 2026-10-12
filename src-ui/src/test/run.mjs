@@ -45,6 +45,11 @@ const testFiles = [
     entry: path.join(__dirname, "I18n.test.tsx"),
     runnerName: "runI18nTests",
   },
+  {
+    name: "SoundstageDial & 8D Orbital Trajectory HUD Test Suite",
+    entry: path.join(__dirname, "SoundstageDial.test.tsx"),
+    runnerName: "runSoundstageDialTests",
+  },
 ];
 
 async function main() {

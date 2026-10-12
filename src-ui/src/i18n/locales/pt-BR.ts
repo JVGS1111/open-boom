@@ -43,6 +43,7 @@ export const ptBR: TranslationDictionary = {
     title: "SURROUND 3D",
     immersion: "IMERSÃO",
     calibrateSoundstage: "CALIBRAR SOUNDSTAGE",
+    orbit8D: "8D Orbit",
     doubleClickReset: "Duplo-clique para redefinir para 50%",
     calibrateModalTitle: "Calibração Espacial & Caixas Virtuais",
     calibrateModalSubtitle: "Palco Sonoro Binaural 7.1 ITU-R BS.775 KEMAR",
