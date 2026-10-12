@@ -7,8 +7,11 @@ use open_boom_wasapi::stream_pump::{AudioStreamPump, StreamPumpConfig};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+static HARDWARE_AUDIO_LOCK: Mutex<()> = Mutex::new(());
+
 #[test]
 fn test_audio_stream_pump_lifecycle() {
+    let _guard = HARDWARE_AUDIO_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let coordinator = Arc::new(Mutex::new(AudioEngineCoordinator::new(
         LoopbackConfig::default(),
         RenderConfig {
@@ -125,6 +128,7 @@ mod windows_loopback_mode_b_tests {
 
     #[test]
     fn test_mode_b_self_exclusion_prevents_bell_feedback_oscillation() {
+        let _guard = HARDWARE_AUDIO_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let enumerator: IMMDeviceEnumerator =
@@ -336,6 +340,7 @@ mod windows_loopback_mode_b_tests {
 
     #[test]
     fn test_mode_b_captures_generated_test_audio_and_decays_to_silence() {
+        let _guard = HARDWARE_AUDIO_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let enumerator: IMMDeviceEnumerator = match CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) {
@@ -508,5 +513,111 @@ mod windows_loopback_mode_b_tests {
             );
         }
     }
+
+    #[test]
+    fn test_mode_b_packet_boundary_continuity_no_static_with_surround_off_and_on() {
+        let sample_rate = 48_000u32;
+        let frames_per_packet = 480usize; // 10ms WASAPI quantum
+        let num_packets = 12usize;
+        let freq = 440.0f32;
+
+        for surround_enabled in [false, true] {
+            let mut coord = AudioEngineCoordinator::new(
+                LoopbackConfig::default(),
+                RenderConfig {
+                    allow_synthetic_fallback: true,
+                    ..Default::default()
+                },
+            );
+            coord.processor_mut().set_sample_rate(sample_rate);
+            coord.processor_mut().set_master_power(true);
+            coord
+                .processor_mut()
+                .handle_command(AudioCommand::SetEqBypass { bypassed: false });
+            coord
+                .processor_mut()
+                .handle_command(AudioCommand::SetEqGains {
+                    gains_db: [3.0; GRAPHIC_EQ_BANDS],
+                });
+            coord
+                .processor_mut()
+                .handle_command(AudioCommand::SetSurround3D {
+                    enabled: surround_enabled,
+                    intensity: 0.75,
+                });
+
+            let mut continuous_output = Vec::with_capacity(num_packets * frames_per_packet * 2);
+            let mut input_packet = vec![0.0f32; frames_per_packet * 2];
+            let mut output_packet = vec![0.0f32; frames_per_packet * 2];
+
+            let mut last_audio_instant = std::time::Instant::now();
+            let mut idle_flushed = false;
+
+            for pkt in 0..num_packets {
+                // Simulate the 4ms inter-packet wait when GetNextPacketSize() == 0 between 10ms WASAPI packets.
+                // Because last_audio_instant.elapsed() < 200ms, the pump must NOT flush zeros into coord!
+                std::thread::sleep(Duration::from_millis(4));
+                assert!(
+                    last_audio_instant.elapsed() < Duration::from_millis(200) && !idle_flushed,
+                    "Inter-packet wait of 4ms must never trigger premature DSP idle flush"
+                );
+
+                for f in 0..frames_per_packet {
+                    let global_frame = pkt * frames_per_packet + f;
+                    let t = global_frame as f32 / sample_rate as f32;
+                    let s = (2.0 * std::f32::consts::PI * freq * t).sin() * 0.25;
+                    input_packet[f * 2] = s;
+                    input_packet[f * 2 + 1] = s;
+                }
+
+                last_audio_instant = std::time::Instant::now();
+                idle_flushed = false;
+                coord.process_audio_chunk(&input_packet, &mut output_packet);
+                continuous_output.extend_from_slice(&output_packet);
+            }
+
+            // Skip the initial 4 packets (40ms) to allow the 2ms MasterLimiter lookahead and FIR/reverb
+            // to reach steady state, then verify every 10ms packet boundary has zero 2ms silence holes
+            // and smooth sample-to-sample derivative continuity.
+            let steady_start_frame = 4 * frames_per_packet;
+            let total_frames = num_packets * frames_per_packet;
+            let mut max_step_delta = 0.0f32;
+
+            for pkt in 4..num_packets {
+                let boundary_start = pkt * frames_per_packet;
+                // Check the first 96 frames (2ms lookahead window) of each packet for energy
+                let mut lookahead_window_rms = 0.0f32;
+                for f in boundary_start..(boundary_start + 96) {
+                    let l = continuous_output[f * 2];
+                    lookahead_window_rms += l * l;
+                }
+                lookahead_window_rms = (lookahead_window_rms / 96.0).sqrt();
+                assert!(
+                    lookahead_window_rms > 0.05,
+                    "Packet {} first 2ms window must not be zeroed out (surround={}, rms={:.5})",
+                    pkt,
+                    surround_enabled,
+                    lookahead_window_rms
+                );
+            }
+
+            for f in (steady_start_frame + 1)..total_frames {
+                let prev_l = continuous_output[(f - 1) * 2];
+                let curr_l = continuous_output[f * 2];
+                let delta = (curr_l - prev_l).abs();
+                if delta > max_step_delta {
+                    max_step_delta = delta;
+                }
+            }
+
+            assert!(
+                max_step_delta < 0.12,
+                "Steady-state waveform across packet boundaries must have no click/pop discontinuities (surround={}, max_step_delta={:.5})",
+                surround_enabled,
+                max_step_delta
+            );
+        }
+    }
 }
+
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -997,7 +997,7 @@ export const App: React.FC = () => {
 
     try {
       await invoke("set_audio_bridge_mode", { mode: sanitized });
-      await handleRestartApplication();
+      setIsSwitchingBridge(false);
     } catch (err) {
       console.error("Failed to set audio bridge mode:", err);
       setAudioBridgeMode(prevMode);
@@ -1400,6 +1400,14 @@ export const App: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [bypassActive, masterPower]);
 
+  // Memoized modal & drawer close handlers to prevent re-render cascades
+  const handleCloseSettings = useCallback(() => setIsSettingsOpen(false), []);
+  const handleCloseConfigurator = useCallback(() => setIsConfiguratorOpen(false), []);
+  const handleCloseAutoEq = useCallback(() => setIsAutoEqOpen(false), []);
+  const handleClosePresetSelector = useCallback(() => setIsPresetSelectorOpen(false), []);
+  const handleCloseEqDrawer = useCallback(() => setIsEqDrawerOpen(false), []);
+  const handleCloseAppMixer = useCallback(() => setIsAppMixerOpen(false), []);
+
   // Poll real-time telemetry from Tauri core at >= 30 fps (Story 6.2, CAP-5)
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -1417,28 +1425,45 @@ export const App: React.FC = () => {
           orbit_enabled?: boolean;
         }>("get_telemetry");
         if (snapshot) {
-          setLatencyMs(snapshot.round_trip_latency_ms);
-          setLimiterGainReductionDb(snapshot.limiter_gain_reduction_db);
+          setLatencyMs((prev) =>
+            Math.abs(prev - snapshot.round_trip_latency_ms) > 0.05
+              ? snapshot.round_trip_latency_ms
+              : prev
+          );
+          setLimiterGainReductionDb((prev) =>
+            Math.abs(prev - snapshot.limiter_gain_reduction_db) > 0.05
+              ? snapshot.limiter_gain_reduction_db
+              : prev
+          );
           if (typeof snapshot.limiter_headroom_db === "number") {
-            setLimiterHeadroomDb(snapshot.limiter_headroom_db);
+            setLimiterHeadroomDb((prev) =>
+              Math.abs(prev - snapshot.limiter_headroom_db) > 0.05
+                ? snapshot.limiter_headroom_db
+                : prev
+            );
           }
-          if (snapshot.sample_rate) {
-            setSampleRate(snapshot.sample_rate);
+          if (typeof snapshot.sample_rate === "number") {
+            const nextRate = snapshot.sample_rate;
+            setSampleRate((prev) => (prev !== nextRate ? nextRate : prev));
           }
-          if (snapshot.bit_depth) {
-            setBitDepth(snapshot.bit_depth);
+          if (typeof snapshot.bit_depth === "number") {
+            const nextDepth = snapshot.bit_depth;
+            setBitDepth((prev) => (prev !== nextDepth ? nextDepth : prev));
           }
           if (typeof snapshot.limiter_active === "boolean") {
-            setLimiterActive(snapshot.limiter_active);
+            const nextLimiter = snapshot.limiter_active;
+            setLimiterActive((prev) => (prev !== nextLimiter ? nextLimiter : prev));
           }
           if (typeof snapshot.using_virtual_bridge === "boolean") {
-            setUsingVirtualBridge(snapshot.using_virtual_bridge);
+            const nextBridge = snapshot.using_virtual_bridge;
+            setUsingVirtualBridge((prev) => (prev !== nextBridge ? nextBridge : prev));
           }
           if (typeof snapshot.orbit_phase_deg === "number") {
             setOrbitPhaseDeg(snapshot.orbit_phase_deg);
           }
           if (typeof snapshot.orbit_enabled === "boolean") {
-            setOrbitEnabled(snapshot.orbit_enabled);
+            const nextOrbitEnabled = snapshot.orbit_enabled;
+            setOrbitEnabled((prev) => (prev !== nextOrbitEnabled ? nextOrbitEnabled : prev));
           }
         }
       } catch {
@@ -1455,7 +1480,7 @@ export const App: React.FC = () => {
       {/* Settings Modal (Story 1.7, FR29, In-App Updates) */}
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={handleCloseSettings}
         launchOnStartup={launchOnStartup}
         onToggleStartup={handleToggleStartup}
         bufferGuardEnabled={bufferGuardEnabled}
@@ -1482,7 +1507,7 @@ export const App: React.FC = () => {
       {/* 8-Channel Virtual Speaker Configurator Modal (Story 2.3 & 2.4, FR7) */}
       <SoundstageConfiguratorModal
         isOpen={isConfiguratorOpen}
-        onClose={() => setIsConfiguratorOpen(false)}
+        onClose={handleCloseConfigurator}
         speakerMuted={speakerMuted}
         speakerGainsDb={speakerGainsDb}
         speakerAzimuthsDeg={speakerAzimuthsDeg}
@@ -1504,7 +1529,7 @@ export const App: React.FC = () => {
       {/* AutoEq Headphone Profile Search Popover (Story 3.3, UX-DR8) */}
       <AutoEqPopover
         isOpen={isAutoEqOpen}
-        onClose={() => setIsAutoEqOpen(false)}
+        onClose={handleCloseAutoEq}
         activeProfileId={activeAutoEqProfile?.id}
         onSelectProfile={handleSelectAutoEqProfile}
         onClearProfile={handleClearAutoEqProfile}
@@ -1513,7 +1538,7 @@ export const App: React.FC = () => {
       {/* Equalizer Genre Factory & Custom Presets Popover (Story 3.5, FR11, AD-10) */}
       <PresetSelectorPopover
         isOpen={isPresetSelectorOpen}
-        onClose={() => setIsPresetSelectorOpen(false)}
+        onClose={handleClosePresetSelector}
         presets={eqPresets}
         activePresetName={activeEqPreset}
         currentGains={eqGains}
@@ -1597,7 +1622,7 @@ export const App: React.FC = () => {
         {/* Equalizer Studio Drawer (Story 3.2, UX-DR7) */}
         <EqualizerStudioDrawer
           isOpen={isEqDrawerOpen}
-          onClose={() => setIsEqDrawerOpen(false)}
+          onClose={handleCloseEqDrawer}
           mode={eqMode}
           onModeChange={setEqMode}
           gains={eqGains}
@@ -1614,7 +1639,7 @@ export const App: React.FC = () => {
         {/* Application Stream Mixer Drawer (Story 5.2, UX-DR9) */}
         <AppMixerDrawer
           isOpen={isAppMixerOpen}
-          onClose={() => setIsAppMixerOpen(false)}
+          onClose={handleCloseAppMixer}
           sessions={audioSessions}
           onVolumeChange={handleAppVolumeChange}
           onToggleMute={handleAppToggleMute}

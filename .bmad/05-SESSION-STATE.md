@@ -321,9 +321,16 @@
       - Adicionado `AUDCLNT_STREAMFLAGS_EVENTCALLBACK` (`CreateEventW` + `WaitForSingleObject`), supressão de renderização duplicada em bypass/mute/silêncio no Modo B, parada e limpeza do buffer circular (`AUDCLNT_BUFFERFLAGS_SILENT` + `render_client.Stop()` + `render_client.Reset()`) e despacho de `AudioCommand::ResetFilters` no idle para decair filtros IIR e telemetria para `-100.0 dBFS`.
     - **Testes com Geração de Áudio Real (`crates/open-boom-wasapi/tests/stream_pump_tests.rs`):**
       - Gerador de arquivo `.wav` PCM 16-bit e tom piloto estreito (14.321 Hz) validando >34 dB de rejeição da própria saída no Modo B e decaimento imediato ao silêncio (`<= -90 dBFS`) após o término do áudio (**217 testes Cargo verdes e 106 testes UI verdes**).
+47. **Eliminação de Estática e Estouros (100 Hz Packet-Boundary Dropouts) no Modo B de Loopback (T8.4 / ADR-044):**
+    - **Causa Raiz Identificada:** Entre pacotes consecutivos de 10ms do WASAPI, `WaitForSingleObject(h_ev, 4)` (ou `sleep(2ms)`) acordava antes da chegada do próximo pacote (`GetNextPacketSize() == 0`) e injetava `960` amostras `0.0` em `coord.process_audio_chunk` no meio da reprodução ativa, zerando a janela de lookahead de 2ms (96 frames) do `MasterLimiter` 100 vezes por segundo (gerando mais estática com 3D Surround desligado e menos quando suavizado pelo filtro FIR do 3D Surround), além de chamar `render_client.Stop()`/`Reset()` prematuramente e descartar pacotes quando `padding > frames_read * 2`.
+    - **Correção (`crates/open-boom-wasapi/src/stream_pump.rs` & `tests/stream_pump_tests.rs`):**
+      - O flush de silêncio e `AudioCommand::ResetFilters` agora só é disparado uma única vez (`idle_flushed = true`) quando nenhum áudio ativo é recebido por $\ge 200\text{ ms}$ (`last_audio_instant.elapsed() >= Duration::from_millis(200)`), preservando 100% da continuidade de fase e do buffer de lookahead de 2ms entre pacotes.
+      - O `render_client` utiliza buffer de 25ms (`buffer_guard_enabled`), permanece iniciado sem `Stop()`/`Reset()` abruptos durante a sessão e jamais descarta pacotes capturados.
+      - Adicionado teste de regressão `test_mode_b_packet_boundary_continuity_no_static_with_surround_off_and_on` validando continuidade senoidal sem buracos de 2ms e sem degraus nas fronteiras de pacotes tanto com 3D Surround desligado quanto ligado (**218 testes Cargo verdes e 106 testes UI verdes**).
 
 ## O que está em andamento agora
 * **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3 / T8.4) estão 100% implementados, revisados e testados.**
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com 217 testes Cargo verdes e 106 testes UI verdes.
+* Nenhum bloqueio. Sistema com 218 testes Cargo verdes e 106 testes UI verdes.
+

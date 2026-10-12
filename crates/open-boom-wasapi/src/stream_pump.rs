@@ -232,12 +232,12 @@ impl AudioStreamPump {
 
                 let using_process_loopback = capture_device_opt.is_none();
 
-                // In Mode B (Process Loopback), use a tight 10ms render buffer to minimize phase offset;
-                // in Mode A (Virtual Sink), use 25ms when buffer_guard_enabled is active.
-                let buffer_duration_hns = if using_process_loopback || !config.buffer_guard_enabled {
-                    100_000
-                } else {
+                // Use 25ms render buffer when buffer_guard_enabled is active to prevent underruns
+                // under Windows thread scheduling jitter, or 10ms when disabled.
+                let buffer_duration_hns = if config.buffer_guard_enabled {
                     250_000
+                } else {
+                    100_000
                 };
 
                 let render_init_res = render_client.Initialize(
@@ -265,23 +265,18 @@ impl AudioStreamPump {
                 let render_buffer_size = render_client.GetBufferSize().unwrap_or(480);
                 let render_channels = (*render_fmt_ptr).nChannels.max(1) as usize;
                 let render_sample_rate = (*render_fmt_ptr).nSamplesPerSec;
-                let mut render_started = false;
-                if !using_process_loopback {
-                    if let Ok(ptr) = render_svc.GetBuffer(render_buffer_size) {
-                        let slice = std::slice::from_raw_parts_mut(
-                            ptr as *mut f32,
-                            render_buffer_size as usize * render_channels,
-                        );
-                        slice.fill(0.0);
-                        let _ = render_svc.ReleaseBuffer(
-                            render_buffer_size,
-                            AUDCLNT_BUFFERFLAGS_SILENT.0 as u32,
-                        );
-                    }
-                    if render_client.Start().is_ok() {
-                        render_started = true;
-                    }
+                if let Ok(ptr) = render_svc.GetBuffer(render_buffer_size) {
+                    let slice = std::slice::from_raw_parts_mut(
+                        ptr as *mut f32,
+                        render_buffer_size as usize * render_channels,
+                    );
+                    slice.fill(0.0);
+                    let _ = render_svc.ReleaseBuffer(
+                        render_buffer_size,
+                        AUDCLNT_BUFFERFLAGS_SILENT.0 as u32,
+                    );
                 }
+                let _ = render_client.Start();
 
                 let capture_event = CreateEventW(None, false, false, None).ok();
                 let mut use_event_callback = false;
@@ -466,30 +461,8 @@ impl AudioStreamPump {
                 let scratch_capacity = 16384;
                 let mut input_scratch = vec![0.0f32; scratch_capacity];
                 let mut output_scratch = vec![0.0f32; scratch_capacity];
-                let mut idle_flush_ticks: u32 = 32;
-
-                let stop_and_reset_render = |render_client: &IAudioClient,
-                                             render_svc: &IAudioRenderClient,
-                                             render_started: &mut bool| {
-                    if *render_started {
-                        let padding = render_client.GetCurrentPadding().unwrap_or(0);
-                        let avail = render_buffer_size.saturating_sub(padding);
-                        if avail > 0 {
-                            if let Ok(ptr) = render_svc.GetBuffer(avail) {
-                                let slice = std::slice::from_raw_parts_mut(
-                                    ptr as *mut f32,
-                                    avail as usize * render_channels,
-                                );
-                                slice.fill(0.0);
-                                let _ = render_svc
-                                    .ReleaseBuffer(avail, AUDCLNT_BUFFERFLAGS_SILENT.0 as u32);
-                            }
-                        }
-                        let _ = render_client.Stop();
-                        let _ = render_client.Reset();
-                        *render_started = false;
-                    }
-                };
+                let mut last_audio_instant = std::time::Instant::now();
+                let mut idle_flushed = true;
 
                 // Real-Time Audio Streaming Pump Loop
                 while is_running.load(Ordering::Relaxed) {
@@ -497,7 +470,7 @@ impl AudioStreamPump {
                     if packet_size == 0 {
                         if use_event_callback {
                             if let Some(h_ev) = capture_event {
-                                let _ = WaitForSingleObject(h_ev, 4);
+                                let _ = WaitForSingleObject(h_ev, 5);
                             }
                         } else {
                             std::thread::sleep(Duration::from_millis(2));
@@ -507,33 +480,25 @@ impl AudioStreamPump {
                             continue;
                         }
 
-                        // Flush DSP delay lines (2ms limiter lookahead, HRTF early reflections)
-                        // and decay telemetry meters cleanly to -100 dBFS when external audio stops
-                        if idle_flush_ticks < 32 {
-                            idle_flush_ticks += 1;
+                        // Only flush DSP state & decay telemetry when audio has been genuinely
+                        // absent for >= 200ms. Never inject zeros between normal 10ms WASAPI packets,
+                        // as that overwrites the 2ms MasterLimiter lookahead and FIR delay lines
+                        // and causes 100 Hz packet-boundary clicks/static!
+                        if !idle_flushed
+                            && last_audio_instant.elapsed() >= Duration::from_millis(200)
+                        {
                             let flush_samples = 960.min(scratch_capacity);
                             input_scratch[..flush_samples].fill(0.0);
                             if let Ok(mut coord) = coordinator.try_lock() {
-                                if idle_flush_ticks >= 6 {
-                                    coord
-                                        .processor_mut()
-                                        .handle_command(open_boom_core::types::AudioCommand::ResetFilters);
-                                }
+                                coord
+                                    .processor_mut()
+                                    .handle_command(open_boom_core::types::AudioCommand::ResetFilters);
                                 coord.process_audio_chunk(
                                     &input_scratch[..flush_samples],
                                     &mut output_scratch[..flush_samples],
                                 );
+                                idle_flushed = true;
                             }
-                        }
-
-                        // Stop and reset the WASAPI render stream after ~12ms of capture inactivity
-                        // so the circular hardware DMA buffer can never repeat stale frames
-                        if idle_flush_ticks >= 3 && render_started {
-                            stop_and_reset_render(
-                                &render_client,
-                                &render_svc,
-                                &mut render_started,
-                            );
                         }
                         continue;
                     }
@@ -609,9 +574,12 @@ impl AudioStreamPump {
                                 }
                             }
                             if max_in > 1e-5 {
-                                idle_flush_ticks = 0;
-                            } else if idle_flush_ticks < 32 {
-                                idle_flush_ticks += 1;
+                                last_audio_instant = std::time::Instant::now();
+                                idle_flushed = false;
+                            } else if !idle_flushed
+                                && last_audio_instant.elapsed() >= Duration::from_millis(200)
+                            {
+                                idle_flushed = true;
                             }
 
                             // Process audio frames through DSP pipeline
@@ -622,7 +590,7 @@ impl AudioStreamPump {
                             let mut is_muted = false;
                             for _ in 0..16 {
                                 if let Ok(mut coord) = coordinator.try_lock() {
-                                    if idle_flush_ticks >= 8 {
+                                    if idle_flushed {
                                         coord
                                             .processor_mut()
                                             .handle_command(open_boom_core::types::AudioCommand::ResetFilters);
@@ -640,7 +608,7 @@ impl AudioStreamPump {
                             }
                             if !processed {
                                 if let Ok(mut coord) = coordinator.lock() {
-                                    if idle_flush_ticks >= 8 {
+                                    if idle_flushed {
                                         coord
                                             .processor_mut()
                                             .handle_command(open_boom_core::types::AudioCommand::ResetFilters);
@@ -658,40 +626,23 @@ impl AudioStreamPump {
                             }
 
                             // In Mode B (Process Loopback), the physical endpoint is already playing
-                            // the dry system audio directly. Never render duplicate audio when DSP is
-                            // bypassed/powered-off, muted, or when input/output have decayed to silence.
+                            // the dry system audio directly. Render continuously whenever DSP is active,
+                            // unmuted, and within active audio or its 200ms decay tail.
                             let should_render = if using_process_loopback {
-                                if !dsp_active || is_muted || idle_flush_ticks >= 8 {
-                                    false
-                                } else {
-                                    let mut max_out = 0.0f32;
-                                    for &s in &output_scratch[..stereo_sample_count] {
-                                        let a = s.abs();
-                                        if a > max_out {
-                                            max_out = a;
-                                        }
-                                    }
-                                    max_out > 1e-5
-                                }
+                                dsp_active && !is_muted && !idle_flushed
                             } else {
-                                idle_flush_ticks < 16
+                                !idle_flushed
                             };
 
                             if should_render {
-                                // Write processed audio frames to physical output DAC
-                                let max_retries = if using_process_loopback {
-                                    4
-                                } else if config.buffer_guard_enabled {
+                                // Write processed audio frames to physical output DAC without dropping packets
+                                let max_retries = if config.buffer_guard_enabled {
                                     25
                                 } else {
                                     12
                                 };
                                 for _ in 0..max_retries {
                                     let padding = render_client.GetCurrentPadding().unwrap_or(0);
-                                    // In Mode B, prevent excessive queue buildup in the render buffer
-                                    if using_process_loopback && padding > frames_read * 2 {
-                                        break;
-                                    }
                                     let available = render_buffer_size.saturating_sub(padding);
 
                                     if available >= frames_read {
@@ -722,22 +673,11 @@ impl AudioStreamPump {
                                                 }
                                             }
                                             let _ = render_svc.ReleaseBuffer(frames_read, 0);
-                                            if !render_started {
-                                                if render_client.Start().is_ok() {
-                                                    render_started = true;
-                                                }
-                                            }
                                         }
                                         break;
                                     }
                                     std::thread::sleep(Duration::from_micros(400));
                                 }
-                            } else if render_started {
-                                stop_and_reset_render(
-                                    &render_client,
-                                    &render_svc,
-                                    &mut render_started,
-                                );
                             }
                         }
                         let _ = capture_svc.ReleaseBuffer(frames_read);

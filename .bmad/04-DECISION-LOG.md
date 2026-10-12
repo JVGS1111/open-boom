@@ -703,4 +703,19 @@
      - Quando `packet_size == 0` no idle, o pump drena a pipeline com blocos zerados e dispara `AudioCommand::ResetFilters` no 6º tick (~24ms), decaindo os filtros IIR e a telemetria limpa e imediatamente para `-100.0 dBFS`.
 * **Consequência:** Eliminação total do loop de realimentação / sino metálico no Modo B, decaimento imediato ao silêncio ao pausar o áudio e verificação automatizada com geração de áudio de teste `.wav` e tom piloto estreito (14.321 Hz) em `crates/open-boom-wasapi/tests/stream_pump_tests.rs` (217 testes Cargo e 106 testes UI verdes).
 
+---
+
+## ADR-044: Eliminação de Estática e Estouros (100 Hz Packet-Boundary Dropouts) no Modo B de Loopback
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Após a resolução do loop de realimentação acústica no Modo B (`4c4087b`), o usuário confirmou que o sino infinito desapareceu e que o 3D Surround e o 8D Orbit funcionavam, mas relatou ouvir estática e estouros ("uma estatica, uns estouros"), observando que **com o 3D Surround ativado havia menos estática e com o 3D Surround desativado havia mais estática**.
+* **Causa Raiz Identificada:**
+  1. **Flush Prematuro da Janela de Lookahead de 2ms entre Cada Pacote WASAPI de 10ms (`stream_pump.rs`):** O mixer compartilhado do Windows entrega pacotes de captura a cada **10ms** (`480` frames a 48 kHz). Como `WaitForSingleObject(h_ev, 4)` (ou `sleep(2ms)`) acordava após apenas **2 a 4ms**, `capture_svc.GetNextPacketSize()` ainda retornava `0` enquanto o pacote seguinte ($t = 10\text{ ms}$) não chegava. O loop tratava esse intervalo normal entre pacotes como "inatividade" e injetava `960` amostras `0.0` em `coord.process_audio_chunk` (sem enviá-las ao `render_svc`) no meio da reprodução ativa! Isso sobrescrevia a linha de atraso de 96 frames (2ms) do `MasterLimiter` com zeros e descartava os 2ms de áudio que aguardavam no lookahead. Quando o próximo pacote chegava em $t = 10\text{ ms}$, os primeiros 2ms emitidos pelo `MasterLimiter` eram silêncio (`0.0`), abrindo um buraco retangular de 2ms a cada 10ms (100 vezes por segundo).
+  2. **Por que o 3D Surround Reduzia a Estática:** Com o 3D Surround ligado, a convolução FIR KEMAR de 64 taps e o reverberador suavizavam parcialmente as bordas retangulares dos buracos de 2ms; com o 3D Surround desligado, os degraus abruptos iam direto para a saída como estática/cliques de banda larga.
+  3. **Chamadas Prematuras a `render_client.Stop()` / `Reset()` e Descarte de Pacotes (`padding > frames_read * 2`):** Parar e resetar o `IAudioClient` em hiatos de ~12ms ou descartar pacotes quando `padding > frames_read * 2` causava descontinuidades de fase (estouros audíveis).
+* **Decisões:**
+  1. **Preservação Estrita do Estado do DSP entre Pacotes (`last_audio_instant` >= 200ms):** O pump jamais injeta zeros em `coord.process_audio_chunk` durante esperas normais entre pacotes de 10ms. O flush de silêncio e `AudioCommand::ResetFilters` só ocorre **uma única vez** (`idle_flushed = true`) quando nenhum áudio ativo (`max_in > 1e-5`) é recebido por **$\ge 200\text{ ms}$** reais.
+  2. **Stream WASAPI Contínuo sem `Stop()`/`Reset()` e Zero Pacotes Descartados:** O `render_client` é inicializado com buffer de 25ms (`buffer_guard_enabled`), pré-preenchido com `AUDCLNT_BUFFERFLAGS_SILENT` e mantido iniciado continuamente sem chamadas a `Stop()`/`Reset()` durante a sessão; a condição `padding > frames_read * 2` foi removida para que nenhum pacote capturado seja descartado.
+* **Consequência:** Áudio 100% contínuo e cristalino no Modo B (tanto com 3D Surround desligado quanto ligado), validado pelo novo teste `test_mode_b_packet_boundary_continuity_no_static_with_surround_off_and_on` em `crates/open-boom-wasapi/tests/stream_pump_tests.rs` (**218 testes Cargo verdes**).
+
 
