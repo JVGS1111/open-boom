@@ -169,6 +169,11 @@ export function runSettingsModalTests(): TestResult[] {
         htmlLoopback.includes("Modo B (Emulação Loopback Sem Driver)"),
       "Should display Mode B driverless loopback warning banner when loopback mode is selected"
     );
+    assert(
+      htmlLoopback.includes("[BETA]") &&
+        htmlLoopback.includes("data-testid=\"audio-bridge-mode-b-beta-pill\""),
+      "Should display explicit BETA label and pill badge on Mode B"
+    );
 
     const htmlAutoFallback = renderToStaticMarkup(
       <SettingsModal

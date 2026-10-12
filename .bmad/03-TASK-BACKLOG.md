@@ -64,15 +64,23 @@
 - [X] **T8.1**: Mecanismo de Auto-Update In-App a Custo Zero via GitHub Releases (Verificação automática na abertura do app, badge âmbar pulsante na Titlebar levando direto para `Configurações -> Atualizações`, painel completo com notas de versão, switches de checagem ao iniciar e instalação automática, e botão de `Reiniciar Aplicação` no mesmo slot de ação - Spec 8.1, ADR-038).
 - [X] **T8.2**: Seletor Manual de Modo de Captura de Áudio (`audio_bridge_mode`: `auto` | `virtual` | `loopback`) em `SettingsModal.tsx` com Persistência Atômica e Reinicialização Automática do App (Permite alternar e testar ao vivo entre o driver virtual `Boom Audio` Modo A e a emulação sem driver WASAPI Loopback Modo B, restaurando o endpoint físico do Windows antes do restart - ADR-040).
 - [X] **T8.3**: Correção do Seletor de Assets, Download Rápido via `curl.exe` e Instalação Atômica sem Janelas Duplicadas no Auto-Update In-App (`select_installer_asset_url` priorizando `-setup.exe` sobre `-portable-x64.exe`, staging atômico em `%TEMP%\OpenBoom_Setup_Update.exe` com guarda `DownloadInFlightGuard` e execução diferida `/S /UPDATE` após encerramento do processo antigo em `restart_application` - ADR-042).
-- [X] **T8.4**: Correção Definitiva do Loopback Mode (Modo B) contra Realimentação Acústica ("Sino Atordoante" Karplus-Strong) e Retenção de Nota no Idle (`activate_process_loopback_client` via `ActivateAudioInterfaceAsync` com `VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK` e `PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE`, reset de buffer DMA com `AUDCLNT_BUFFERFLAGS_SILENT` + `Stop/Reset`, flush de filtros no idle e testes automatizados com geração de áudio `.wav` - ADR-043).
+- [X] **T8.4**: Correção Definitiva do Loopback Mode (Modo B) contra Realimentação Acústica ("Sino Atordoante" Karplus-Strong), Retenção de Nota no Idle e Estática de Fronteira de Pacotes (`activate_process_loopback_client` via `ActivateAudioInterfaceAsync` com `VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK` e `PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE`, preservação contínua do buffer de lookahead de 2ms entre pacotes de 10ms e testes automatizados com geração de áudio `.wav` - ADR-043, ADR-044).
+- [X] **T8.5**: Classificação do Modo B (Emulação Loopback Sem Driver) como `[BETA]` na UI e Registro do Bug de Duplicação Acústica / Slapback Delay (Adição de badge e rótulo `[BETA]` em `SettingsModal.tsx`, `StatusBar.tsx` e locales `pt-BR`/`en`/`es`, documentando que sem um driver virtual isolando a saída do Windows, o sistema reproduz o som original seco em $t=0\text{ ms}$ somado à reprodução processada pelo DSP em $t\approx 25\text{ ms}$ no mesmo fone físico - ADR-045).
 
 ---
 
-### Sprint 9 / Épico Pro: Concepção & Viabilidade do "Modo Gamer Pro" (Pesquisa & Arquitetura)
+### Backlog de Bugs Conhecidos & Ajustes Finos Futuros (Modo B `[BETA]`)
+- [ ] **BUG-MODE-B-01 (Duplicação Acústica / Delay entre Duas Reproduções no Modo B `[BETA]`)**: No Modo B (`audio_bridge_mode = "loopback"` sem driver virtual), como os aplicativos renderizam diretamente no endpoint físico do Windows ($t = 0\text{ ms}$) e o OpenBoom captura esse fluxo via WASAPI Process Loopback, processa no DSP (2ms lookahead + 10–25ms de buffer WASAPI) e re-injeta no mesmo fone físico ($t \approx 25\text{ ms}$), o usuário ouve **duas reproduções simultâneas com leve delay entre elas** (efeito de som duplicado / distante / slapback). **Decisão Estratégica:** Pausar o ajuste fino desse modo (mantendo-o rotulado como `[BETA]`) e priorizar a adoção/integração de um **driver de áudio virtual open-source** (`T9.5`) que isole a captura nativamente sem duplicação.
+
+---
+
+### Sprint 9 / Épico Pro: Driver Virtual Open-Source & Concepção do "Modo Gamer Pro"
 - [ ] **T9.1**: Estudo de Viabilidade e Custos de Driver Virtual Próprio (Mapeamento do Windows Driver Kit SYSVAD, requisitos de assinatura Microsoft WHQL, token de hardware EV ~US$ 500/ano, e alternativa com drivers virtuais livres).
+- [ ] **T9.5**: Integração de Driver Virtual de Áudio Open-Source como Substituto Definitivo do Modo B e Desvinculação do `boomvad.sys` (Avaliar e integrar driver virtual open-source de baixa latência para Windows — ex: Virtual Audio Wire / Scream / SYSVAD open-source — eliminando o efeito de dupla reprodução do Modo B sem depender do driver proprietário do Boom 3D).
 - [ ] **T9.2**: Pipeline Acústico de Engenharia Reversa de Áudios de Jogos via REA (Metodologia de laboratório com espectrogramas FFT para identificar assinaturas espectrais de passos, recargas e tiros em CS2, Warzone, BF6 sem violar copyright de assets).
 - [ ] **T9.3**: Modelagem do DSP "Gamer Advantage" (Estágio de Peak Clarity EQ em tempo real + Compressor Dinâmico DRC para amplificar sons baixos/passos e atenuar tiros ensurdecedores).
 - [ ] **T9.4**: Estratégia de Produto Open-Core & Proteção Jurídica (Separação entre OpenBoom Core MIT/Apache e Módulo Pro comercial, compliance anticheat zero-hook, e blindagem de marcas registradas).
+
 
 
 

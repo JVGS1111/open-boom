@@ -268,10 +268,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Section 2.5: Audio Capture Bridge Mode (Driver Boom Audio vs. Loopback Emulation) */}
             <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex flex-col gap-2.5">
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
-                  <Radio className="w-3.5 h-3.5 text-accent-cyan" />
-                  {t.settings.bridgeModeTitle}
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-accent-cyan" />
+                    {t.settings.bridgeModeTitle}
+                  </span>
+                  <span
+                    data-testid="audio-bridge-mode-b-beta-pill"
+                    className="px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0"
+                  >
+                    Modo B: BETA
+                  </span>
+                </div>
                 <span className="text-[11px] text-text-muted leading-tight">
                   {t.settings.bridgeModeDesc}
                 </span>
@@ -304,24 +312,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div
                 data-testid="audio-bridge-active-badge"
-                className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border ${
+                className={`flex items-center justify-between gap-1.5 text-[10px] font-mono px-2 py-1 rounded border ${
                   usingVirtualBridge && audioBridgeMode !== "loopback"
                     ? "text-status-online bg-status-online/10 border-status-online/25"
                     : "text-status-warning bg-status-warning/10 border-status-warning/25"
                 }`}
               >
-                <CheckCircle2
-                  className={`w-3 h-3 shrink-0 ${
-                    usingVirtualBridge && audioBridgeMode !== "loopback"
-                      ? "text-status-online"
-                      : "text-status-warning"
-                  }`}
-                />
-                <span>
-                  {usingVirtualBridge && audioBridgeMode !== "loopback"
-                    ? t.settings.bridgeModeActiveVirtual
-                    : t.settings.bridgeModeActiveLoopback}
-                </span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <CheckCircle2
+                    className={`w-3 h-3 shrink-0 ${
+                      usingVirtualBridge && audioBridgeMode !== "loopback"
+                        ? "text-status-online"
+                        : "text-status-warning"
+                    }`}
+                  />
+                  <span className="truncate">
+                    {usingVirtualBridge && audioBridgeMode !== "loopback"
+                      ? t.settings.bridgeModeActiveVirtual
+                      : t.settings.bridgeModeActiveLoopback}
+                  </span>
+                </div>
+                {(!usingVirtualBridge || audioBridgeMode === "loopback") && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider rounded bg-amber-500/25 text-amber-300 border border-amber-400/50 shrink-0">
+                    BETA
+                  </span>
+                )}
               </div>
 
               {(audioBridgeMode === "loopback" || !usingVirtualBridge) && (

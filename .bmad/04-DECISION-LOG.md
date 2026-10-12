@@ -735,4 +735,19 @@
   4. **Comutação Dinâmica Instantânea do Modo de Captura:** O seletor de ponte de áudio no `App.tsx` reseta `isSwitchingBridge(false)` imediatamente após o hot-restart do backend em `set_audio_bridge_mode`, eliminando bloqueios do seletor e dispensando reinicializações do app.
 * **Consequência:** Interação fluida, scroll 100% estável no menu, dropdown de seleção de canais de áudio operando sem fechar sozinho, e 106 testes de UI + 218 testes Cargo verdes no workspace.
 
+---
+
+## ADR-046: Registro do Efeito de Dupla Reprodução (Slapback Delay) no Modo B, Rotulagem como `[BETA]` e Direcionamento para Driver Virtual Open-Source
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Após a eliminação do loop de sino metálico (`ADR-043`) e da estática/estouros de fronteira de pacotes (`ADR-044`), o usuário validou o Modo B e observou com precisão o comportamento acústico remanescente: *"o som ficou duplicado de uma forma estranha, inclusive acho que entendi oq é loopfeedback se eu nao tiver falando bobagem é duas reproduções pra dar um efeito distante. Ficou com um delay entre as reproduções ou coisa assim"*. O usuário solicitou registrar esse bug/comportamento, colocar uma label `BETA` no Modo B, lançar uma release consolidada e direcionar o esforço futuro para a integração de um **driver virtual open-source** em vez de investir em ajuste fino do Modo B sem driver.
+* **Diagnóstico Técnico Registrado (`BUG-MODE-B-01`):**
+  - No Modo B (WASAPI Process Loopback sem dispositivo virtual), os aplicativos do Windows (Spotify, navegador, jogos) enviam o áudio original diretamente para o endpoint físico do fone de ouvido em $t = 0\text{ ms}$ (**Reprodução 1 — Dry**).
+  - Simultaneamente, o OpenBoom captura esse fluxo via `VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK`, aplica a cadeia DSP + `MasterLimiter` (2ms de lookahead) + buffers de captura/renderização WASAPI (~20–25ms) e injeta o áudio processado no **mesmo** fone físico em $t \approx 25\text{ ms}$ (**Reprodução 2 — Wet**).
+  - A soma acústica dessas duas reproduções defasadas em ~25ms produz exatamente o efeito de **som duplicado / distante (slapback delay / comb filtering)** percebido pelo usuário.
+* **Decisões:**
+  1. **Registro Formal no Backlog (`BUG-MODE-B-01` e `T9.5` em `.bmad/03-TASK-BACKLOG.md`):** Documentado o fenômeno de dupla reprodução no Modo B para eventual ajuste fino futuro e criada a tarefa prioritária `T9.5` para adoção de um driver virtual de áudio open-source que isole o fluxo do Windows nativamente sem duplicação e sem depender do `boomvad.sys`.
+  2. **Rotulagem Explícita `[BETA]` no Modo B (`SettingsModal.tsx`, `StatusBar.tsx`, `pt-BR.ts`, `en.ts`, `es.ts`):** Adicionados pills visuais `BETA` (`Modo B: BETA`) e textos explicativos claros nos 3 idiomas informando que o Modo B é experimental e apresenta dupla reprodução com leve delay (~25ms) por não utilizar driver virtual isolado.
+* **Consequência:** Transparência total para o usuário na interface, governança BMAD atualizada com o bug e a nova diretriz arquitetural (driver open-source), e preparação imediata para o lançamento da release `v0.5.2`.
+
 

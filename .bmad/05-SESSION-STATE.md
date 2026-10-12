@@ -327,10 +327,15 @@
       - O flush de silêncio e `AudioCommand::ResetFilters` agora só é disparado uma única vez (`idle_flushed = true`) quando nenhum áudio ativo é recebido por $\ge 200\text{ ms}$ (`last_audio_instant.elapsed() >= Duration::from_millis(200)`), preservando 100% da continuidade de fase e do buffer de lookahead de 2ms entre pacotes.
       - O `render_client` utiliza buffer de 25ms (`buffer_guard_enabled`), permanece iniciado sem `Stop()`/`Reset()` abruptos durante a sessão e jamais descarta pacotes capturados.
       - Adicionado teste de regressão `test_mode_b_packet_boundary_continuity_no_static_with_surround_off_and_on` validando continuidade senoidal sem buracos de 2ms e sem degraus nas fronteiras de pacotes tanto com 3D Surround desligado quanto ligado (**218 testes Cargo verdes e 106 testes UI verdes**).
+48. **Registro do Efeito de Dupla Reprodução (Slapback Delay) no Modo B (`BUG-MODE-B-01`), Rotulagem `[BETA]` na UI, Direcionamento para Driver Virtual Open-Source (`T9.5`) e Lançamento `v0.5.2` (T8.5 / ADR-046):**
+    - **Diagnóstico Registrado (`BUG-MODE-B-01`):** No Modo B (sem driver virtual isolando a saída do Windows), o usuário ouve a soma do áudio seco original enviado pelos aplicativos ao fone físico ($t = 0\text{ ms}$) com a reprodução processada pelo DSP do OpenBoom ($t \approx 25\text{ ms}$), gerando o efeito de som duplicado/distante.
+    - **UI & Internacionalização (`SettingsModal.tsx`, `StatusBar.tsx`, `pt-BR.ts`, `en.ts`, `es.ts`):** Adicionados pills visuais `BETA` (`Modo B: BETA`) e textos explicativos claros nos 3 idiomas marcando o Modo B como experimental.
+    - **Diretriz Estratégica (`T9.5`):** Pausado o ajuste fino do Modo B em favor da integração futura de um driver virtual de áudio open-source para Windows.
 
 ## O que está em andamento agora
-* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3 / T8.4) estão 100% implementados, revisados e testados.**
+* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3 / T8.4 / T8.5) estão 100% implementados, revisados e testados.**
+* **Próximo passo planejado:** `T9.5` — Integração de Driver Virtual de Áudio Open-Source como substituto definitivo do Modo B.
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com 218 testes Cargo verdes e 106 testes UI verdes.
-
+* `BUG-MODE-B-01` registrado como comportamento conhecido do Modo B `[BETA]` (dupla reprodução com ~25ms de delay por ausência de sink virtual isolado), a ser superado pela adoção do driver virtual open-source (`T9.5`).
+* Sistema com 218 testes Cargo verdes e 106 testes UI verdes.
