@@ -81,11 +81,16 @@ export const AppMixerDrawer: React.FC<AppMixerDrawerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Focus container when drawer opens and register Escape key listener
+  // Focus container once when drawer opens
+  useEffect(() => {
+    if (isOpen) {
+      containerRef.current?.focus({ preventScroll: true });
+    }
+  }, [isOpen]);
+
+  // Register Escape key listener
   useEffect(() => {
     if (!isOpen) return;
-
-    containerRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;

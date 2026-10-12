@@ -200,6 +200,6 @@ export const ptBR: TranslationDictionary = {
     bridgeModeActiveLoopback: "Canal Ativo: Modo B — Emulação WASAPI Loopback (Sem Driver)",
     bridgeModeLoopbackWarningTitle: "Modo B (Emulação Loopback Sem Driver) Selecionado",
     bridgeModeLoopbackWarningDesc: "Sem o driver virtual Boom Audio isolando a entrada, o Windows toca o áudio original e o áudio 3D processado juntos no mesmo fone físico, podendo gerar eco/duplicação.",
-    bridgeModeRestartNotice: "Ao alterar o canal de captura, o OpenBoom salva a configuração e reinicia automaticamente.",
+    bridgeModeRestartNotice: "A troca de modo comuta o canal de áudio e atualiza a captura instantaneamente em tempo real.",
   },
 };

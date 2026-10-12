@@ -95,7 +95,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, initialTab]);
 
-  // Keyboard accessibility: Escape to dismiss, focus trap handling (UX-DR11)
+  // Focus initial close button element once when modal opens (UX-DR11)
+  useEffect(() => {
+    if (isOpen) {
+      closeButtonRef.current?.focus({ preventScroll: true });
+    }
+  }, [isOpen]);
+
+  // Keyboard accessibility: Escape to dismiss (UX-DR11)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -107,8 +114,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    closeButtonRef.current?.focus();
-
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 

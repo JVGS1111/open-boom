@@ -200,6 +200,6 @@ export const en: TranslationDictionary = {
     bridgeModeActiveLoopback: "Active Channel: Mode B — WASAPI Loopback Emulation (No Virtual Driver)",
     bridgeModeLoopbackWarningTitle: "Mode B (Driverless Loopback) Active",
     bridgeModeLoopbackWarningDesc: "Bypassing the Boom Audio virtual sink plays processed audio on top of the direct Windows stream on the same physical headphone, which can cause slapback echo.",
-    bridgeModeRestartNotice: "Changing the capture channel automatically saves preferences and restarts OpenBoom.",
+    bridgeModeRestartNotice: "Changing capture modes automatically updates routing and audio capture in real time.",
   },
 };

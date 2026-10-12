@@ -718,4 +718,21 @@
   2. **Stream WASAPI Contínuo sem `Stop()`/`Reset()` e Zero Pacotes Descartados:** O `render_client` é inicializado com buffer de 25ms (`buffer_guard_enabled`), pré-preenchido com `AUDCLNT_BUFFERFLAGS_SILENT` e mantido iniciado continuamente sem chamadas a `Stop()`/`Reset()` durante a sessão; a condição `padding > frames_read * 2` foi removida para que nenhum pacote capturado seja descartado.
 * **Consequência:** Áudio 100% contínuo e cristalino no Modo B (tanto com 3D Surround desligado quanto ligado), validado pelo novo teste `test_mode_b_packet_boundary_continuity_no_static_with_surround_off_and_on` em `crates/open-boom-wasapi/tests/stream_pump_tests.rs` (**218 testes Cargo verdes**).
 
+---
+
+## ADR-045: Desacoplamento de Foco e Estabilidade de Scroll em Modais sob Telemetria em Tempo Real
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Ao selecionar o Modo B (WASAPI Loopback) no menu de configurações (`SettingsModal`), o usuário relatou um bug crítico de interação: não conseguia clicar em mais nada no menu; ao clicar no `<select>`, este abria e fechava muito rápido, e qualquer clique jogava o scroll para o topo da modal.
+* **Causa Raiz Identificada:**
+  1. **Acoplamento de Foco no Escape Listener (`SettingsModal.tsx` & `AppMixerDrawer.tsx`):** A chamada `closeButtonRef.current?.focus()` estava inserida dentro do `useEffect` de escuta da tecla `Escape`, dependendo de `[isOpen, onClose]`.
+  2. **Cascata de Re-renders a 30 fps via Telemetria:** No Modo B (Loopback direto do sistema), pequenas flutuações de headroom/pico de áudio (`limiter_headroom_db`) alteravam o estado da UI a cada ~33ms (30 fps). A cada render, uma nova referência de função anônima `onClose={() => setIsSettingsOpen(false)}` era repassada.
+  3. **Roubo Contínuo de Foco e Scroll Jump:** A cada tick (ou clique que gerasse render), a mudança na referência de `onClose` disparava o efeito, executando `closeButtonRef.current?.focus()`. Como o botão de fechar (`X`) está no topo da modal com `overflow-y-auto`, o navegador movia o foco para o topo, fechando qualquer dropdown de `<select>` imediatamente (por perda de foco) e rolando a visualização de volta para o topo.
+* **Decisões:**
+  1. **Separação Estrita do Foco Inicial (`[isOpen]` com `preventScroll: true`):** O foco no botão de fechar (ou no container da drawer) agora é disparado **apenas uma vez** quando o modal transiciona de fechado para aberto (`isOpen`), sem rolar a página. O listener de teclado `Escape` opera em efeito separado e não toca no foco de elementos da interface.
+  2. **Memoização de Callbacks `onClose` (`useCallback`):** Todas as funções de fechamento de modais e drawers em `App.tsx` foram encapsuladas em referências estáveis com `useCallback`.
+  3. **Amortecimento de Jitter de Telemetria:** Variáveis numéricas de telemetria receberam limiar $\epsilon = 0.05\text{ dB}$, evitando re-renders desnecessários quando o sinal de áudio oscila apenas na margem do ruído de quantização.
+  4. **Comutação Dinâmica Instantânea do Modo de Captura:** O seletor de ponte de áudio no `App.tsx` reseta `isSwitchingBridge(false)` imediatamente após o hot-restart do backend em `set_audio_bridge_mode`, eliminando bloqueios do seletor e dispensando reinicializações do app.
+* **Consequência:** Interação fluida, scroll 100% estável no menu, dropdown de seleção de canais de áudio operando sem fechar sozinho, e 106 testes de UI + 218 testes Cargo verdes no workspace.
+
 

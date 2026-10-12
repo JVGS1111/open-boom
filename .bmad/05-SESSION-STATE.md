@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 16:48
-* **Sprint Ativa:** **Sprint 8 Concluída | Nova Iniciativa em Refinamento: "OpenBoom Gamer Pro" (Épico 9 / ADR-041)**
-* **Tarefa Atual:** Registrada a proposta comercial e técnica do Modo Gamer Pro no BMAD ([ADR-041](file:///c:/Users/joaov/Documents/GitHub/open-boom/.bmad/04-DECISION-LOG.md#L643) e Backlog `T9.1`–`T9.4`).
+* **Data/Hora:** 12/10/2026 - 18:55
+* **Sprint Ativa:** **Sprint 8 Concluída | Correção Crítica de Interação em Modais (ADR-045)**
+* **Tarefa Atual:** Corrigido bug de foco e salto de scroll em modais (`SettingsModal` e `AppMixerDrawer`) ao selecionar Modo B, garantindo estabilidade de interação ([ADR-045](file:///c:/Users/joaov/Documents/GitHub/open-boom/.bmad/04-DECISION-LOG.md)).
 
 
 ## O que foi concluído nesta sessão
