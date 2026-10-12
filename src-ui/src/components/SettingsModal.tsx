@@ -476,7 +476,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="flex items-center gap-2 font-mono text-[11px]">
                   <span className="px-2 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-secondary">
-                    {t.settings.currentVersionLabel}: <strong className="text-text-primary">{updateInfo?.currentVersion || "0.5.1"}</strong>
+                    {t.settings.currentVersionLabel}: <strong className="text-text-primary">{updateInfo?.currentVersion || "0.5.2"}</strong>
                   </span>
                   {updateInfo?.latestVersion && (
                     <span className={`px-2 py-0.5 rounded border ${
@@ -506,7 +506,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Sparkles className="w-4 h-4 shrink-0" />
                   <span className="font-semibold">
                     {t.settings.updateAvailableMessage} (v{updateInfo.latestVersion})
-                    {updateInfo.publishedAt && ` Ã¢â‚¬Â¢ ${t.settings.publishedOn} ${new Date(updateInfo.publishedAt).toLocaleDateString()}`}
+                    {updateInfo.publishedAt && ` ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${t.settings.publishedOn} ${new Date(updateInfo.publishedAt).toLocaleDateString()}`}
                   </span>
                 </div>
               ) : (
