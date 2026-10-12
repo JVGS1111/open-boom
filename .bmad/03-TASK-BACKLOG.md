@@ -64,6 +64,14 @@
 - [X] **T8.1**: Mecanismo de Auto-Update In-App a Custo Zero via GitHub Releases (Verificação automática na abertura do app, badge âmbar pulsante na Titlebar levando direto para `Configurações -> Atualizações`, painel completo com notas de versão, switches de checagem ao iniciar e instalação automática, e botão de `Reiniciar Aplicação` no mesmo slot de ação - Spec 8.1, ADR-038).
 - [X] **T8.2**: Seletor Manual de Modo de Captura de Áudio (`audio_bridge_mode`: `auto` | `virtual` | `loopback`) em `SettingsModal.tsx` com Persistência Atômica e Reinicialização Automática do App (Permite alternar e testar ao vivo entre o driver virtual `Boom Audio` Modo A e a emulação sem driver WASAPI Loopback Modo B, restaurando o endpoint físico do Windows antes do restart - ADR-040).
 
+---
+
+### Sprint 9 / Épico Pro: Concepção & Viabilidade do "Modo Gamer Pro" (Pesquisa & Arquitetura)
+- [ ] **T9.1**: Estudo de Viabilidade e Custos de Driver Virtual Próprio (Mapeamento do Windows Driver Kit SYSVAD, requisitos de assinatura Microsoft WHQL, token de hardware EV ~US$ 500/ano, e alternativa com drivers virtuais livres).
+- [ ] **T9.2**: Pipeline Acústico de Engenharia Reversa de Áudios de Jogos via REA (Metodologia de laboratório com espectrogramas FFT para identificar assinaturas espectrais de passos, recargas e tiros em CS2, Warzone, BF6 sem violar copyright de assets).
+- [ ] **T9.3**: Modelagem do DSP "Gamer Advantage" (Estágio de Peak Clarity EQ em tempo real + Compressor Dinâmico DRC para amplificar sons baixos/passos e atenuar tiros ensurdecedores).
+- [ ] **T9.4**: Estratégia de Produto Open-Core & Proteção Jurídica (Separação entre OpenBoom Core MIT/Apache e Módulo Pro comercial, compliance anticheat zero-hook, e blindagem de marcas registradas).
+
 
 
 

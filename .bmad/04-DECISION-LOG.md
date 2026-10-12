@@ -638,5 +638,29 @@
      - Adicionado card "Canal de Captura de Áudio (Driver vs. Emulação)" com `<select>` acessível, indicador de canal ativo (`Modo A` vs `Modo B`), alerta âmbar explicativo quando em modo Loopback sem driver e aviso de reinicialização automática em `pt-BR`, `en` e `es`.
 * **Consequência:** 214 testes Cargo verdes e 106 testes UI verdes.
 
+---
 
-
+## ADR-041: Concepção da Iniciativa "OpenBoom Gamer Pro" (Modo Gamer Pago) e Estratégia de Driver Virtual Próprio
+* **Data:** 12/10/2026
+* **Status:** Proposta / Em Avaliação (Refinamento BMAD)
+* **Contexto:** 
+  - O usuário propôs a criação de um "Modo Gamer" comercial (pago), mantendo o núcleo do OpenBoom livre/open-source (modelo Open-Core / Freemium).
+  - O Modo Gamer visa oferecer perfis acústicos específicos por jogo (CS2, Warzone, Battlefield, Apex, etc.) com realce dinâmico de frequências de passos/tiros e compressão adaptativa para vantagem tática sem violar anticheats.
+  - Foi levantada a necessidade de desvincular o produto comercial do driver proprietário `boomvad.sys` (Boom 3D), avaliando o desenvolvimento de um driver virtual de áudio próprio via REA/WDK e os custos/viabilidade de certificação WHQL da Microsoft.
+* **Decisões Iniciais & Pontos de Refinamento:**
+  1. **Legalidade e Conformidade com Anticheat (Zero-Ban Guarantee):**
+     - O Modo Gamer atuará estritamente como processador de áudio em nível de sistema/saída (Windows Core Audio / WASAPI).
+     - Proibição absoluta de injeção de DLLs, abertura de handles de processo (`PROCESS_VM_READ`) ou leitura de memória dos jogos. O software é 100% passivo em relação ao processo do jogo.
+  2. **Engenharia Reversa Ética de Áudio de Jogos (Lab Acoustics vs. Copyright):**
+     - O REA e ferramentas de análise de áudio serão usados apenas em ambiente de laboratório para inspecionar assinaturas de frequência (espectrogramas FFT de passos de areia, cascalho, metal e tiros em jogos como CS2/Warzone).
+     - NENHUM arquivo de áudio (`.wav`, `.bank`, `.pck`) ou código do jogo será embutido no instalador do OpenBoom. O produto distribuirá unicamente os parâmetros matemáticos do DSP (ganhos em dB, frequências centrais em Hz, fatores Q dos biquads e tempos de ataque/release do DRC).
+  3. **Estratégia de Driver Virtual Próprio e Custos de Licenciamento (WHQL / Certificado EV):**
+     - **Custos Reais de Certificação Microsoft:**
+       - Não custa milhões de dólares. A submissão no portal Microsoft Hardware Developer Program (HLK/WHQL) em si é **gratuita** pela Microsoft.
+       - O custo obrigatório é um **Certificado de Assinatura de Código EV (Extended Validation)** em token de hardware (Sectigo, DigiCert, GlobalSign), que custa entre **US$ 400 e US$ 900 por ano** (~R$ 2.500 a R$ 5.500/ano), além da abertura formal de CNPJ/D-U-N-S.
+     - **Alternativas de Driver Virtual Livre:**
+       - Investigar projetos open-source baseados no SYSVAD do WDK da Microsoft ou drivers virtuais abertos (ex: scream, virtual-audio-wire).
+       - O Modo B (WASAPI Loopback puro) continuará disponível como fallback sem necessidade de driver.
+  4. **Naming & Proteção contra Marcas Registradas (Trademarks):**
+     - Evitar o uso direto de marcas registradas das publishers (Valve, Activision, EA) na vitrine de venda. Utilizar nomenclaturas de categoria acústica (ex: "Tactical FPS - CS Focus", "Battle Royale - High Velocity", "MilSim Clarity").
+* **Consequência:** Abertura formal do épico de pesquisa e refinamento no backlog BMAD (`T9.1` a `T9.4`).

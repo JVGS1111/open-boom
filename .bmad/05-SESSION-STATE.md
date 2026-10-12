@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 16:40
-* **Sprint Ativa:** **Sprint 8 / Epic 1 — Seletor de Canal de Captura de Áudio (Driver vs. Emulação Loopback) [CONCLUÍDA]**
-* **Tarefa Atual:** Spec 1.9 (`spec-1-9-audio-capture-bridge-mode-selector.md`) concluída e revisada com 100% de sucesso via `/bmad-build-auto`. Revisão em 4 lentes aplicada (`Blind Hunter`, `Edge Case Hunter`, `Verification Gap Reviewer`, `Intent Alignment Auditor`), todas as 12 melhorias/patches embarcadas e suítes completas de testes verdes (214 Cargo + 106 UI).
+* **Data/Hora:** 12/10/2026 - 16:48
+* **Sprint Ativa:** **Sprint 8 Concluída | Nova Iniciativa em Refinamento: "OpenBoom Gamer Pro" (Épico 9 / ADR-041)**
+* **Tarefa Atual:** Registrada a proposta comercial e técnica do Modo Gamer Pro no BMAD ([ADR-041](file:///c:/Users/joaov/Documents/GitHub/open-boom/.bmad/04-DECISION-LOG.md#L643) e Backlog `T9.1`–`T9.4`).
 
 
 ## O que foi concluído nesta sessão

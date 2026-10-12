@@ -13,6 +13,10 @@
     "ui:build": "npm --prefix src-ui run build",
     "ui:test": "npm --prefix src-ui run test",
     "test": "npm --prefix src-ui run test",
+    "release": "powershell -ExecutionPolicy Bypass -File ./scripts/release.ps1 -Version minor",
+    "release:patch": "powershell -ExecutionPolicy Bypass -File ./scripts/release.ps1 -Version patch",
+    "release:minor": "powershell -ExecutionPolicy Bypass -File ./scripts/release.ps1 -Version minor",
+    "release:major": "powershell -ExecutionPolicy Bypass -File ./scripts/release.ps1 -Version major",
     "release:tag": "powershell -ExecutionPolicy Bypass -File ./scripts/release.ps1"
   },
   "devDependencies": {
