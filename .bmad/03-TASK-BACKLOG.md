@@ -52,7 +52,7 @@
 - [X] **T5.5**: Suporte a Internacionalização (i18n: pt-BR, en, es), Menu de Idiomas e Detecção Automática do Sistema Operacional (Dicionários completos sem dependências externas, seletor na barra de título, modal de configurações e menu de bandeja nativo do Windows, persistência atômica no AppConfig e lançamento v0.2.0 - ADR-033).
 
 ### Sprint 6: 8D Orbital Audio (Som Rotativo 360° & Trajetória Dinâmica)
-- [/] **T6.1**: Motor DSP de Modulação Azimutal Orbital & Rotação Contínua 7.1 em Sub-Blocos (Extensão de `Spatializer3D` com cálculo dinâmico $\theta_k(t)$ a cada 32 frames, interpolação suave KEMAR e zero alocações na heap - CAP-1, ADR-032).
-- [ ] **T6.2**: Controle de Orientação e Velocidade Angular (Suporte a Sentido Horário, Anti-Horário e Pêndulo; período de 2s a 30s; comando `AudioCommand::SetOrbit8D` lock-free - CAP-2, CAP-3).
+- [X] **T6.1**: Motor DSP de Modulação Azimutal Orbital & Rotação Contínua 7.1 em Sub-Blocos (Extensão de `Spatializer3D` com cálculo dinâmico $\theta_k(t)$ a cada 32 frames, interpolação suave KEMAR e zero alocações na heap - CAP-1, ADR-032).
+- [X] **T6.2**: Controle de Orientação e Velocidade Angular (Suporte a Sentido Horário, Anti-Horário e Pêndulo; período de 2s a 30s; comando `AudioCommand::SetOrbit8D` lock-free - CAP-2, CAP-3).
 - [ ] **T6.3**: Integração de UI / HUD do Modo 8D (Toggle 8D, seletores de direção e velocidade, visualização do cometa/beacon orbital $\ge 30\text{ fps}$ e persistência no `AppConfig` - CAP-4, CAP-5).
 

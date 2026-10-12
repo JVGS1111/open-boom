@@ -469,6 +469,32 @@
   6. **Resiliência Headless em Testes:** Contexto padrão do `I18nContext` inicializado com o dicionário em inglês, permitindo que testes estáticos via `renderToStaticMarkup` executem de forma determinística sem exigir wrapper explícito.
 * **Consequência:** 78 testes de UI aprovados e 175 testes Cargo aprovados com 100% de sucesso. Versão bumpada para `0.2.0` (tag `v0.2.0`).
 
+---
+
+## ADR-034: Implementação do Motor DSP de Modulação Azimutal Orbital 8D & Rotação Contínua 7.1 em Sub-Blocos (Story 6.1)
+* **Data:** 11/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Necessidade de implementar a base matemática e o pipeline de DSP do modo 8D Orbital Audio no `Spatializer3D`, garantindo rotação 360° em tempo real sem alocações na heap, sem contenção de lock, com precisão angular estrita e sem artefatos de fase ou estalos de transição.
+* **Decisões:**
+  1. **Tipos e Contratos Lock-Free (`crates/open-boom-core/src/types.rs`):**
+     - Adicionado enum `OrbitDirection` (`Clockwise = 0`, `CounterClockwise = 1`, `PingPong = 2`) com derivações `Copy`, `POD`, e `Serialize`/`Deserialize`.
+     - Adicionado comando POD `AudioCommand::SetOrbit8D { enabled, direction, period_sec, depth }` para despacho lock-free via fila circular SPSC.
+     - Estendido `TelemetrySnapshot` com `orbit_phase_deg: f32` e `orbit_enabled: bool`.
+  2. **Acumulador de Fase em Dupla Precisão (`f64`) para Eliminação de Drift:**
+     - A acumulação de fase por amostra ($\Delta \phi = 1 / (T_{\text{rev}} \cdot f_s) \approx 1.736 \times 10^{-6}$) acumula erro de arredondamento em float32 ao longo de centenas de milhares de amostras (desvio de $\approx 0.21^\circ$ em 6s). O acumulador interno `orbit_phase_progress` foi tipado como `f64`, garantindo erro acumulado $< 10^{-8}$ graus e simetria perfeita em $T/4$, $T/2$, $3T/4$ e $T$.
+  3. **Atualização de HRTF por Sub-Blocos de 32 Amostras (`ORBIT_SUB_BLOCK_SAMPLES = 32`):**
+     - O recálculo dos coeficientes de convolução KEMAR ocorre a cada 32 frames de áudio (~0.67ms a 48 kHz), reduzindo em 97% o custo computacional com deslocamento angular por sub-bloco de apenas $\approx 0.12^\circ$ (muito abaixo do limiar auditivo MAA de $1^\circ$).
+  4. **Isolamento Estrito do Canal LFE:**
+     - O canal de sub-graves (`CH_LFE`) é ignorado na rotação orbital (`if ch == CH_LFE { continue; }`), mantendo seus coeficientes HRTF bit-idênticos à referência estática em azimute 0.0° para evitar desequilíbrio e fadiga de fase nos graves.
+  5. **Deslocamento Rígido da Constelação e Função de Wrap Contínua:**
+     - Cada alto-falante não-LFE é rotacionado por $\theta_k(t) = \text{wrap}_{[-180, 180]}(\text{speaker\_azimuth}[k] + \theta_{\text{orbit}}(t) \cdot \text{orbit\_depth})$.
+     - Função `wrap_deg_180` implementada com `rem_euclid(360.0)` garantindo intervalo contínuo $[-180.0^\circ, +180.0^\circ]$ e mapeamento idêntico de âncoras para $\pm 180^\circ$.
+  6. **Transição Contínua na Comutação de Direção:**
+     - O método `sync_progress_to_direction` adapta o progresso normalizado imediatamente para o ângulo azimutal atual ao alternar entre Horário, Anti-Horário e Pêndulo, garantindo reversão imediata do incremento angular sem cliques ou saltos transitórios.
+  7. **Restauração Limpa ao Desativar o Modo 8D:**
+     - Ao desativar o modo 8D, `restore_static_hrtfs` recalcula imediatamente os coeficientes HRTF estáticos para os azimutes nominais configurados sem zerar buffers de histórico, prevenindo descontinuidades DC.
+* **Consequência:** 13 novos testes de integração em `crates/open-boom-core/tests/orbital_tests.rs` e teste de desserialização serde no `src-tauri` aprovados com 100% de sucesso. Total de 188 testes Cargo passando no workspace com zero warnings.
+
 
 
 

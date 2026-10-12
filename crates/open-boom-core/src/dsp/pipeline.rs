@@ -114,6 +114,7 @@ impl AudioProcessor {
     /// Sets the operational sample rate and updates all internal DSP stages.
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         let sr = sample_rate as f32;
+        self.spatializer.set_sample_rate(sr);
         self.parametric_eq.set_sample_rate(sr);
         self.graphic_eq.set_sample_rate(sr);
         self.fidelity.set_sample_rate(sr);
@@ -175,6 +176,14 @@ impl AudioProcessor {
             AudioCommand::SetSurround3D { enabled, intensity } => {
                 self.spatializer.enabled = enabled;
                 self.spatializer.set_intensity(intensity);
+            }
+            AudioCommand::SetOrbit8D {
+                enabled,
+                direction,
+                period_sec,
+                depth,
+            } => {
+                self.spatializer.set_orbit(enabled, direction, period_sec, depth);
             }
             AudioCommand::SetSpeakerMute { channel, muted } => {
                 self.spatializer.set_speaker_mute(channel as usize, muted);
@@ -458,7 +467,21 @@ impl AudioProcessor {
                 0.0
             },
             autoeq_active: self.parametric_eq.is_enabled() && self.parametric_eq.active_count > 0,
+            orbit_phase_deg: self.spatializer.orbit_phase_deg,
+            orbit_enabled: self.spatializer.orbit_enabled,
         }
+    }
+
+    /// Configure 8D orbital soundstage rotation mode.
+    #[inline]
+    pub fn set_orbit(
+        &mut self,
+        enabled: bool,
+        direction: crate::types::OrbitDirection,
+        period_sec: f32,
+        depth: f32,
+    ) {
+        self.spatializer.set_orbit(enabled, direction, period_sec, depth);
     }
 
     /// Adjust gain for an individual graphic EQ band (0..30) in dB (-12.0 to +12.0 dB).

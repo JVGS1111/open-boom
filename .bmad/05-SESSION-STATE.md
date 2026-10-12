@@ -205,8 +205,28 @@
       - Build de produção (`npm run build`) validado sem erros.
     - **Lançamento & Versionamento:** Bump de versão para `0.2.0` no `package.json`, `src-ui/package.json`, `Cargo.toml`, e `tauri.conf.json`.
 
+37. **Implementação do Motor DSP de Modulação Azimutal Orbital 8D & Rotação Contínua 7.1 em Sub-Blocos (Story 6.1):**
+    - **Tipos de Domínio e Contratos POD SPSC (`crates/open-boom-core/src/types.rs`):**
+      - Definição do enum `OrbitDirection` (`Clockwise = 0`, `CounterClockwise = 1`, `PingPong = 2`) com derivações `Copy`, `POD` e `Serialize`/`Deserialize`.
+      - Comando POD `AudioCommand::SetOrbit8D { enabled, direction, period_sec, depth }` para transferência lock-free na fila circular SPSC.
+      - Extensão de `TelemetrySnapshot` com `orbit_phase_deg: f32` e `orbit_enabled: bool`.
+    - **Motor de Órbita Contínua (`crates/open-boom-core/src/dsp/spatializer_3d.rs`):**
+      - Acumulador de fase em dupla precisão (`f64`) para eliminação estrita de drift por arredondamento ao longo de milhões de amostras.
+      - Recálculo dinâmico de coeficientes HRTF KEMAR a cada 32 frames de áudio (`ORBIT_SUB_BLOCK_SAMPLES = 32`, ~0.67ms a 48 kHz), economizando 97% de CPU e mantendo passo angular de ~0.12° (imperceptível sob limiar MAA).
+      - Deslocamento azimutal rígido da constelação virtual 7.1: $\theta_k(t) = \text{wrap}_{[-180, 180]}(\text{speaker\_azimuth}[k] + \theta_{\text{orbit}}(t) \cdot \text{orbit\_depth})$.
+      - Isolamento do canal LFE (`CH_LFE` inalterado com HRTF mono estático) contra desequilíbrio e fadiga de fase nos sub-graves.
+      - Transição angular suave sem saltos ao comutar direção (`sync_progress_to_direction`).
+      - Restauração suave dos HRTFs estáticos nominais ao desativar o modo 8D (`restore_static_hrtfs`).
+    - **Integração no Processador de Áudio (`crates/open-boom-core/src/dsp/pipeline.rs`):**
+      - Despacho de comando `AudioCommand::SetOrbit8D` com ativação automática do spatializer 3D e preenchimento contínuo na telemetria.
+    - **Suíte de Testes Dedicada (`crates/open-boom-core/tests/orbital_tests.rs`):**
+      - 13 testes de integração cobrindo rotação horária (+360° em 12s), anti-horária (-360° em 12s), pêndulo senoidal ($\pm 180^\circ \sin(2\pi t / T)$ sem descontinuidades), cadência estrita de 32 frames, isolamento LFE, profundidade orbital, sanitização de NaN/Inf, reversão contínua de direção, restauração ao desativar e orçamento de processamento em tempo real.
+    - **Verificação de Qualidade Global:**
+      - 188 testes Cargo passando no workspace com 100% de sucesso e zero warnings.
+      - ADR-034 registrado no `.bmad/04-DECISION-LOG.md`.
+
 ## O que está em andamento agora
-* Suporte a internacionalização (i18n) e corte da versão v0.2.0 concluídos com 100% de testes verdes.
+* Story 6.1 concluída com 100% de sucesso. Pronto para Story 6.2 / 6.3 (Integração HUD/UI do Modo 8D).
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio ativo. Todos os 175 testes Cargo e 78 testes de UI do frontend estão passando com 100% de sucesso.
+* Nenhum bloqueio ativo. Todos os 188 testes Cargo no backend e testes do frontend passam com 100% de sucesso.

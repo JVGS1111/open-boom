@@ -954,6 +954,21 @@ mod tests {
                 preamp_offset_db: -5.2,
             }
         );
+
+        // 12. SetOrbit8D
+        let cmd12: AudioCommand = serde_json::from_str(
+            r#"{"SetOrbit8D": {"enabled": true, "direction": "Clockwise", "period_sec": 12.0, "depth": 0.85}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cmd12,
+            AudioCommand::SetOrbit8D {
+                enabled: true,
+                direction: open_boom_core::types::OrbitDirection::Clockwise,
+                period_sec: 12.0,
+                depth: 0.85,
+            }
+        );
     }
 
     #[test]

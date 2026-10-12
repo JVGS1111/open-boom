@@ -5,12 +5,40 @@
 //! using SIMD acceleration (SSE2/AVX) and zero heap allocations.
 
 use crate::types::{
-    CH_CENTER, CH_FRONT_LEFT, CH_FRONT_RIGHT, CH_LFE, CH_REAR_LEFT, CH_REAR_RIGHT,
+    OrbitDirection, CH_CENTER, CH_FRONT_LEFT, CH_FRONT_RIGHT, CH_LFE, CH_REAR_LEFT, CH_REAR_RIGHT,
     CH_SURROUND_LEFT, CH_SURROUND_RIGHT, ITU_R_7_1_DEFAULT_AZIMUTHS, SURROUND_7_1_CHANNELS,
 };
 
 /// FIR filter tap length for HRTF impulse responses (64 taps = 1.33ms at 48 kHz).
 pub const HRTF_TAPS: usize = 64;
+
+/// Sub-block frame size for orbital HRTF coefficient updates (32 samples = ~0.67ms at 48 kHz).
+pub const ORBIT_SUB_BLOCK_SAMPLES: usize = 32;
+
+/// Default 8D orbital revolution period in seconds (12.0 seconds).
+pub const DEFAULT_ORBIT_PERIOD_SEC: f32 = 12.0;
+
+/// Minimum allowable 8D orbital revolution period in seconds (2.0 seconds).
+pub const MIN_ORBIT_PERIOD_SEC: f32 = 2.0;
+
+/// Maximum allowable 8D orbital revolution period in seconds (30.0 seconds).
+pub const MAX_ORBIT_PERIOD_SEC: f32 = 30.0;
+
+/// Default 8D orbital spatial depth factor (0.85 = 85%).
+pub const DEFAULT_ORBIT_DEPTH: f32 = 0.85;
+
+/// Wraps an azimuth angle in degrees to the continuous range [-180.0, 180.0].
+#[inline]
+pub fn wrap_deg_180(deg: f32) -> f32 {
+    if !deg.is_finite() {
+        return 0.0;
+    }
+    let mut a = (deg + 180.0).rem_euclid(360.0) - 180.0;
+    if a == -180.0 && deg > 0.0 {
+        a = 180.0;
+    }
+    a
+}
 
 /// Calibrated KEMAR HRTF impulse responses in reverse order for forward linear convolution.
 /// Index [ch][k] where k=0 corresponds to delay=63, k=63 corresponds to delay=0 (newest sample).
@@ -284,6 +312,14 @@ pub struct Spatializer3D {
     pub hrtf_right: [[f32; HRTF_TAPS]; SURROUND_7_1_CHANNELS],
     history: [[f32; 128]; SURROUND_7_1_CHANNELS],
     write_pos: usize,
+    pub orbit_enabled: bool,
+    pub orbit_direction: OrbitDirection,
+    pub orbit_period_sec: f32,
+    pub orbit_depth: f32,
+    pub orbit_phase_deg: f32,
+    orbit_phase_progress: f64,
+    orbit_sub_block_counter: usize,
+    sample_rate: f32,
 }
 
 impl Default for Spatializer3D {
@@ -314,6 +350,22 @@ impl Spatializer3D {
             hrtf_right,
             history: [[0.0; 128]; SURROUND_7_1_CHANNELS],
             write_pos: 0,
+            orbit_enabled: false,
+            orbit_direction: OrbitDirection::Clockwise,
+            orbit_period_sec: DEFAULT_ORBIT_PERIOD_SEC,
+            orbit_depth: DEFAULT_ORBIT_DEPTH,
+            orbit_phase_deg: 0.0,
+            orbit_phase_progress: 0.0,
+            orbit_sub_block_counter: 0,
+            sample_rate: crate::types::INTERNAL_SAMPLE_RATE_F32,
+        }
+    }
+
+    /// Set operational sample rate in Hz for timing and orbital phase progression.
+    #[inline]
+    pub fn set_sample_rate(&mut self, sample_rate: f32) {
+        if sample_rate.is_finite() && sample_rate > 0.0 {
+            self.sample_rate = sample_rate;
         }
     }
 
@@ -326,6 +378,140 @@ impl Spatializer3D {
             intensity.clamp(0.0, 1.0)
         };
         self.target_intensity = safe;
+    }
+
+    /// Configures 8D orbital soundstage rotation mode.
+    ///
+    /// Period is clamped to [2.0, 30.0] seconds (default 12.0s).
+    /// Depth is clamped to [0.0, 1.0] (default 0.85).
+    /// Automatically engages 3D spatializer if `enabled == true`.
+    /// When disabled, smoothly restores static speaker HRTFs without clicks or dropouts.
+    pub fn set_orbit(
+        &mut self,
+        enabled: bool,
+        direction: OrbitDirection,
+        period_sec: f32,
+        depth: f32,
+    ) {
+        let safe_period = if period_sec.is_nan() || period_sec.is_infinite() {
+            DEFAULT_ORBIT_PERIOD_SEC
+        } else {
+            period_sec.clamp(MIN_ORBIT_PERIOD_SEC, MAX_ORBIT_PERIOD_SEC)
+        };
+
+        let safe_depth = if depth.is_nan() || depth.is_infinite() {
+            DEFAULT_ORBIT_DEPTH
+        } else {
+            depth.clamp(0.0, 1.0)
+        };
+
+        self.orbit_period_sec = safe_period;
+        self.orbit_depth = safe_depth;
+
+        if enabled {
+            self.enabled = true;
+            if !self.orbit_enabled {
+                self.orbit_enabled = true;
+                self.orbit_direction = direction;
+                self.orbit_phase_deg = 0.0;
+                self.orbit_phase_progress = 0.0;
+                self.orbit_sub_block_counter = 0;
+                self.update_orbit_hrtfs();
+            } else if self.orbit_direction != direction {
+                self.sync_progress_to_direction(direction);
+                self.orbit_direction = direction;
+            }
+        } else if self.orbit_enabled {
+            self.orbit_enabled = false;
+            self.orbit_direction = direction;
+            self.orbit_phase_deg = 0.0;
+            self.orbit_phase_progress = 0.0;
+            self.orbit_sub_block_counter = 0;
+            self.restore_static_hrtfs();
+        } else {
+            self.orbit_direction = direction;
+        }
+    }
+
+    /// Synchronizes internal normalized phase progress when motion direction switches.
+    fn sync_progress_to_direction(&mut self, new_direction: OrbitDirection) {
+        match new_direction {
+            OrbitDirection::Clockwise => {
+                self.orbit_phase_progress = (self.orbit_phase_deg as f64 / 360.0).rem_euclid(1.0);
+            }
+            OrbitDirection::CounterClockwise => {
+                self.orbit_phase_progress = (-self.orbit_phase_deg as f64 / 360.0).rem_euclid(1.0);
+            }
+            OrbitDirection::PingPong => {
+                let sin_val = (self.orbit_phase_deg / 180.0).clamp(-1.0, 1.0) as f64;
+                let rad = sin_val.asin();
+                self.orbit_phase_progress = (rad / (2.0 * std::f64::consts::PI)).rem_euclid(1.0);
+            }
+        }
+    }
+
+    /// Restores static HRTF filter coefficients computed from calibrated `speaker_azimuth`.
+    pub fn restore_static_hrtfs(&mut self) {
+        for ch in 0..SURROUND_7_1_CHANNELS {
+            let (hl, hr) = compute_interpolated_hrtf(ch, self.speaker_azimuth[ch]);
+            self.hrtf_left[ch] = hl;
+            self.hrtf_right[ch] = hr;
+        }
+    }
+
+    /// Recalculates HRTF filter coefficients for non-LFE virtual speakers
+    /// based on the current orbital phase and depth:
+    /// $\theta_k(t) = \text{wrap}_{[-180, 180]}(\text{speaker\_azimuth}[k] + \theta_{\text{orbit}}(t) \cdot \text{orbit\_depth})$.
+    #[inline]
+    pub fn update_orbit_hrtfs(&mut self) {
+        for ch in 0..SURROUND_7_1_CHANNELS {
+            if ch == CH_LFE {
+                // LFE channel isolation: never rotate or modulate LFE channel azimuth
+                continue;
+            }
+            let eff_az = wrap_deg_180(self.speaker_azimuth[ch] + self.orbit_phase_deg * self.orbit_depth);
+            let (hl, hr) = compute_interpolated_hrtf(ch, eff_az);
+            self.hrtf_left[ch] = hl;
+            self.hrtf_right[ch] = hr;
+        }
+    }
+
+    /// Advances the orbital trajectory phase by one audio sample.
+    #[inline]
+    pub fn advance_orbit_phase(&mut self) {
+        let period = if self.orbit_period_sec.is_finite() && self.orbit_period_sec >= MIN_ORBIT_PERIOD_SEC {
+            self.orbit_period_sec as f64
+        } else {
+            DEFAULT_ORBIT_PERIOD_SEC as f64
+        };
+        let sample_rate = if self.sample_rate.is_finite() && self.sample_rate > 0.0 {
+            self.sample_rate as f64
+        } else {
+            crate::types::INTERNAL_SAMPLE_RATE_F32 as f64
+        };
+
+        let phase_step = 1.0 / (period * sample_rate);
+        self.orbit_phase_progress += phase_step;
+        if self.orbit_phase_progress >= 1.0 {
+            self.orbit_phase_progress -= 1.0;
+        } else if self.orbit_phase_progress < 0.0 {
+            self.orbit_phase_progress += 1.0;
+        }
+
+        match self.orbit_direction {
+            OrbitDirection::Clockwise => {
+                let raw_deg = (self.orbit_phase_progress * 360.0) as f32;
+                self.orbit_phase_deg = wrap_deg_180(raw_deg);
+            }
+            OrbitDirection::CounterClockwise => {
+                let raw_deg = (-self.orbit_phase_progress * 360.0) as f32;
+                self.orbit_phase_deg = wrap_deg_180(raw_deg);
+            }
+            OrbitDirection::PingPong => {
+                let angle_rad = 2.0 * std::f64::consts::PI * self.orbit_phase_progress;
+                self.orbit_phase_deg = (180.0 * angle_rad.sin() as f32).clamp(-180.0, 180.0);
+            }
+        }
     }
 
     /// Mute or unmute an individual virtual speaker channel (0..7).
@@ -361,9 +547,16 @@ impl Spatializer3D {
                 azimuth_deg.clamp(-180.0, 180.0)
             };
             self.speaker_azimuth[channel] = safe_deg;
-            let (hl, hr) = compute_interpolated_hrtf(channel, safe_deg);
-            self.hrtf_left[channel] = hl;
-            self.hrtf_right[channel] = hr;
+            if !self.orbit_enabled {
+                let (hl, hr) = compute_interpolated_hrtf(channel, safe_deg);
+                self.hrtf_left[channel] = hl;
+                self.hrtf_right[channel] = hr;
+            } else if channel != CH_LFE {
+                let eff_az = wrap_deg_180(safe_deg + self.orbit_phase_deg * self.orbit_depth);
+                let (hl, hr) = compute_interpolated_hrtf(channel, eff_az);
+                self.hrtf_left[channel] = hl;
+                self.hrtf_right[channel] = hr;
+            }
         }
     }
 
@@ -371,10 +564,10 @@ impl Spatializer3D {
     #[inline]
     pub fn reset_speaker_positions(&mut self) {
         self.speaker_azimuth = ITU_R_7_1_DEFAULT_AZIMUTHS;
-        for ch in 0..SURROUND_7_1_CHANNELS {
-            let (hl, hr) = compute_interpolated_hrtf(ch, ITU_R_7_1_DEFAULT_AZIMUTHS[ch]);
-            self.hrtf_left[ch] = hl;
-            self.hrtf_right[ch] = hr;
+        if !self.orbit_enabled {
+            self.restore_static_hrtfs();
+        } else {
+            self.update_orbit_hrtfs();
         }
     }
 
@@ -383,6 +576,14 @@ impl Spatializer3D {
         self.history = [[0.0; 128]; SURROUND_7_1_CHANNELS];
         self.write_pos = 0;
         self.current_intensity = self.target_intensity;
+        self.orbit_sub_block_counter = 0;
+        self.orbit_phase_progress = 0.0;
+        self.orbit_phase_deg = 0.0;
+        if !self.orbit_enabled {
+            self.restore_static_hrtfs();
+        } else {
+            self.update_orbit_hrtfs();
+        }
     }
 
     /// Convolves 8 virtual speaker channels into binaural stereo [L, R] using KEMAR HRTF.
@@ -393,6 +594,15 @@ impl Spatializer3D {
 
         if !self.enabled {
             return (dry_l, dry_r);
+        }
+
+        // Sub-block orbital coefficient update (every 32 samples)
+        if self.orbit_enabled {
+            if self.orbit_sub_block_counter == 0 {
+                self.update_orbit_hrtfs();
+            }
+            self.orbit_sub_block_counter = (self.orbit_sub_block_counter + 1) % ORBIT_SUB_BLOCK_SAMPLES;
+            self.advance_orbit_phase();
         }
 
         // Smooth parameter interpolation step (crossfade over ~240 samples / 5ms)

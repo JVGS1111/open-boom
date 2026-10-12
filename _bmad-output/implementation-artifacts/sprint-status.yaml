@@ -77,8 +77,8 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-1-motor-dsp-de-modulacao-azimutal-orbital-rotacao-continua-7-1-em-sub-blocos: in-progress
-  6-2-botao-rapido-8d-orbit-indicador-trajetoria-neon-no-soundstagedial: backlog
+  6-1-motor-dsp-de-modulacao-azimutal-orbital-rotacao-continua-7-1-em-sub-blocos: done
+  6-2-botao-rapido-8d-orbit-indicador-trajetoria-neon-no-soundstagedial: in-progress
   6-3-painel-completo-de-parametros-orbitais-no-modal-de-calibracao-persistencia-atomica: backlog
   epic-6-retrospective: optional
 

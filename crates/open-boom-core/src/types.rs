@@ -87,6 +87,22 @@ pub const ITU_R_7_1_DEFAULT_AZIMUTHS: [f32; SURROUND_7_1_CHANNELS] = [
     90.0,    // Surround Right
 ];
 
+/// Motion direction for 8D orbital soundstage rotation.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum OrbitDirection {
+    Clockwise = 0,
+    CounterClockwise = 1,
+    PingPong = 2,
+}
+
+impl Default for OrbitDirection {
+    fn default() -> Self {
+        Self::Clockwise
+    }
+}
+
 /// Filter type for parametric biquad filters.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,6 +151,13 @@ pub enum AudioCommand {
     SetBypass(bool),
     /// 3D Surround spatializer intensity (0.0 to 1.0) and enable switch.
     SetSurround3D { enabled: bool, intensity: f32 },
+    /// Configure 8D orbital soundstage rotation mode.
+    SetOrbit8D {
+        enabled: bool,
+        direction: OrbitDirection,
+        period_sec: f32,
+        depth: f32,
+    },
     /// Mute or unmute an individual virtual speaker channel (0..7).
     SetSpeakerMute { channel: u8, muted: bool },
     /// Adjust relative trim gain for an individual virtual speaker in dB (-12.0 to +12.0 dB).
@@ -217,6 +240,10 @@ pub struct TelemetrySnapshot {
     pub autoeq_preamp_db: f32,
     /// Whether AutoEq parametric stage is currently active.
     pub autoeq_active: bool,
+    /// Current 8D orbital rotation angle in degrees (-180.0 to +180.0 deg).
+    pub orbit_phase_deg: f32,
+    /// Whether 8D orbital soundstage rotation mode is currently active.
+    pub orbit_enabled: bool,
 }
 
 impl Default for TelemetrySnapshot {
@@ -236,6 +263,8 @@ impl Default for TelemetrySnapshot {
             surround_enabled: false,
             autoeq_preamp_db: 0.0,
             autoeq_active: false,
+            orbit_phase_deg: 0.0,
+            orbit_enabled: false,
         }
     }
 }
