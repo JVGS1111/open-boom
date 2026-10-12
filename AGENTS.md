@@ -12,13 +12,13 @@
 * Keep the UI responsive, low-latency, and true to the dark modern aesthetic.
 
 ## Decompilation Tools & REA MCP Integration
-* **Repositório Irmão de Decompilação:** `c:\Users\joaov\Documents\GitHub\decompilator`.
-* **Servidor MCP Ativo:** O servidor MCP do **REA (Reverse Engineer Anything)** (`rea`) está registrado globalmente no ambiente Antigravity e disponível para o agente em todas as sessões.
-* **Uso Obrigatório para Engenharia Reversa:** Sempre que surgirem dúvidas sobre:
-  - Formato de buffers de áudio, chamadas de sistema ou drivers virtuais (`boomvad.sys`);
-  - Algoritmos internos de DSP (`AVBoomAudioProcessor`, `AVFIRFilterSSE`, rotinas de HRTF e equalização);
-  - Assinaturas de métodos e estruturas de dados de áudio;
-  O agente DEVE utilizar as ferramentas do MCP do REA (`batch_decompile`, `inspect_native_instruction`, `read_bytes`, `procedure_assembly`, etc.) e consultar os artefatos de `c:\Users\joaov\Documents\GitHub\decompilator` para extrair evidências reais e guiar a implementação sem adivinhações.
+* **Sister Decompilation Repository:** `../decompilator` (sibling repo on the same machine).
+* **Active MCP Server:** The **REA (Reverse Engineer Anything)** MCP server (`rea`) is registered globally in the Antigravity environment and available to the agent in every session.
+* **Mandatory for Reverse Engineering:** Whenever there are questions about:
+  - Audio buffer formats, system calls, or virtual audio drivers (`boomvad.sys`);
+  - Internal DSP algorithms (`AVBoomAudioProcessor`, `AVFIRFilterSSE`, HRTF and EQ routines);
+  - Method signatures and audio data structures;
+  The agent MUST use REA MCP tools (`batch_decompile`, `inspect_native_instruction`, `read_bytes`, `procedure_assembly`, etc.) and consult artifacts from the sibling decompilator repository to extract real evidence and guide implementation without guesswork.
 
 ## Git & Release Policy (Version Batching)
 * **Commit & Push ao Finalizar Tarefas:** Ao concluir uma tarefa, feature ou correção, o agente deve realizar o `git commit` e fazer `git push` das alterações para a branch no GitHub.
