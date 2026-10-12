@@ -20,3 +20,7 @@
   - Assinaturas de métodos e estruturas de dados de áudio;
   O agente DEVE utilizar as ferramentas do MCP do REA (`batch_decompile`, `inspect_native_instruction`, `read_bytes`, `procedure_assembly`, etc.) e consultar os artefatos de `c:\Users\joaov\Documents\GitHub\decompilator` para extrair evidências reais e guiar a implementação sem adivinhações.
 
+## Git & Release Policy (Version Batching)
+* **Commit & Push ao Finalizar Tarefas:** Ao concluir uma tarefa, feature ou correção, o agente deve realizar o `git commit` e fazer `git push` das alterações para a branch no GitHub.
+* **Proibição de Release Automático por Fix:** **NUNCA** faça bump de versão (`Cargo.toml`, `package.json`, `tauri.conf.json`) nem crie/publique tags de release (`v*.*.*`) automaticamente para cada tarefa ou fix individual. O projeto adota o lançamento de **pacotes de atualização (batches)** consolidados.
+* **Aviso de Aguardo de Sinal:** Sempre que finalizar uma tarefa e subir o código para o Git, informe explicitamente ao usuário que o código foi enviado e que **está aguardando o sinal explícito dele para gerar uma nova versão/release**.
