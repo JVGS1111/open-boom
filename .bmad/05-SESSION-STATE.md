@@ -314,9 +314,16 @@
       - `download_and_install_update` utiliza `curl.exe -fL` (com fallback PowerShell sob `$ProgressPreference = 'SilentlyContinue'`), guarda de concorrência `DownloadInFlightGuard` (`AtomicBool`) e staging atômico via `.part` -> `%TEMP%\OpenBoom_Setup_Update.exe` sem abrir processos enquanto o app está aberto.
       - `restart_application` encerra o `AudioStreamPump`, restaura o endpoint físico do Windows, inicia um worker oculto (`CREATE_NO_WINDOW`) que aguarda o encerramento do PID antigo, finaliza processos remanescentes, executa `OpenBoom_Setup_Update.exe /S /UPDATE -Wait`, limpa `%TEMP%` e abre uma única instância do `%LOCALAPPDATA%\OpenBoom\open-boom.exe` atualizado.
     - **Verificação Completa & Atualização Local:** **215 testes Cargo passando (0 falhas)**, **106 testes UI passando (0 falhas)**, binário instalado em `%LOCALAPPDATA%\OpenBoom\open-boom.exe` atualizado para a v0.5.0 corrigida e smoke test local verificado.
+46. **Correção Definitiva do Loopback Mode (Modo B) contra Realimentação Acústica ("Sino Atordoante" Karplus-Strong) e Retenção de Nota no Idle (T8.4 / ADR-043):**
+    - **Causa Raiz Identificada:** Em `crates/open-boom-wasapi/src/stream_pump.rs`, o Modo B abria `AUDCLNT_STREAMFLAGS_LOOPBACK` padrão no mesmo endpoint físico (`render_device.clone()`) onde o `render_svc` do OpenBoom injetava o áudio processado. O OpenBoom recapturava sua própria saída a cada ~10–25ms, reaplicava o ganho do DSP e re-injetava no DAC, criando um ressonador comb de realimentação positiva (síntese Karplus-Strong de sino metálico em `-0.2 dBFS`) que tocava 1 nota infinitamente mesmo após pausar o áudio externo.
+    - **Implementação de Process Loopback Real (`crates/open-boom-wasapi/src/loopback_capture.rs` e `stream_pump.rs`):**
+      - Implementado `ProcessLoopbackCompletionHandler` (`#[windows_core::implement(IActivateAudioInterfaceCompletionHandler)]`) e `activate_process_loopback_client(exclude_process_id: u32)` via `ActivateAudioInterfaceAsync` com `VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK` (`"VAD\\Process_Loopback"`) e `PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE`, excluindo a árvore de processos do próprio OpenBoom (`GetCurrentProcessId()`) diretamente no mixer do Windows (`audiodg.exe`).
+      - Adicionado `AUDCLNT_STREAMFLAGS_EVENTCALLBACK` (`CreateEventW` + `WaitForSingleObject`), supressão de renderização duplicada em bypass/mute/silêncio no Modo B, parada e limpeza do buffer circular (`AUDCLNT_BUFFERFLAGS_SILENT` + `render_client.Stop()` + `render_client.Reset()`) e despacho de `AudioCommand::ResetFilters` no idle para decair filtros IIR e telemetria para `-100.0 dBFS`.
+    - **Testes com Geração de Áudio Real (`crates/open-boom-wasapi/tests/stream_pump_tests.rs`):**
+      - Gerador de arquivo `.wav` PCM 16-bit e tom piloto estreito (14.321 Hz) validando >34 dB de rejeição da própria saída no Modo B e decaimento imediato ao silêncio (`<= -90 dBFS`) após o término do áudio (**217 testes Cargo verdes e 106 testes UI verdes**).
 
 ## O que está em andamento agora
-* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3) estão 100% implementados, revisados e testados.**
+* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3 / T8.4) estão 100% implementados, revisados e testados.**
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com 215 testes Cargo verdes e 106 testes UI verdes.
+* Nenhum bloqueio. Sistema com 217 testes Cargo verdes e 106 testes UI verdes.

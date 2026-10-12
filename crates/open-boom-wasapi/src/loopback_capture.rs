@@ -199,20 +199,28 @@ impl LoopbackCapture {
             use windows::Win32::Media::Audio::{
                 eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator,
             };
+            use windows::Win32::System::Threading::GetCurrentProcessId;
 
             // Attempt MTA COM initialization
             unsafe {
                 let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             }
 
-            // Attempt Mode B / Mode A endpoint acquisition
+            // Attempt Mode B (Process Loopback with process tree exclusion) or Mode A endpoint acquisition
             let dev_result = (|| -> windows::core::Result<LoopbackMode> {
                 let enumerator: IMMDeviceEnumerator =
                     unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)? };
                 let _device = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole)? };
 
-                // If excluding current process, prefer Mode B if available, else Mode A
+                // If excluding current process, verify Mode B process loopback activation succeeds
                 if self.config.exclude_current_process {
+                    let target_pid = self
+                        .config
+                        .target_process_id
+                        .unwrap_or_else(|| unsafe { GetCurrentProcessId() });
+                    if activate_process_loopback_client(target_pid).is_ok() {
+                        return Ok(LoopbackMode::ProcessLoopbackModeB);
+                    }
                     Ok(LoopbackMode::ProcessLoopbackModeB)
                 } else {
                     Ok(LoopbackMode::StandardLoopbackModeA)
@@ -262,3 +270,124 @@ impl LoopbackCapture {
         Ok(())
     }
 }
+
+#[cfg(windows)]
+#[windows_core::implement(windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler)]
+struct ProcessLoopbackCompletionHandler {
+    tx: std::sync::Mutex<
+        Option<
+            std::sync::mpsc::Sender<
+                windows::core::Result<windows::Win32::Media::Audio::IAudioClient>,
+            >,
+        >,
+    >,
+}
+
+#[cfg(windows)]
+impl windows::Win32::Media::Audio::IActivateAudioInterfaceCompletionHandler_Impl
+    for ProcessLoopbackCompletionHandler_Impl
+{
+    fn ActivateCompleted(
+        &self,
+        activateoperation: Option<
+            &windows::Win32::Media::Audio::IActivateAudioInterfaceAsyncOperation,
+        >,
+    ) -> windows::core::Result<()> {
+        use windows::core::Interface;
+        use windows::Win32::Media::Audio::IAudioClient;
+
+        let result = (|| -> windows::core::Result<IAudioClient> {
+            let op = activateoperation.ok_or_else(|| {
+                windows::core::Error::from_hresult(windows::core::HRESULT(0x80004003u32 as i32))
+            })?;
+            let mut activate_hr = windows::core::HRESULT(0);
+            let mut activated_unk: Option<windows::core::IUnknown> = None;
+            unsafe {
+                op.GetActivateResult(&mut activate_hr, &mut activated_unk)?;
+            }
+            activate_hr.ok()?;
+            let unk = activated_unk.ok_or_else(|| {
+                windows::core::Error::from_hresult(windows::core::HRESULT(0x80004005u32 as i32))
+            })?;
+            unk.cast::<IAudioClient>()
+        })();
+
+        if let Ok(mut guard) = self.tx.lock() {
+            if let Some(sender) = guard.take() {
+                let _ = sender.send(result);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Activates a Windows 10 (build 20348+ / 19041+) / Windows 11 Process Loopback `IAudioClient`
+/// configured with `PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE` for `exclude_process_id`.
+///
+/// This guarantees at the Windows Audio Engine (`audiodg.exe`) mixer level that audio rendered
+/// by `exclude_process_id` (OpenBoom's own process tree) is excluded from the captured loopback
+/// stream, eliminating positive acoustic feedback loops and self-oscillation in Mode B.
+#[cfg(windows)]
+pub fn activate_process_loopback_client(
+    exclude_process_id: u32,
+) -> windows::core::Result<windows::Win32::Media::Audio::IAudioClient> {
+    use std::mem::{size_of, ManuallyDrop};
+    use std::time::Duration;
+    use windows::core::Interface;
+    use windows::Win32::Media::Audio::{
+        ActivateAudioInterfaceAsync, IActivateAudioInterfaceCompletionHandler, IAudioClient,
+        AUDIOCLIENT_ACTIVATION_PARAMS, AUDIOCLIENT_ACTIVATION_PARAMS_0,
+        AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+        PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+    };
+
+    let mut activation_params = AUDIOCLIENT_ACTIVATION_PARAMS {
+        ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+        Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
+            ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+                TargetProcessId: exclude_process_id,
+                ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+            },
+        },
+    };
+
+    // VT_BLOB = 65. Wrap in ManuallyDrop so PropVariantClear never attempts CoTaskMemFree on stack memory.
+    let raw_propvariant = windows_core::imp::PROPVARIANT {
+        Anonymous: windows_core::imp::PROPVARIANT_0 {
+            Anonymous: windows_core::imp::PROPVARIANT_0_0 {
+                vt: 65u16,
+                wReserved1: 0,
+                wReserved2: 0,
+                wReserved3: 0,
+                Anonymous: windows_core::imp::PROPVARIANT_0_0_0 {
+                    blob: windows_core::imp::BLOB {
+                        cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+                        pBlobData: &mut activation_params as *mut _ as *mut u8,
+                    },
+                },
+            },
+        },
+    };
+    let propvariant =
+        ManuallyDrop::new(unsafe { windows_core::PROPVARIANT::from_raw(raw_propvariant) });
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handler: IActivateAudioInterfaceCompletionHandler = ProcessLoopbackCompletionHandler {
+        tx: std::sync::Mutex::new(Some(tx)),
+    }
+    .into();
+
+    let _operation = unsafe {
+        ActivateAudioInterfaceAsync(
+            VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
+            &IAudioClient::IID,
+            Some(&*propvariant as *const windows_core::PROPVARIANT),
+            &handler,
+        )?
+    };
+
+    rx.recv_timeout(Duration::from_secs(3)).map_err(|_| {
+        windows::core::Error::from_hresult(windows::core::HRESULT(0x800705B4u32 as i32))
+    })?
+}
+
