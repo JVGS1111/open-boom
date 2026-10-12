@@ -664,3 +664,20 @@
   4. **Naming & Proteção contra Marcas Registradas (Trademarks):**
      - Evitar o uso direto de marcas registradas das publishers (Valve, Activision, EA) na vitrine de venda. Utilizar nomenclaturas de categoria acústica (ex: "Tactical FPS - CS Focus", "Battle Royale - High Velocity", "MilSim Clarity").
 * **Consequência:** Abertura formal do épico de pesquisa e refinamento no backlog BMAD (`T9.1` a `T9.4`).
+
+---
+
+## ADR-042: Correção do Auto-Update In-App (Seleção Estrita do Instalador NSIS, Download Acelerado e Substituição Atômica sem Janelas Duplicadas)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** Durante a atualização in-app da v0.4.0 para a v0.5.0, o usuário relatou três sintomas: (1) demora excessiva no download, (2) abertura de 2 novas janelas na v0.5.0 enquanto 1 janela permanecia na v0.4.0 (gerando 3 ícones na bandeja do sistema), e (3) ao fechar todas e abrir novamente pelo atalho, o aplicativo abria novamente na v0.4.0.
+* **Causa Raiz Identificada:**
+  1. Na API do GitHub Releases, o artefato portátil `OpenBoom-v0.5.0-portable-x64.exe` (10.3 MB) precede alfabeticamente o instalador `OpenBoom_0.5.0_x64-setup.exe` (2.4 MB, pois `-` ASCII 45 < `_` ASCII 95). O filtro antigo (`lower.contains("openboom")`) selecionava o executável portátil em vez do instalador NSIS.
+  2. O PowerShell 5.1 executava `Invoke-WebRequest` sem `$ProgressPreference = 'SilentlyContinue'`, degradando a taxa de transferência pelo cálculo de progresso a cada pacote.
+  3. `download_and_install_update` executava `Start-Process $dest -ArgumentList "/S"` imediatamente após o download (com o app antigo ainda aberto). Como `$dest` era o binário portátil em `%TEMP%`, isso apenas abria novas instâncias da v0.5.0 a partir de `%TEMP%` sem atualizar `%LOCALAPPDATA%\OpenBoom\open-boom.exe`.
+* **Decisões:**
+  1. **Seleção Estrita do Instalador (`select_installer_asset_url` em `src-tauri/src/lib.rs`):** Prioriza estritamente pacotes `.exe` que contenham `"setup"` ou `"installer"` e **não** contenham `"portable"`, evitando que o binário portátil seja baixado como instalador.
+  2. **Download Rápido e Staging Atômico com Guarda de Concorrência (`download_and_install_update`):** Utiliza `curl.exe -fL` nativo do Windows (com fallback `Invoke-WebRequest -UseBasicParsing` sob `$ProgressPreference = 'SilentlyContinue'`), protege contra downloads simultâneos via `DownloadInFlightGuard` (`AtomicBool`) e faz staging atômico via `.part` -> `%TEMP%\OpenBoom_Setup_Update.exe` **sem** iniciar processos enquanto a janela atual está aberta.
+  3. **Aplicação Diferida no Encerramento (`restart_application` e `App.tsx`):** Ao concluir o download manual (ou clicar em Reiniciar), `restart_application` encerra o `AudioStreamPump`, restaura o endpoint físico do Windows, dispara um worker PowerShell oculto (`CREATE_NO_WINDOW`) e executa `app.exit(0)`. O worker aguarda o término do PID antigo, encerra quaisquer instâncias remanescentes de `open-boom`, executa `OpenBoom_Setup_Update.exe /S /UPDATE -Wait` com o arquivo destravado, remove os temporários de `%TEMP%` e abre **exatamente uma** instância do `%LOCALAPPDATA%\OpenBoom\open-boom.exe` atualizado.
+* **Consequência:** Atualização in-app concluída em poucos segundos, substituição real do binário instalado em `%LOCALAPPDATA%\OpenBoom\open-boom.exe` e abertura de uma única janela na versão nova. Validado com 215 testes Cargo e 106 testes UI verdes.
+

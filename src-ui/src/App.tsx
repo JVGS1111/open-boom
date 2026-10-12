@@ -703,12 +703,16 @@ export const App: React.FC = () => {
     }
   };
 
-  const triggerAutoInstall = async (downloadUrl: string) => {
+  const triggerAutoInstall = async (downloadUrl: string, autoRestartAfterDownload = false) => {
+    if (isDownloadingUpdate) return;
     setIsDownloadingUpdate(true);
     setUpdateError(null);
     try {
       await invoke("download_and_install_update", { downloadUrl });
       setIsUpdateReadyToRestart(true);
+      if (autoRestartAfterDownload) {
+        await handleRestartApplication();
+      }
     } catch (err) {
       setUpdateError(String(err) || "Failed to download update");
     } finally {
@@ -717,8 +721,8 @@ export const App: React.FC = () => {
   };
 
   const handleInstallUpdate = async () => {
-    if (!updateInfo?.downloadUrl) return;
-    await triggerAutoInstall(updateInfo.downloadUrl);
+    if (!updateInfo?.downloadUrl || isDownloadingUpdate) return;
+    await triggerAutoInstall(updateInfo.downloadUrl, true);
   };
 
   const handleRestartApplication = async () => {

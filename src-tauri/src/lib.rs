@@ -55,6 +55,8 @@ pub struct AppState {
     pub auto_route: bool,
     pub session_manager: Arc<Mutex<SessionManager>>,
     pub volume_sync: Arc<EndpointVolumeSync>,
+    pub staged_update_installer: Arc<Mutex<Option<std::path::PathBuf>>>,
+    pub is_downloading_update: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Default for AppState {
@@ -178,6 +180,8 @@ impl AppState {
             auto_route,
             session_manager,
             volume_sync,
+            staged_update_installer: Arc::new(Mutex::new(None)),
+            is_downloading_update: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -818,12 +822,60 @@ pub struct UpdateCheckResult {
     pub download_url: Option<String>,
 }
 
+/// Selects the appropriate installer asset URL from a GitHub Release `assets` array.
+/// Strictly prioritizes NSIS setup/installer packages (`*-setup.exe`, `*installer*.exe`)
+/// and excludes standalone portable binaries (`*portable*.exe`) so the update routine
+/// never accidentally launches a portable binary from `%TEMP%` instead of running the setup installer.
+pub fn select_installer_asset_url(assets: &[serde_json::Value]) -> Option<String> {
+    // Pass 1: Explicit setup/installer .exe (excluding portable)
+    for asset in assets {
+        if let Some(name) = asset["name"].as_str() {
+            let lower = name.to_lowercase();
+            if lower.ends_with(".exe")
+                && !lower.contains("portable")
+                && (lower.contains("setup") || lower.contains("installer"))
+            {
+                if let Some(url) = asset["browser_download_url"].as_str() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+
+    // Pass 2: Any non-portable .exe
+    for asset in assets {
+        if let Some(name) = asset["name"].as_str() {
+            let lower = name.to_lowercase();
+            if lower.ends_with(".exe") && !lower.contains("portable") {
+                if let Some(url) = asset["browser_download_url"].as_str() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+
+    // Pass 3: Last-resort fallback to any .exe
+    for asset in assets {
+        if let Some(name) = asset["name"].as_str() {
+            let lower = name.to_lowercase();
+            if lower.ends_with(".exe") {
+                if let Some(url) = asset["browser_download_url"].as_str() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
 #[tauri::command]
 async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateCheckResult, String> {
     let current_version = app.package_info().version.to_string();
 
     tauri::async_runtime::spawn_blocking(move || {
         let ps_cmd = r#"
+            $ProgressPreference = 'SilentlyContinue'
             $ErrorActionPreference = 'Stop'
             try {
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -872,18 +924,9 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateCheckResult, S
         let published_at = json["published_at"].as_str().map(|s| s.to_string());
         let html_url = json["html_url"].as_str().map(|s| s.to_string());
 
-        let mut download_url = None;
-        if let Some(assets) = json["assets"].as_array() {
-            for asset in assets {
-                if let Some(name) = asset["name"].as_str() {
-                    let lower = name.to_lowercase();
-                    if lower.ends_with(".exe") && (lower.contains("setup") || lower.contains("installer") || lower.contains("openboom")) {
-                        download_url = asset["browser_download_url"].as_str().map(|s| s.to_string());
-                        break;
-                    }
-                }
-            }
-        }
+        let mut download_url = json["assets"]
+            .as_array()
+            .and_then(|assets| select_installer_asset_url(assets));
 
         if download_url.is_none() {
             download_url = html_url.clone();
@@ -933,27 +976,77 @@ pub fn is_version_newer(latest: &str, current: &str) -> bool {
     current_pre && !latest_pre
 }
 
+struct DownloadInFlightGuard {
+    flag: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Drop for DownloadInFlightGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 #[tauri::command]
-async fn download_and_install_update(download_url: String) -> Result<(), String> {
-    if !download_url.starts_with("https://github.com/") && !download_url.starts_with("https://objects.githubusercontent.com/") {
+async fn download_and_install_update(
+    download_url: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if !download_url.starts_with("https://github.com/")
+        && !download_url.starts_with("https://objects.githubusercontent.com/")
+    {
         return Err("Update URL must originate from GitHub".to_string());
     }
     if !download_url.to_lowercase().ends_with(".exe") {
         return Err("Update package does not contain an executable installer".to_string());
     }
 
+    if state
+        .is_downloading_update
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_err()
+    {
+        return Err("An update download is already in progress".to_string());
+    }
+
+    let flag = state.is_downloading_update.clone();
+    let staged_slot = state.staged_update_installer.clone();
+
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = DownloadInFlightGuard { flag };
+
+        let dest_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe");
+        let part_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe.part");
+
         let mut cmd = std::process::Command::new("powershell");
         let ps_cmd = r#"
+            $ProgressPreference = 'SilentlyContinue'
             $ErrorActionPreference = 'Stop'
             $url = $env:OPENBOOM_UPDATE_URL
+            $dest = $env:OPENBOOM_UPDATE_DEST
+            $part = $env:OPENBOOM_UPDATE_PART
             try {
-                $pid_str = $PID.ToString()
-                $dest = Join-Path $env:TEMP ("OpenBoom_Setup_Update_" + $pid_str + ".exe")
-                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                Invoke-WebRequest -Uri $url -OutFile $dest -TimeoutSec 90
-                # Launch silent installer
-                Start-Process -FilePath $dest -ArgumentList "/S"
+                if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
+                $usedCurl = $false
+                $curlExe = Join-Path $env:SystemRoot "System32\curl.exe"
+                if (Test-Path $curlExe) {
+                    & $curlExe -fL -sS --retry 2 --connect-timeout 15 --max-time 90 -o $part $url
+                    if ($LASTEXITCODE -eq 0 -and (Test-Path $part) -and ((Get-Item $part).Length -gt 32768)) {
+                        $usedCurl = $true
+                    }
+                }
+                if (-not $usedCurl) {
+                    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                    Invoke-WebRequest -Uri $url -OutFile $part -UseBasicParsing -TimeoutSec 90
+                }
+                if (-not (Test-Path $part) -or ((Get-Item $part).Length -le 32768)) {
+                    throw "Downloaded update package is incomplete or empty."
+                }
+                Move-Item -Path $part -Destination $dest -Force
             } catch {
                 [Console]::Error.WriteLine($_.Exception.Message)
                 exit 1
@@ -961,6 +1054,8 @@ async fn download_and_install_update(download_url: String) -> Result<(), String>
         "#;
 
         cmd.env("OPENBOOM_UPDATE_URL", &download_url)
+            .env("OPENBOOM_UPDATE_DEST", &dest_path)
+            .env("OPENBOOM_UPDATE_PART", &part_path)
             .args(["-NoProfile", "-NonInteractive", "-Command", ps_cmd]);
 
         #[cfg(windows)]
@@ -969,11 +1064,17 @@ async fn download_and_install_update(download_url: String) -> Result<(), String>
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
-        let output = cmd.output().map_err(|e| format!("Failed to initiate update install: {}", e))?;
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to initiate update download: {}", e))?;
 
         if !output.status.success() {
             let err = String::from_utf8_lossy(&output.stderr);
             return Err(format!("Update download error: {}", err.trim()));
+        }
+
+        if let Ok(mut guard) = staged_slot.lock() {
+            *guard = Some(dest_path);
         }
 
         Ok(())
@@ -990,6 +1091,84 @@ fn restart_application(app: tauri::AppHandle, state: State<'_, AppState>) -> Res
         }
     }
     state.restore_physical_default_device();
+
+    // Check if an in-app update installer was staged for installation on restart
+    let staged_installer = state
+        .staged_update_installer
+        .lock()
+        .ok()
+        .and_then(|mut g| g.take())
+        .or_else(|| {
+            let default_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe");
+            if default_path.exists() {
+                Some(default_path)
+            } else {
+                None
+            }
+        });
+
+    if let Some(installer_path) = staged_installer {
+        if installer_path.exists() {
+            let current_pid = std::process::id().to_string();
+            let current_exe = std::env::current_exe()
+                .ok()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            let ps_apply = r#"
+                $ProgressPreference = 'SilentlyContinue'
+                $ErrorActionPreference = 'SilentlyContinue'
+                $oldPid = [int]$env:OPENBOOM_OLD_PID
+                $installer = $env:OPENBOOM_INSTALLER_PATH
+                $currentExe = $env:OPENBOOM_CURRENT_EXE
+
+                if ($oldPid -gt 0) {
+                    $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
+                    if ($proc) {
+                        $proc.WaitForExit(5000) | Out-Null
+                    }
+                }
+
+                Get-Process -Name "open-boom" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "OpenBoom_Setup_Update*" -and $_.Id -ne $PID } | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 300
+
+                $installedExe = Join-Path $env:LOCALAPPDATA "OpenBoom\open-boom.exe"
+                if (Test-Path $installer) {
+                    Start-Process -FilePath $installer -ArgumentList "/S", "/UPDATE" -Wait
+                    if ((Test-Path $installedExe) -and $currentExe -and ($currentExe -ne $installedExe) -and (-not $currentExe.StartsWith($env:TEMP, [System.StringComparison]::OrdinalIgnoreCase))) {
+                        Copy-Item -Path $installedExe -Destination $currentExe -Force -ErrorAction SilentlyContinue
+                    }
+                }
+
+                Remove-Item -Path (Join-Path $env:TEMP "OpenBoom_Setup_Update*.exe") -Force -ErrorAction SilentlyContinue
+
+                if (Test-Path $installedExe) {
+                    Start-Process -FilePath $installedExe
+                } elseif ($currentExe -and (Test-Path $currentExe)) {
+                    Start-Process -FilePath $currentExe
+                }
+            "#;
+
+            let mut cmd = std::process::Command::new("powershell");
+            cmd.env("OPENBOOM_OLD_PID", &current_pid)
+                .env("OPENBOOM_INSTALLER_PATH", &installer_path)
+                .env("OPENBOOM_CURRENT_EXE", &current_exe)
+                .args(["-NoProfile", "-NonInteractive", "-Command", ps_apply]);
+
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
+
+            if cmd.spawn().is_ok() {
+                app.exit(0);
+                return Ok(());
+            }
+        }
+    }
+
     app.restart();
 }
 
@@ -1807,6 +1986,44 @@ mod tests {
         assert!(!*state.is_routed_to_virtual.lock().unwrap());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_select_installer_asset_url_prioritizes_setup_over_portable() {
+        // Exact asset order returned by GitHub Releases API (where 'OpenBoom-v0.5.0-portable-x64.exe'
+        // sorts ASCII-wise before 'OpenBoom_0.5.0_x64-setup.exe')
+        let assets_json: serde_json::Value = serde_json::from_str(
+            r#"[
+                {
+                    "name": "OpenBoom-v0.5.0-portable-x64.exe",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.5.0/OpenBoom-v0.5.0-portable-x64.exe"
+                },
+                {
+                    "name": "OpenBoom_0.5.0_x64-setup.exe",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.5.0/OpenBoom_0.5.0_x64-setup.exe"
+                },
+                {
+                    "name": "SHA256SUMS.txt",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.5.0/SHA256SUMS.txt"
+                }
+            ]"#,
+        )
+        .expect("parse assets json");
+
+        let selected = select_installer_asset_url(assets_json.as_array().unwrap());
+        assert_eq!(
+            selected.as_deref(),
+            Some("https://github.com/JVGS1111/open-boom/releases/download/v0.5.0/OpenBoom_0.5.0_x64-setup.exe"),
+            "Must select the NSIS setup installer and never the portable binary when both exist"
+        );
+
+        // Verify DownloadInFlightGuard resets flag on drop
+        let flag = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        {
+            let _g = DownloadInFlightGuard { flag: flag.clone() };
+            assert!(flag.load(std::sync::atomic::Ordering::SeqCst));
+        }
+        assert!(!flag.load(std::sync::atomic::Ordering::SeqCst));
     }
 }
 

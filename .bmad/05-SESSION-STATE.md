@@ -307,15 +307,16 @@
     - **Comandos Tauri IPC, Inicialização Unificada e Restauração Limpa antes do Restart (`src-tauri/src/lib.rs`):** Construtor unificado `AppState::with_options(store, startup, auto_route)` (roteando o endpoint padrão do Windows antes de iniciar o `AudioStreamPump`), comandos `set_audio_bridge_mode` e `get_audio_bridge_mode`, sincronização de `audio_bridge_mode` em `save_app_config`, e chamada incondicional a `restore_physical_default_device()` e parada do `AudioStreamPump` em `restart_application` antes de `app.restart()`.
     - **UI e Internacionalização (`SettingsModal.tsx`, `App.tsx`, `i18n`):** Card dedicado nas configurações gerais com `<select>` acessível para os 3 modos, badge permanente do canal ativo (`Mode A` ou `Mode B`), alerta âmbar de eco no Modo B sem driver, guarda de early-return e rollback em caso de erro de IPC, reinicialização automática ao trocar o canal e paridade 100% em `pt-BR`, `en` e `es`.
     - **Verificação Completa de Testes & Smoke Test Local:** **214 testes Cargo passando (0 falhas)**, **106 testes UI passando (0 falhas)**, build Vite em 1.90s e smoke launch local de `open-boom.exe` verificado com sucesso (`PID=18752`, `Responding=True`).
+45. **Correção Definitiva do Auto-Update In-App: Seleção Estrita do Instalador NSIS, Download Acelerado via `curl.exe` e Substituição Atômica sem Janelas Duplicadas (T8.3 / ADR-042):**
+    - **Causa Raiz Identificada:** Na API do GitHub Releases, o artefato portátil `OpenBoom-v0.5.0-portable-x64.exe` (10.3 MB) precede alfabeticamente o instalador `OpenBoom_0.5.0_x64-setup.exe` (2.4 MB). O filtro anterior (`lower.contains("openboom")`) baixava o binário portátil para `%TEMP%` (de forma lenta por `Invoke-WebRequest` sem `$ProgressPreference = 'SilentlyContinue'`) e o executava com `/S` enquanto a v0.4.0 seguia aberta, abrindo janelas da v0.5.0 a partir de `%TEMP%` sem atualizar `%LOCALAPPDATA%\OpenBoom\open-boom.exe`.
+    - **Correção no Backend (`src-tauri/src/lib.rs`) e Frontend (`src-ui/src/App.tsx`):**
+      - `select_installer_asset_url` prioriza estritamente pacotes `.exe` contendo `"setup"` ou `"installer"` e exclui `"portable"`.
+      - `download_and_install_update` utiliza `curl.exe -fL` (com fallback PowerShell sob `$ProgressPreference = 'SilentlyContinue'`), guarda de concorrência `DownloadInFlightGuard` (`AtomicBool`) e staging atômico via `.part` -> `%TEMP%\OpenBoom_Setup_Update.exe` sem abrir processos enquanto o app está aberto.
+      - `restart_application` encerra o `AudioStreamPump`, restaura o endpoint físico do Windows, inicia um worker oculto (`CREATE_NO_WINDOW`) que aguarda o encerramento do PID antigo, finaliza processos remanescentes, executa `OpenBoom_Setup_Update.exe /S /UPDATE -Wait`, limpa `%TEMP%` e abre uma única instância do `%LOCALAPPDATA%\OpenBoom\open-boom.exe` atualizado.
+    - **Verificação Completa & Atualização Local:** **215 testes Cargo passando (0 falhas)**, **106 testes UI passando (0 falhas)**, binário instalado em `%LOCALAPPDATA%\OpenBoom\open-boom.exe` atualizado para a v0.5.0 corrigida e smoke test local verificado.
 
 ## O que está em andamento agora
-* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2) estão 100% implementados, revisados pelo fluxo `/bmad-build-auto` e testados.**
+* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3) estão 100% implementados, revisados e testados.**
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com 214 testes Cargo verdes e 106 testes UI verdes.
-
-
-
-
-
-
+* Nenhum bloqueio. Sistema com 215 testes Cargo verdes e 106 testes UI verdes.
