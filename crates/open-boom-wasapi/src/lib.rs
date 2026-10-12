@@ -14,6 +14,7 @@ pub mod resampler;
 pub mod session_manager;
 pub mod stream_pump;
 pub mod virtual_bridge;
+pub mod volume_sync;
 
 pub use coordinator::{AudioEngineCoordinator, DEFAULT_COMMAND_QUEUE_CAPACITY};
 pub use device::AudioDeviceManager;
@@ -25,3 +26,4 @@ pub use resampler::{Resampler, MAX_RESAMPLER_CHANNELS};
 pub use session_manager::{AppVolumeProfile, ProcessAudioSession, SessionManager};
 pub use stream_pump::{AudioStreamPump, StreamPumpConfig};
 pub use virtual_bridge::{BridgeMode, VirtualAudioBridge, VirtualBridgeConfig};
+pub use volume_sync::{EndpointVolumeSync, VolumeSyncEvent, OPEN_BOOM_VOLUME_CONTEXT_GUID};

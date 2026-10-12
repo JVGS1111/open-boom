@@ -473,12 +473,13 @@ export const App: React.FC = () => {
     fetchDevices();
   }, [activeDeviceId]);
 
-  // 3. Listen to tray context menu actions from Tauri backend (FR28)
+  // 3. Listen to tray context menu actions and Windows master volume sync from Tauri backend (FR28, FR-SYNC)
   useEffect(() => {
     let unlistenPower: (() => void) | undefined;
     let unlistenMute: (() => void) | undefined;
     let unlistenPreset: (() => void) | undefined;
     let unlistenLanguage: (() => void) | undefined;
+    let unlistenWindowsVolume: (() => void) | undefined;
 
     const setupListeners = async () => {
       try {
@@ -501,6 +502,18 @@ export const App: React.FC = () => {
         unlistenLanguage = await listen<string>("tray-language-changed", (event) => {
           setLanguage(event.payload as LanguageOption);
         });
+        unlistenWindowsVolume = await listen<{
+          volume: number;
+          is_muted?: boolean;
+          muted?: boolean;
+        }>("windows-volume-changed", (event) => {
+          const rawVol =
+            typeof event.payload.volume === "number" ? event.payload.volume : 0.8;
+          const clamped = Math.max(0, Math.min(1.5, rawVol));
+          setVolume(clamped);
+          const muteState = event.payload.is_muted ?? event.payload.muted ?? false;
+          setIsMuted(muteState);
+        });
       } catch {
         // Browser mode fallback
       }
@@ -513,6 +526,7 @@ export const App: React.FC = () => {
       if (unlistenMute) unlistenMute();
       if (unlistenPreset) unlistenPreset();
       if (unlistenLanguage) unlistenLanguage();
+      if (unlistenWindowsVolume) unlistenWindowsVolume();
     };
   }, []);
 

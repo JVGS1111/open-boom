@@ -55,6 +55,11 @@ const testFiles = [
     entry: path.join(__dirname, "SoundstageConfiguratorModal.test.tsx"),
     runnerName: "runSoundstageConfiguratorModalTests",
   },
+  {
+    name: "Titlebar & Windows Master Volume Sync Test Suite",
+    entry: path.join(__dirname, "TitlebarVolumeSync.test.tsx"),
+    runnerName: "runTitlebarVolumeSyncTests",
+  },
 ];
 
 async function main() {

@@ -140,7 +140,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             max="1.5"
             step="0.01"
             value={isMuted ? 0 : volume}
-            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!Number.isNaN(val)) {
+                onVolumeChange(val);
+              }
+            }}
             onDoubleClick={() => onVolumeChange(1.0)} // Snap to 100% (0.0 dB)
             title={t.titlebar.masterVolumeTooltip}
             aria-label={t.titlebar.masterVolume}

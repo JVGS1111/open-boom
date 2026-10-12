@@ -11,7 +11,9 @@ open-boom-core = { path = "../open-boom-core" }
 thiserror = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
+windows-core = "0.58.0"
 windows = { workspace = true, features = [
+    "implement",
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",

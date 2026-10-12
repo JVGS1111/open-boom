@@ -9,8 +9,8 @@ use open_boom_storage::{
     EqPreset, PresetStore, StartupManager,
 };
 use open_boom_wasapi::{
-    AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, LoopbackConfig, RenderConfig,
-    SessionManager, StreamPumpConfig,
+    AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, EndpointVolumeSync,
+    LoopbackConfig, RenderConfig, SessionManager, StreamPumpConfig,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -22,6 +22,13 @@ use tauri::{
 
 pub mod dispatcher;
 use dispatcher::{UiDispatcher, COMMAND_QUEUE_CAPACITY};
+
+/// Payload delivered across the Tauri IPC boundary on Windows volume change events.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WindowsVolumeChangedPayload {
+    pub volume: f32,
+    pub is_muted: bool,
+}
 
 pub struct AppState {
     pub dispatcher: UiDispatcher,
@@ -36,6 +43,7 @@ pub struct AppState {
     pub is_routed_to_virtual: Arc<Mutex<bool>>,
     pub auto_route: bool,
     pub session_manager: Arc<Mutex<SessionManager>>,
+    pub volume_sync: Arc<EndpointVolumeSync>,
 }
 
 impl Default for AppState {
@@ -111,6 +119,19 @@ impl AppState {
         }
         let session_manager = Arc::new(Mutex::new(session_mgr_instance));
 
+        let volume_sync = Arc::new(EndpointVolumeSync::with_synthetic_fallback(true));
+        let dispatcher_for_vol = dispatcher.clone();
+        volume_sync.add_on_volume_changed(move |event| {
+            let v = event.volume;
+            let linear_vol = if v <= 1.0 { v * v } else { 1.0 };
+            let boost = if v > 1.0 { v } else { 1.0 };
+            let _ = dispatcher_for_vol.send(AudioCommand::SetMasterVolume {
+                volume: linear_vol,
+                boost,
+            });
+            let _ = dispatcher_for_vol.send(AudioCommand::SetMute(event.is_muted));
+        });
+
         Self {
             dispatcher,
             command_queue,
@@ -124,6 +145,7 @@ impl AppState {
             is_routed_to_virtual,
             auto_route,
             session_manager,
+            volume_sync,
         }
     }
 
@@ -207,9 +229,34 @@ fn dispatch_command(cmd: AudioCommand, state: State<'_, AppState>) -> Result<(),
         AudioCommand::SetBypass(bypassed) => {
             let _ = state.handle_master_power_toggle(!*bypassed);
         }
+        AudioCommand::SetMasterVolume { volume, boost } => {
+            let slider_vol = if *boost > 1.0 { *boost } else { volume.max(0.0).sqrt() };
+            let _ = state.volume_sync.set_master_volume(slider_vol);
+        }
+        AudioCommand::SetMute(muted) => {
+            let _ = state.volume_sync.set_mute(*muted);
+        }
         _ => {}
     }
     state.dispatcher.send(cmd).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_master_volume(volume: f32, state: State<'_, AppState>) -> Result<(), String> {
+    let clamped = volume.clamp(0.0, 1.5);
+    let linear_vol = if clamped <= 1.0 { clamped * clamped } else { 1.0 };
+    let boost = if clamped > 1.0 { clamped } else { 1.0 };
+    let _ = state.volume_sync.set_master_volume(clamped);
+    state.dispatcher.send(AudioCommand::SetMasterVolume {
+        volume: linear_vol,
+        boost,
+    }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_mute(muted: bool, state: State<'_, AppState>) -> Result<(), String> {
+    let _ = state.volume_sync.set_mute(muted);
+    state.dispatcher.send(AudioCommand::SetMute(muted)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -271,6 +318,8 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
         }
     }
 
+    let _ = state.volume_sync.rebind_endpoint(device_id);
+
     Ok(())
 }
 
@@ -298,13 +347,16 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
         *pump_guard = AudioStreamPump::start(
             state.coordinator.clone(),
             StreamPumpConfig {
-                target_device_id: fallback_id,
+                target_device_id: fallback_id.clone(),
                 capture_device_id: virtual_id,
                 allow_synthetic: !state.auto_route,
                 buffer_guard_enabled: buffer_guard,
             },
         ).ok();
     }
+
+    let _ = state.volume_sync.rebind_endpoint(fallback_id);
+
     Ok(())
 }
 
@@ -614,6 +666,19 @@ pub fn run() {
                 }
             }
 
+            // Register Windows master endpoint volume change listener to emit Tauri events (FR-SYNC)
+            let app_handle_vol = app.handle().clone();
+            let state = app.state::<AppState>();
+            state.volume_sync.add_on_volume_changed(move |event| {
+                let _ = app_handle_vol.emit(
+                    "windows-volume-changed",
+                    WindowsVolumeChangedPayload {
+                        volume: event.volume,
+                        is_muted: event.is_muted,
+                    },
+                );
+            });
+
             // Load tray icon
             let icon = app
                 .default_window_icon()
@@ -694,6 +759,7 @@ pub fn run() {
                                 false
                             };
                             let next_mute = !current_mute;
+                            let _ = state.volume_sync.set_mute(next_mute);
                             let _ = state.dispatcher.send(AudioCommand::SetMute(next_mute));
                             let _ = app.emit("tray-mute-toggled", next_mute);
                         }
@@ -786,6 +852,8 @@ pub fn run() {
             reset_app_volume_profile,
             set_buffer_guard,
             set_orbit_8d,
+            set_master_volume,
+            set_mute,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -1234,6 +1302,83 @@ mod tests {
         assert_eq!(dir2, OrbitDirection::PingPong);
         assert_eq!(period2, 6.5);
         assert_eq!(depth2, 1.0);
+    }
+
+    #[test]
+    fn test_windows_volume_sync_to_dispatcher_and_queue() {
+        let state = AppState::new();
+
+        // 1. Simulate OS volume change (e.g. keyboard media key or Windows taskbar) to 45% (0.45)
+        let processed = state.volume_sync.simulate_os_volume_change(0.45, false, None);
+        assert!(processed, "OS volume change must be processed");
+
+        // Drain commands from command queue
+        let mut found_volume = false;
+        let mut found_mute = false;
+        for _ in 0..30 {
+            if let Some(cmd) = state.command_queue.pop() {
+                match cmd {
+                    AudioCommand::SetMasterVolume { volume, boost } => {
+                        let expected_linear = 0.45 * 0.45;
+                        assert!((volume - expected_linear).abs() < 1e-4, "Linear volume should be 0.45^2");
+                        assert_eq!(boost, 1.0, "Boost should be 1.0 for <= 100%");
+                        found_volume = true;
+                    }
+                    AudioCommand::SetMute(muted) => {
+                        assert!(!muted, "Mute should be false");
+                        found_mute = true;
+                    }
+                    _ => {}
+                }
+            }
+            if found_volume && found_mute {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        assert!(found_volume, "SPSC queue must receive SetMasterVolume from OS change");
+        assert!(found_mute, "SPSC queue must receive SetMute from OS change");
+
+        // 2. Simulate OS mute toggle
+        let processed_mute = state.volume_sync.simulate_os_volume_change(0.45, true, None);
+        assert!(processed_mute);
+
+        let mut found_mute_true = false;
+        for _ in 0..30 {
+            if let Some(cmd) = state.command_queue.pop() {
+                if let AudioCommand::SetMute(muted) = cmd {
+                    if muted {
+                        found_mute_true = true;
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(found_mute_true, "SPSC queue must receive SetMute(true) from OS mute toggle");
+    }
+
+    #[test]
+    fn test_dispatch_command_syncs_to_windows_endpoint() {
+        let state = AppState::new();
+
+        // 1. Set volume 80% (linear 0.64, boost 1.0)
+        let _ = state.volume_sync.set_master_volume(0.80);
+        let vol = state.volume_sync.get_master_volume().unwrap();
+        assert!((vol - 0.80).abs() < 1e-4);
+
+        // 2. Set boost 135% (boost 1.35) -> Windows master volume clamped to 1.0 (100%)
+        let _ = state.volume_sync.set_master_volume(1.35);
+        let vol_boost = state.volume_sync.get_master_volume().unwrap();
+        assert!((vol_boost - 1.0).abs() < 1e-4, "Boost > 100% must clamp Windows endpoint to 1.0");
+
+        // 3. Set mute
+        let _ = state.volume_sync.set_mute(true);
+        assert!(state.volume_sync.is_muted().unwrap());
+
+        let _ = state.volume_sync.set_mute(false);
+        assert!(!state.volume_sync.is_muted().unwrap());
     }
 }
 
