@@ -9,5 +9,8 @@ pub mod startup;
 pub use autoeq_db::{
     AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats, ParametricFilterConfig,
 };
-pub use preset_store::{AppConfig, AppVolumeProfile, CoreOrbitDirection as OrbitDirection, EqPreset, PresetStore};
+pub use preset_store::{
+    sanitize_audio_bridge_mode, AppConfig, AppVolumeProfile, CoreOrbitDirection as OrbitDirection,
+    EqPreset, PresetStore,
+};
 pub use startup::{StartupManager, DEFAULT_APP_NAME, RUN_KEY_SUBKEY};

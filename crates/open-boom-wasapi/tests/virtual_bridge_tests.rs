@@ -191,3 +191,38 @@ fn test_coordinator_runtime_device_lost_fallback() {
         "Coordinator fallback recovery must execute in < 500ms"
     );
 }
+
+#[test]
+fn test_dynamic_set_force_mode_switching() {
+    let mut coordinator = AudioEngineCoordinator::new(
+        LoopbackConfig::default(),
+        RenderConfig {
+            force_synthetic: true,
+            ..Default::default()
+        },
+    );
+
+    // Force Mode A (Virtual Sink)
+    let mode_a = coordinator
+        .set_bridge_force_mode(Some(BridgeMode::VirtualSinkModeA))
+        .expect("force Mode A");
+    assert_eq!(mode_a, BridgeMode::VirtualSinkModeA);
+    assert!(coordinator.is_using_virtual_bridge());
+    assert!(coordinator.telemetry_snapshot().using_virtual_bridge);
+
+    // Force Mode B (Loopback Fallback without driver)
+    let mode_b = coordinator
+        .set_bridge_force_mode(Some(BridgeMode::LoopbackFallbackModeB))
+        .expect("force Mode B");
+    assert_eq!(mode_b, BridgeMode::LoopbackFallbackModeB);
+    assert!(!coordinator.is_using_virtual_bridge());
+    assert!(!coordinator.telemetry_snapshot().using_virtual_bridge);
+
+    // Return to Auto (None)
+    let mode_auto = coordinator
+        .set_bridge_force_mode(None)
+        .expect("restore Auto mode");
+    assert_eq!(mode_auto, BridgeMode::LoopbackFallbackModeB);
+    assert_eq!(coordinator.bridge().force_mode(), None);
+}
+

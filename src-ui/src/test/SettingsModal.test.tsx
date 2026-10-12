@@ -113,5 +113,46 @@ export function runSettingsModalTests(): TestResult[] {
     );
   });
 
+  test("Audio Capture Bridge Mode selector renders options and active virtual channel status", () => {
+    const html = renderToStaticMarkup(
+      <SettingsModal
+        isOpen={true}
+        onClose={() => {}}
+        launchOnStartup={false}
+        onToggleStartup={() => {}}
+        audioBridgeMode="virtual"
+        usingVirtualBridge={true}
+      />
+    );
+    assert(
+      html.includes("value=\"auto\"") &&
+        html.includes("value=\"virtual\"") &&
+        html.includes("value=\"loopback\""),
+      "Should render all three audio bridge mode select options (auto, virtual, loopback)"
+    );
+    assert(
+      html.includes("Mode A") || html.includes("Modo A"),
+      "Should display active Mode A virtual sink status"
+    );
+  });
+
+  test("Audio Capture Bridge Mode selector displays amber warning banner when loopback is selected", () => {
+    const html = renderToStaticMarkup(
+      <SettingsModal
+        isOpen={true}
+        onClose={() => {}}
+        launchOnStartup={false}
+        onToggleStartup={() => {}}
+        audioBridgeMode="loopback"
+        usingVirtualBridge={false}
+      />
+    );
+    assert(
+      html.includes("Mode B (Driverless Loopback)") ||
+        html.includes("Modo B (Emulação Loopback Sem Driver)"),
+      "Should display Mode B driverless loopback warning banner when loopback mode is selected"
+    );
+  });
+
   return results;
 }

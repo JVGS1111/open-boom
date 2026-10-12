@@ -300,12 +300,19 @@
     - **Integração no Backend Tauri (`src-tauri/src/lib.rs`):** `AppState::dispatch_audio_command` centraliza a atualização de `AudioCommand::SetMasterVolume` e `AudioCommand::SetMute`, sincronizando a fila SPSC de áudio e o volume escalar do Windows (`v.clamp(0.0, 1.0)`), emitindo eventos `windows-volume-changed` para o frontend quando o volume/mute do Windows é alterado externamente (barra de tarefas ou teclas de mídia do teclado), e executando `rebind_endpoint` em `handle_master_power_toggle`, `set_audio_device` e `trigger_device_fallback`.
     - **Sincronização Reativa na UI (`src-ui/src/App.tsx` e `src-ui/src/components/Titlebar.tsx`):** Listener para `windows-volume-changed` atualizando `masterVolume` e `isMuted` sem re-invocar `set_master_volume` (prevenindo loops IPC), e desbloqueio automático de mudo (`onToggleMute`) ao arrastar o slider de volume para $> 0$ enquanto mutado.
     - **Verificação Completa de Testes:** 9 testes em `crates/open-boom-wasapi/tests/volume_sync_tests.rs`, testes de despacho em `src-tauri/src/lib.rs` e suíte `src-ui/src/test/TitlebarVolumeSync.test.tsx`. Total global: **212 testes Cargo passando (0 falhas)**, **104 testes UI passando (0 falhas)** e build de produção Vite concluído em 1.90s.
+44. **Implementação do Seletor de Canal de Captura de Áudio (Driver Boom Audio vs. Emulação Loopback) com Reinicialização Automática (T8.2 / ADR-040):**
+    - **Persistência Atômica (`crates/open-boom-storage/src/preset_store.rs`):** Adicionado `audio_bridge_mode: String` (`"auto"`, `"virtual"`, `"loopback"`) em `AppConfig` com sanitizador `sanitize_audio_bridge_mode`.
+    - **Controle Dinâmico de Bridge e StreamPump (`crates/open-boom-wasapi`):** Adicionados `VirtualAudioBridge::set_force_mode`, `AudioEngineCoordinator::set_bridge_force_mode` e `StreamPumpConfig::force_loopback` para permitir ignorar drivers virtuais (`Boom Audio`) e forçar captura WASAPI Loopback direto no dispositivo físico (Modo B) ou forçar Virtual Sink (Modo A).
+    - **Comandos Tauri IPC e Restauração Limpa antes do Restart (`src-tauri/src/lib.rs`):** Comandos `set_audio_bridge_mode` e `get_audio_bridge_mode`, restaurando o endpoint físico do Windows antes do restart quando em modo `"loopback"` e encerrando o `AudioStreamPump` em `restart_application` antes de `app.restart()`.
+    - **UI e Internacionalização (`SettingsModal.tsx`, `App.tsx`, `i18n`):** Card dedicado nas configurações gerais com `<select>` acessível para os 3 modos, badge do canal ativo, alerta âmbar de eco no Modo B sem driver, reinicialização automática ao trocar o canal e paridade 100% em `pt-BR`, `en` e `es`.
+    - **Verificação Completa de Testes:** **214 testes Cargo passando (0 falhas)** e **106 testes UI passando (0 falhas)**.
 
 ## O que está em andamento agora
-* **Sincronização Bidirecional de Volume com o Windows (Spec 7.1) & Auto-Update In-App (Spec 8.1) Concluídos:** Todos os épicos planejados (Epics 1 a 8) estão 100% implementados, revisados e testados.
+* **Todos os épicos planejados (Epics 1 a 8 + T8.2) estão 100% implementados, revisados e testados.**
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema com 212 testes Cargo verdes e 104 testes UI verdes.
+* Nenhum bloqueio. Sistema com 214 testes Cargo verdes e 106 testes UI verdes.
+
 
 
 

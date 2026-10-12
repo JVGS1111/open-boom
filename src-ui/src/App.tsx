@@ -9,7 +9,7 @@ import { EffectsRackStrip, EffectModule } from "./components/EffectsRackStrip";
 import { StatusBar } from "./components/StatusBar";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { AudioDeviceInfo } from "./components/DeviceSelector";
-import { SettingsModal, UpdateInfo, SettingsTab } from "./components/SettingsModal";
+import { SettingsModal, UpdateInfo, SettingsTab, AudioBridgeMode } from "./components/SettingsModal";
 import {
   SoundstageConfiguratorModal,
   OrbitDirection,
@@ -168,6 +168,7 @@ export const App: React.FC = () => {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("general");
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const [bufferGuardEnabled, setBufferGuardEnabled] = useState(true);
+  const [audioBridgeMode, setAudioBridgeMode] = useState<AudioBridgeMode>("auto");
   const [checkUpdatesOnStartup, setCheckUpdatesOnStartup] = useState(true);
   const [autoInstallUpdates, setAutoInstallUpdates] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -250,6 +251,7 @@ export const App: React.FC = () => {
           language?: string;
           check_updates_on_startup?: boolean;
           auto_install_updates?: boolean;
+          audio_bridge_mode?: string;
         }>("load_app_config");
 
         if (config) {
@@ -453,6 +455,14 @@ export const App: React.FC = () => {
           if (typeof config.auto_install_updates === "boolean") {
             setAutoInstallUpdates(config.auto_install_updates);
           }
+
+          if (
+            config.audio_bridge_mode === "virtual" ||
+            config.audio_bridge_mode === "loopback" ||
+            config.audio_bridge_mode === "auto"
+          ) {
+            setAudioBridgeMode(config.audio_bridge_mode);
+          }
         }
       } catch {
         // Browser mode fallback
@@ -609,6 +619,7 @@ export const App: React.FC = () => {
         language: language,
         check_updates_on_startup: checkUpdatesOnStartup,
         auto_install_updates: autoInstallUpdates,
+        audio_bridge_mode: audioBridgeMode,
       };
 
       try {
@@ -637,6 +648,7 @@ export const App: React.FC = () => {
     bypassActive,
     launchOnStartup,
     bufferGuardEnabled,
+    audioBridgeMode,
     orbitEnabled,
     orbitDirection,
     orbitPeriodSec,
@@ -953,6 +965,29 @@ export const App: React.FC = () => {
     } catch (err) {
       console.error("Failed to set buffer guard status:", err);
     }
+  };
+
+  const handleAudioBridgeModeChange = async (mode: AudioBridgeMode) => {
+    const sanitized: AudioBridgeMode =
+      mode === "virtual" || mode === "loopback" ? mode : "auto";
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    setAudioBridgeMode(sanitized);
+    if (sanitized === "loopback") {
+      setUsingVirtualBridge(false);
+    } else if (sanitized === "virtual") {
+      setUsingVirtualBridge(true);
+    }
+
+    try {
+      await invoke("set_audio_bridge_mode", { mode: sanitized });
+    } catch (err) {
+      console.error("Failed to set audio bridge mode:", err);
+    }
+
+    await handleRestartApplication();
   };
 
   // Virtual Soundstage Speaker Handlers (Story 2.3 & 2.4, FR7)
@@ -1408,6 +1443,9 @@ export const App: React.FC = () => {
         onToggleStartup={handleToggleStartup}
         bufferGuardEnabled={bufferGuardEnabled}
         onToggleBufferGuard={handleToggleBufferGuard}
+        audioBridgeMode={audioBridgeMode}
+        usingVirtualBridge={usingVirtualBridge}
+        onChangeAudioBridgeMode={handleAudioBridgeModeChange}
         initialTab={settingsInitialTab}
         checkUpdatesOnStartup={checkUpdatesOnStartup}
         onToggleCheckUpdatesOnStartup={() => setCheckUpdatesOnStartup((prev) => !prev)}

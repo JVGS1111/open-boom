@@ -62,6 +62,8 @@
 
 ### Sprint 8: Experiência de Distribuição & Auto-Update In-App
 - [X] **T8.1**: Mecanismo de Auto-Update In-App a Custo Zero via GitHub Releases (Verificação automática na abertura do app, badge âmbar pulsante na Titlebar levando direto para `Configurações -> Atualizações`, painel completo com notas de versão, switches de checagem ao iniciar e instalação automática, e botão de `Reiniciar Aplicação` no mesmo slot de ação - Spec 8.1, ADR-038).
+- [X] **T8.2**: Seletor Manual de Modo de Captura de Áudio (`audio_bridge_mode`: `auto` | `virtual` | `loopback`) em `SettingsModal.tsx` com Persistência Atômica e Reinicialização Automática do App (Permite alternar e testar ao vivo entre o driver virtual `Boom Audio` Modo A e a emulação sem driver WASAPI Loopback Modo B, restaurando o endpoint físico do Windows antes do restart - ADR-040).
+
 
 
 

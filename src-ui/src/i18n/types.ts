@@ -191,5 +191,16 @@ export interface TranslationDictionary {
     releaseNotesTitle: string;
     currentVersionLabel: string;
     latestVersionLabel: string;
+    bridgeModeTitle: string;
+    bridgeModeDesc: string;
+    bridgeModeSelectAria: string;
+    bridgeModeOptionAuto: string;
+    bridgeModeOptionVirtual: string;
+    bridgeModeOptionLoopback: string;
+    bridgeModeActiveVirtual: string;
+    bridgeModeActiveLoopback: string;
+    bridgeModeLoopbackWarningTitle: string;
+    bridgeModeLoopbackWarningDesc: string;
+    bridgeModeRestartNotice: string;
   };
 }

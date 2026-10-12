@@ -5,11 +5,11 @@ use open_boom_core::types::{
     AudioCommand, AudioDeviceInfo, OrbitDirection, ProcessAudioSession, TelemetrySnapshot, GRAPHIC_EQ_BANDS,
 };
 use open_boom_storage::{
-    AppConfig, AppVolumeProfile, AutoEqDatabase, AutoEqProfile, AutoEqProfileSummary, AutoEqStats,
-    EqPreset, PresetStore, StartupManager,
+    sanitize_audio_bridge_mode, AppConfig, AppVolumeProfile, AutoEqDatabase, AutoEqProfile,
+    AutoEqProfileSummary, AutoEqStats, EqPreset, PresetStore, StartupManager,
 };
 use open_boom_wasapi::{
-    AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, EndpointVolumeSync,
+    AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, BridgeMode, EndpointVolumeSync,
     LoopbackConfig, RenderConfig, SessionManager, StreamPumpConfig,
 };
 use std::sync::{Arc, Mutex};
@@ -22,6 +22,16 @@ use tauri::{
 
 pub mod dispatcher;
 use dispatcher::{UiDispatcher, COMMAND_QUEUE_CAPACITY};
+
+/// Maps a persisted audio bridge mode identifier (`"auto"`, `"virtual"`, `"loopback"`)
+/// to an optional forced `BridgeMode`.
+pub fn parse_bridge_force_mode(mode: &str) -> Option<BridgeMode> {
+    match mode.trim().to_lowercase().as_str() {
+        "virtual" => Some(BridgeMode::VirtualSinkModeA),
+        "loopback" => Some(BridgeMode::LoopbackFallbackModeB),
+        _ => None,
+    }
+}
 
 /// Payload delivered across the Tauri IPC boundary on Windows volume change events.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -41,6 +51,7 @@ pub struct AppState {
     pub active_physical_device_id: Arc<Mutex<Option<String>>>,
     pub virtual_device_id: Arc<Mutex<Option<String>>>,
     pub is_routed_to_virtual: Arc<Mutex<bool>>,
+    pub audio_bridge_mode: Arc<Mutex<String>>,
     pub auto_route: bool,
     pub session_manager: Arc<Mutex<SessionManager>>,
     pub volume_sync: Arc<EndpointVolumeSync>,
@@ -76,10 +87,17 @@ impl AppState {
         let store = PresetStore::default();
         let app_config = store.load_config().unwrap_or_default();
         let buffer_guard = app_config.buffer_guard_enabled;
+        let bridge_mode = if auto_route {
+            sanitize_audio_bridge_mode(&app_config.audio_bridge_mode)
+        } else {
+            "auto".to_string()
+        };
+        let force_loopback = bridge_mode == "loopback";
         let startup = StartupManager::new();
 
         if let Ok(mut coord) = coordinator.lock() {
             coord.set_buffer_guard(buffer_guard);
+            let _ = coord.set_bridge_force_mode(parse_bridge_force_mode(&bridge_mode));
         }
 
         let device_mgr = AudioDeviceManager::new();
@@ -92,18 +110,25 @@ impl AppState {
             coordinator.clone(),
             StreamPumpConfig {
                 target_device_id: physical_id.clone(),
-                capture_device_id: virtual_id.clone(),
+                capture_device_id: if force_loopback { None } else { virtual_id.clone() },
                 allow_synthetic: !auto_route,
                 buffer_guard_enabled: buffer_guard,
+                force_loopback,
             },
         ).ok();
         let pump = Arc::new(Mutex::new(pump_instance));
 
         let is_routed_to_virtual = Arc::new(Mutex::new(false));
 
-        // If auto_route requested, virtual device present and master power is ON (default true), route to virtual sink
+        // If auto_route requested:
+        // - In "auto" or "virtual" mode: route Windows default endpoint to virtual sink (if present)
+        // - In "loopback" mode: ensure Windows default endpoint is routed directly to physical device
         if auto_route {
-            if let Some(ref v_id) = virtual_id {
+            if force_loopback {
+                if let Some(ref p_id) = physical_id {
+                    let _ = device_mgr.set_default_device(p_id);
+                }
+            } else if let Some(ref v_id) = virtual_id {
                 if device_mgr.set_default_device(v_id).is_ok() {
                     if let Ok(mut routed) = is_routed_to_virtual.lock() {
                         *routed = true;
@@ -143,6 +168,7 @@ impl AppState {
             active_physical_device_id: Arc::new(Mutex::new(physical_id)),
             virtual_device_id: Arc::new(Mutex::new(virtual_id)),
             is_routed_to_virtual,
+            audio_bridge_mode: Arc::new(Mutex::new(bridge_mode)),
             auto_route,
             session_manager,
             volume_sync,
@@ -156,6 +182,14 @@ impl AppState {
         state
     }
 
+    pub fn is_loopback_forced(&self) -> bool {
+        self.audio_bridge_mode
+            .lock()
+            .ok()
+            .map(|m| m.as_str() == "loopback")
+            .unwrap_or(false)
+    }
+
     pub fn handle_master_power_toggle(&self, power: bool) -> Result<(), String> {
         let coord = self.coordinator.lock().map_err(|e| e.to_string())?;
         let device_mgr = coord.device_manager().clone();
@@ -163,8 +197,9 @@ impl AppState {
 
         let physical_id = self.active_physical_device_id.lock().ok().and_then(|g| g.clone());
         let virtual_id = self.virtual_device_id.lock().ok().and_then(|g| g.clone());
+        let force_loopback = self.is_loopback_forced();
 
-        if power {
+        if power && !force_loopback {
             if let Some(ref v_id) = virtual_id {
                 let _ = device_mgr.set_default_device(v_id);
                 if let Ok(mut routed) = self.is_routed_to_virtual.lock() {
@@ -181,6 +216,70 @@ impl AppState {
         }
         let _ = self.volume_sync.rebind_endpoint(None);
         Ok(())
+    }
+
+    pub fn apply_audio_bridge_mode(&self, mode: &str) -> Result<String, String> {
+        let sanitized = sanitize_audio_bridge_mode(mode);
+        let force_mode = parse_bridge_force_mode(&sanitized);
+        let force_loopback = sanitized == "loopback";
+
+        if let Ok(mut guard) = self.audio_bridge_mode.lock() {
+            *guard = sanitized.clone();
+        }
+
+        let (device_mgr, power) = {
+            let mut coord = self.coordinator.lock().map_err(|e| e.to_string())?;
+            let _ = coord.set_bridge_force_mode(force_mode);
+            (coord.device_manager().clone(), coord.processor().master_power())
+        };
+
+        // Persist in AppConfig atomically
+        let mut config = self.store.load_config().unwrap_or_default();
+        config.audio_bridge_mode = sanitized.clone();
+        let buffer_guard = config.buffer_guard_enabled;
+        let _ = self.store.save_config(&config);
+
+        let physical_id = self.active_physical_device_id.lock().ok().and_then(|g| g.clone());
+        let virtual_id = self.virtual_device_id.lock().ok().and_then(|g| g.clone());
+
+        // Adjust Windows endpoint routing before restarting stream pump
+        if self.auto_route {
+            if force_loopback || !power {
+                if let Some(ref p_id) = physical_id {
+                    let _ = device_mgr.set_default_device(p_id);
+                    if let Ok(mut routed) = self.is_routed_to_virtual.lock() {
+                        *routed = false;
+                    }
+                }
+            } else if let Some(ref v_id) = virtual_id {
+                if device_mgr.set_default_device(v_id).is_ok() {
+                    if let Ok(mut routed) = self.is_routed_to_virtual.lock() {
+                        *routed = true;
+                    }
+                }
+            }
+        }
+
+        // Hot-restart pump with updated bridge configuration
+        if let Ok(mut pump_guard) = self.pump.lock() {
+            if let Some(mut existing) = pump_guard.take() {
+                existing.stop();
+            }
+            *pump_guard = AudioStreamPump::start(
+                self.coordinator.clone(),
+                StreamPumpConfig {
+                    target_device_id: physical_id,
+                    capture_device_id: if force_loopback { None } else { virtual_id },
+                    allow_synthetic: !self.auto_route,
+                    buffer_guard_enabled: buffer_guard,
+                    force_loopback,
+                },
+            ).ok();
+        }
+
+        let _ = self.volume_sync.rebind_endpoint(None);
+
+        Ok(sanitized)
     }
 
     pub fn dispatch_audio_command(&self, cmd: AudioCommand) -> Result<(), String> {
@@ -299,7 +398,7 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
     }
 
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
-
+    let force_loopback = state.is_loopback_forced();
     let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
 
     if let Ok(mut pump_guard) = state.pump.lock() {
@@ -310,16 +409,17 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
             state.coordinator.clone(),
             StreamPumpConfig {
                 target_device_id: device_id.clone(),
-                capture_device_id: virtual_id,
+                capture_device_id: if force_loopback { None } else { virtual_id },
                 allow_synthetic: !state.auto_route,
                 buffer_guard_enabled: buffer_guard,
+                force_loopback,
             },
         ).ok();
     }
 
-    // If master power is currently OFF, route Windows default directly to the new physical device
+    // If master power is currently OFF or in loopback mode, route Windows default directly to the physical device
     let power = state.coordinator.lock().map(|c| c.processor().master_power()).unwrap_or(true);
-    if !power {
+    if !power || force_loopback {
         if let Some(ref id) = device_id {
             let _ = device_mgr.set_default_device(id);
         }
@@ -345,6 +445,7 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
+    let force_loopback = state.is_loopback_forced();
     let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
 
     if let Ok(mut pump_guard) = state.pump.lock() {
@@ -355,9 +456,10 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
             state.coordinator.clone(),
             StreamPumpConfig {
                 target_device_id: fallback_id.clone(),
-                capture_device_id: virtual_id,
+                capture_device_id: if force_loopback { None } else { virtual_id },
                 allow_synthetic: !state.auto_route,
                 buffer_guard_enabled: buffer_guard,
+                force_loopback,
             },
         ).ok();
     }
@@ -385,6 +487,7 @@ fn set_buffer_guard(enabled: bool, state: State<'_, AppState>) -> Result<(), Str
     // 4. Hot-restart pump with new buffer size
     let physical_id = state.active_physical_device_id.lock().ok().and_then(|g| g.clone());
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
+    let force_loopback = state.is_loopback_forced();
 
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
@@ -394,14 +497,30 @@ fn set_buffer_guard(enabled: bool, state: State<'_, AppState>) -> Result<(), Str
             state.coordinator.clone(),
             StreamPumpConfig {
                 target_device_id: physical_id,
-                capture_device_id: virtual_id,
+                capture_device_id: if force_loopback { None } else { virtual_id },
                 allow_synthetic: !state.auto_route,
                 buffer_guard_enabled: enabled,
+                force_loopback,
             },
         ).ok();
     }
 
     Ok(())
+}
+
+#[tauri::command]
+fn set_audio_bridge_mode(mode: String, state: State<'_, AppState>) -> Result<String, String> {
+    state.apply_audio_bridge_mode(&mode)
+}
+
+#[tauri::command]
+fn get_audio_bridge_mode(state: State<'_, AppState>) -> String {
+    state
+        .audio_bridge_mode
+        .lock()
+        .ok()
+        .map(|m| m.clone())
+        .unwrap_or_else(|| "auto".to_string())
 }
 
 fn resolve_orbit_params(
@@ -834,7 +953,15 @@ async fn download_and_install_update(download_url: String) -> Result<(), String>
 }
 
 #[tauri::command]
-fn restart_application(app: tauri::AppHandle) -> Result<(), String> {
+fn restart_application(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if let Ok(mut pump_guard) = state.pump.lock() {
+        if let Some(mut existing) = pump_guard.take() {
+            existing.stop();
+        }
+    }
+    if state.is_loopback_forced() {
+        state.restore_physical_default_device();
+    }
     app.restart();
 }
 
@@ -1038,6 +1165,8 @@ pub fn run() {
             get_app_volume_profiles,
             reset_app_volume_profile,
             set_buffer_guard,
+            set_audio_bridge_mode,
+            get_audio_bridge_mode,
             set_orbit_8d,
             set_master_volume,
             set_mute,
@@ -1590,6 +1719,40 @@ mod tests {
         assert!(!is_version_newer("0.2.9", "0.3.0"));
         assert!(is_version_newer("0.3.0", "0.3.0-beta.1"));
         assert!(!is_version_newer("0.3.0-beta.1", "0.3.0"));
+    }
+
+    #[test]
+    fn test_apply_audio_bridge_mode() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "open_boom_bridge_mode_test_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let store = PresetStore::new(&temp_dir);
+        let startup = StartupManager::mock();
+        let state = AppState::with_store_and_startup(store.clone(), startup);
+
+        // 1. Switch to "virtual" (Mode A)
+        let applied_v = state.apply_audio_bridge_mode("virtual").expect("apply virtual mode");
+        assert_eq!(applied_v, "virtual");
+        assert!(!state.is_loopback_forced());
+        assert!(state.get_telemetry_snapshot().using_virtual_bridge);
+        assert_eq!(store.load_config().unwrap().audio_bridge_mode, "virtual");
+
+        // 2. Switch to "loopback" (Mode B without driver)
+        let applied_l = state.apply_audio_bridge_mode("loopback").expect("apply loopback mode");
+        assert_eq!(applied_l, "loopback");
+        assert!(state.is_loopback_forced());
+        assert!(!state.get_telemetry_snapshot().using_virtual_bridge);
+        assert_eq!(store.load_config().unwrap().audio_bridge_mode, "loopback");
+
+        // 3. Invalid mode sanitizes back to "auto"
+        let applied_a = state.apply_audio_bridge_mode("invalid_mode").expect("sanitize to auto");
+        assert_eq!(applied_a, "auto");
+        assert!(!state.is_loopback_forced());
+        assert_eq!(store.load_config().unwrap().audio_bridge_mode, "auto");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

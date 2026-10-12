@@ -22,6 +22,9 @@ pub struct StreamPumpConfig {
     pub allow_synthetic: bool,
     /// Whether WASAPI buffer guard (25ms safe buffer + anti-glitch margin) is enabled.
     pub buffer_guard_enabled: bool,
+    /// Whether to force driverless WASAPI loopback capture on the physical device (Mode B),
+    /// ignoring any installed virtual audio devices (e.g. Boom Audio).
+    pub force_loopback: bool,
 }
 
 impl Default for StreamPumpConfig {
@@ -31,6 +34,7 @@ impl Default for StreamPumpConfig {
             capture_device_id: None,
             allow_synthetic: false,
             buffer_guard_enabled: true,
+            force_loopback: false,
         }
     }
 }
@@ -117,7 +121,7 @@ impl AudioStreamPump {
             CoTaskMemFree, STGM_READ,
         };
         use windows::Win32::Media::Audio::{
-            eConsole, eRender, DEVICE_STATE_ACTIVE, IAudioCaptureClient, IAudioClient,
+            eRender, DEVICE_STATE_ACTIVE, IAudioCaptureClient, IAudioClient,
             IAudioRenderClient, IMMDevice, IMMDeviceEnumerator,
             MMDeviceEnumerator, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
             AUDCLNT_BUFFERFLAGS_SILENT, WAVEFORMATEX,
@@ -199,25 +203,27 @@ impl AudioStreamPump {
             let render_buffer_size = render_client.GetBufferSize().unwrap_or(480);
             let _ = render_client.Start();
 
-            // 2. Resolve Capture Endpoint (Prioritize Virtual Audio Sink, e.g. Boom Audio)
+            // 2. Resolve Capture Endpoint (Prioritize Virtual Audio Sink unless force_loopback is set)
             let mut capture_device_opt: Option<IMMDevice> = None;
-            if let Some(ref cap_id) = config.capture_device_id {
-                let h_id = HSTRING::from(cap_id.as_str());
-                capture_device_opt = enumerator.GetDevice(&h_id).ok();
-            }
+            if !config.force_loopback {
+                if let Some(ref cap_id) = config.capture_device_id {
+                    let h_id = HSTRING::from(cap_id.as_str());
+                    capture_device_opt = enumerator.GetDevice(&h_id).ok();
+                }
 
-            if capture_device_opt.is_none() {
-                // Auto-detect virtual device
-                if let Ok(collection) = enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) {
-                    if let Ok(count) = collection.GetCount() {
-                        for i in 0..count {
-                            if let Ok(dev) = collection.Item(i) {
-                                if let Ok(props) = dev.OpenPropertyStore(STGM_READ) {
-                                    if let Ok(name_var) = props.GetValue(&PKEY_Device_FriendlyName) {
-                                        let name = name_var.to_string();
-                                        if crate::device::AudioDeviceManager::is_virtual_device_name(&name) {
-                                            capture_device_opt = Some(dev);
-                                            break;
+                if capture_device_opt.is_none() {
+                    // Auto-detect virtual device
+                    if let Ok(collection) = enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) {
+                        if let Ok(count) = collection.GetCount() {
+                            for i in 0..count {
+                                if let Ok(dev) = collection.Item(i) {
+                                    if let Ok(props) = dev.OpenPropertyStore(STGM_READ) {
+                                        if let Ok(name_var) = props.GetValue(&PKEY_Device_FriendlyName) {
+                                            let name = name_var.to_string();
+                                            if crate::device::AudioDeviceManager::is_virtual_device_name(&name) {
+                                                capture_device_opt = Some(dev);
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -227,10 +233,8 @@ impl AudioStreamPump {
                 }
             }
 
-            // If no virtual device found, capture from the default render device (loopback)
-            let capture_device = capture_device_opt.unwrap_or_else(|| {
-                enumerator.GetDefaultAudioEndpoint(eRender, eConsole).unwrap_or(render_device.clone())
-            });
+            // If no virtual device found or force_loopback is active, capture directly from the physical render device (loopback)
+            let capture_device = capture_device_opt.unwrap_or_else(|| render_device.clone());
 
             let capture_client: IAudioClient = match capture_device.Activate(CLSCTX_ALL, None) {
                 Ok(c) => c,

@@ -74,8 +74,16 @@ impl VirtualAudioBridge {
 
         if let Some(forced) = self.config.force_mode {
             self.active_mode = forced;
-            if forced == BridgeMode::VirtualSinkModeA && self.virtual_device.is_none() {
-                self.virtual_device = Some(AudioDeviceManager::synthetic_virtual_device());
+            if forced == BridgeMode::VirtualSinkModeA {
+                if self.virtual_device.is_none() {
+                    if let Ok(Some(real_dev)) = device_manager.find_virtual_device() {
+                        self.virtual_device = Some(real_dev);
+                    } else {
+                        self.virtual_device = Some(AudioDeviceManager::synthetic_virtual_device());
+                    }
+                }
+            } else {
+                self.virtual_device = None;
             }
             self.last_switch_time = Some(start_time);
             return Ok(forced);
@@ -117,6 +125,25 @@ impl VirtualAudioBridge {
                 }
             }
         }
+    }
+
+    /// Updates the forced bridge operating mode (`None` for Auto, `Some(VirtualSinkModeA)`, or `Some(LoopbackFallbackModeB)`)
+    /// and re-runs detection immediately.
+    pub fn set_force_mode(
+        &mut self,
+        force_mode: Option<BridgeMode>,
+        device_manager: &AudioDeviceManager,
+    ) -> EngineResult<BridgeMode> {
+        self.config.force_mode = force_mode;
+        if force_mode.is_none() {
+            self.virtual_device = None;
+        }
+        self.detect(device_manager)
+    }
+
+    /// Returns the currently configured forced mode override, if any.
+    pub fn force_mode(&self) -> Option<BridgeMode> {
+        self.config.force_mode
     }
 
     /// Returns the currently active bridge operating mode (Mode A vs Mode B).

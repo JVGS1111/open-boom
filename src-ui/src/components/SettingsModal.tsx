@@ -13,6 +13,7 @@ import {
   Sparkles,
   Download,
   RotateCw,
+  Radio,
 } from "lucide-react";
 import { useI18n, LANGUAGE_OPTIONS } from "../i18n";
 
@@ -26,6 +27,7 @@ export interface UpdateInfo {
 }
 
 export type SettingsTab = "general" | "updates";
+export type AudioBridgeMode = "auto" | "virtual" | "loopback";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -34,6 +36,9 @@ interface SettingsModalProps {
   onToggleStartup: () => void;
   bufferGuardEnabled?: boolean;
   onToggleBufferGuard?: () => void;
+  audioBridgeMode?: AudioBridgeMode;
+  usingVirtualBridge?: boolean;
+  onChangeAudioBridgeMode?: (mode: AudioBridgeMode) => void;
   storagePath?: string;
   initialTab?: SettingsTab;
   // Updater properties
@@ -58,6 +63,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleStartup,
   bufferGuardEnabled = true,
   onToggleBufferGuard,
+  audioBridgeMode = "auto",
+  usingVirtualBridge = false,
+  onChangeAudioBridgeMode,
   storagePath = "%APPDATA%\\OpenBoom\\config.json",
   initialTab = "general",
   checkUpdatesOnStartup = true,
@@ -248,6 +256,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Section 2.5: Audio Capture Bridge Mode (Driver Boom Audio vs. Loopback Emulation) */}
+            <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex flex-col gap-2.5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                  <Radio className="w-3.5 h-3.5 text-accent-cyan" />
+                  {t.settings.bridgeModeTitle}
+                </span>
+                <span className="text-[11px] text-text-muted leading-tight">
+                  {t.settings.bridgeModeDesc}
+                </span>
+              </div>
+
+              <select
+                value={audioBridgeMode}
+                aria-label={t.settings.bridgeModeSelectAria}
+                onChange={(e) => {
+                  const val = e.target.value as AudioBridgeMode;
+                  if (onChangeAudioBridgeMode) {
+                    onChangeAudioBridgeMode(val);
+                  }
+                }}
+                className="w-full px-2.5 py-2 rounded-lg bg-surface-elevated border border-border-default text-xs font-medium text-text-primary focus:outline-none focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan/40 transition-colors cursor-pointer"
+              >
+                <option value="auto" className="bg-surface-card text-text-primary">
+                  {t.settings.bridgeModeOptionAuto}
+                </option>
+                <option value="virtual" className="bg-surface-card text-text-primary">
+                  {t.settings.bridgeModeOptionVirtual}
+                </option>
+                <option value="loopback" className="bg-surface-card text-text-primary">
+                  {t.settings.bridgeModeOptionLoopback}
+                </option>
+              </select>
+
+              {audioBridgeMode === "loopback" ? (
+                <div className="bg-status-warning/10 border border-status-warning/40 rounded-md p-2.5 flex items-start gap-2 text-status-warning animate-in fade-in duration-200">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-status-warning" />
+                  <div className="text-[11px] leading-tight">
+                    <span className="font-semibold block text-amber-400 mb-0.5">
+                      {t.settings.bridgeModeLoopbackWarningTitle}
+                    </span>
+                    {t.settings.bridgeModeLoopbackWarningDesc}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded border ${
+                    usingVirtualBridge
+                      ? "text-status-online bg-status-online/10 border-status-online/25"
+                      : "text-status-warning bg-status-warning/10 border-status-warning/25"
+                  }`}
+                >
+                  <CheckCircle2
+                    className={`w-3 h-3 shrink-0 ${
+                      usingVirtualBridge ? "text-status-online" : "text-status-warning"
+                    }`}
+                  />
+                  <span>
+                    {usingVirtualBridge
+                      ? t.settings.bridgeModeActiveVirtual
+                      : t.settings.bridgeModeActiveLoopback}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
+                <RotateCw className="w-3 h-3 text-accent-cyan shrink-0" />
+                <span>{t.settings.bridgeModeRestartNotice}</span>
+              </div>
             </div>
 
             {/* Section 3: Audio Buffer Stability & Acoustic Guard */}

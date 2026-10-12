@@ -120,6 +120,8 @@ pub struct AppConfig {
     pub check_updates_on_startup: bool,
     #[serde(default)]
     pub auto_install_updates: bool,
+    #[serde(default = "default_audio_bridge_mode")]
+    pub audio_bridge_mode: String,
 }
 
 fn default_orbit_direction() -> OrbitDirection {
@@ -132,6 +134,19 @@ fn default_orbit_period_sec() -> f32 {
 
 fn default_orbit_depth() -> f32 {
     0.85
+}
+
+fn default_audio_bridge_mode() -> String {
+    "auto".to_string()
+}
+
+/// Sanitizes an audio bridge mode string to one of `"auto"`, `"virtual"`, or `"loopback"`.
+pub fn sanitize_audio_bridge_mode(mode: &str) -> String {
+    match mode.trim().to_lowercase().as_str() {
+        "virtual" => "virtual".to_string(),
+        "loopback" => "loopback".to_string(),
+        _ => "auto".to_string(),
+    }
 }
 
 impl Default for AppConfig {
@@ -173,6 +188,7 @@ impl Default for AppConfig {
             language: None,
             check_updates_on_startup: true,
             auto_install_updates: false,
+            audio_bridge_mode: default_audio_bridge_mode(),
         }
     }
 }
@@ -789,6 +805,7 @@ impl PresetStore {
                 if cfg.orbit_depth.is_nan() || cfg.orbit_depth < 0.0 || cfg.orbit_depth > 1.0 {
                     cfg.orbit_depth = 0.85;
                 }
+                cfg.audio_bridge_mode = sanitize_audio_bridge_mode(&cfg.audio_bridge_mode);
                 Ok(cfg)
             }
             Err(e) => {

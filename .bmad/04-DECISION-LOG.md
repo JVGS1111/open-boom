@@ -620,4 +620,23 @@
      - Arrastar o slider da `Titlebar` para um valor $> 0$ enquanto `isMuted == true` desativa automaticamente o mudo tanto no DSP quanto no Windows (`set_mute(false)`), espelhando o comportamento nativo do mixer do Windows 11.
 * **Consequência:** Sincronização bidirecional instantânea e livre de loops entre o Windows (barra de tarefas, teclas multimídia, roda de volume do teclado/headset) e o OpenBoom, validada por 9 novos testes de integração em `volume_sync_tests.rs` e suíte `TitlebarVolumeSync.test.tsx` (totalizando 212 testes Cargo verdes e 104 testes UI verdes).
 
+---
+
+## ADR-040: Seletor de Canal de Captura de Áudio (Driver Boom Audio vs. Emulação Loopback) com Reinicialização Automática
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Implementado
+* **Contexto:** O usuário solicitou um seletor na janela de Configurações (`SettingsModal`) para poder alternar manualmente entre os modos de captura de áudio (`Automático`, `Com Driver Boom Audio — Modo A` e `Sem Driver / Emulação WASAPI Loopback — Modo B`), persistindo a escolha e reiniciando o aplicativo automaticamente ao trocar o canal para facilitar testes comparativos e diagnósticos.
+* **Decisões:**
+  1. **Persistência e Sanitização em `AppConfig` (`crates/open-boom-storage/src/preset_store.rs`):**
+     - Adicionado campo `audio_bridge_mode: String` (default `"auto"`, aceitando `"auto"`, `"virtual"`, `"loopback"`) com sanitizador `sanitize_audio_bridge_mode`.
+  2. **Controle de Modo Forçado no `VirtualAudioBridge` e `AudioStreamPump` (`crates/open-boom-wasapi`):**
+     - `VirtualAudioBridge::set_force_mode` permite alternar entre detecção automática (`None`), Modo A forçado (`Some(BridgeMode::VirtualSinkModeA)`) e Modo B forçado (`Some(BridgeMode::LoopbackFallbackModeB)`).
+     - `StreamPumpConfig` estendido com `force_loopback: bool`. Quando `force_loopback == true`, `AudioStreamPump::run_windows_pump` ignora qualquer driver virtual instalado (`Boom Audio`) e captura via `AUDCLNT_STREAMFLAGS_LOOPBACK` diretamente do endpoint físico de renderização (`render_device.clone()`).
+  3. **Transição Limpa de Roteamento COM Antes do Restart (`src-tauri/src/lib.rs`):**
+     - O comando IPC `set_audio_bridge_mode` grava `config.json` atomicamente, restaura o dispositivo padrão do Windows para o fone físico quando em modo `"loopback"` (ou redireciona para o `Boom Audio` quando em `"virtual"`/`"auto"`), reconfigura o `AudioStreamPump` e, em seguida, `restart_application` encerra o pump ativo antes de invocar `app.restart()` para evitar disputa de handles WASAPI.
+  4. **UI e Internacionalização (`SettingsModal.tsx`, `App.tsx`, `i18n`):**
+     - Adicionado card "Canal de Captura de Áudio (Driver vs. Emulação)" com `<select>` acessível, indicador de canal ativo (`Modo A` vs `Modo B`), alerta âmbar explicativo quando em modo Loopback sem driver e aviso de reinicialização automática em `pt-BR`, `en` e `es`.
+* **Consequência:** 214 testes Cargo verdes e 106 testes UI verdes.
+
+
 
