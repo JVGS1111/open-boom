@@ -896,3 +896,20 @@
 
 
 
+
+---
+
+## ADR-054: Eliminação de Communications Ducking e Auto-Unmute de Sessões na Transição de Driver
+* **Data:** 13/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  - Após a instalação do driver e primeiro boot do OpenBoom, o usuário notou que o Windows mutava abas do Chrome e jogos no Mixer de Volume do Windows.
+  - Causa raiz investigada:
+    1. **Atribuição Indevida do Papel `eCommunications`:** Em `crates/open-boom-wasapi/src/device.rs`, a função `set_windows_default_device_worker` chamava `set_default_func(policy_ptr, pcwstr, eCommunications)`. No Windows, quando um dispositivo de comunicação é alterado ou streams de comunicação são ativadas, a política nativa de "Atenuação de Comunicações" do Windows (Painel de Som -> Comunicações: *"Reduzir o volume de outros sons em 80%"* ou *"Desativar o som de todos os outros sons"*) é disparada, mutando ou zerando o volume de fluxos de mídia/jogos (`eConsole` e `eMultimedia`).
+    2. **Glitch de Migração do Windows 11 / Restart do `audiosrv`:** Durante a reinicialização forçada do serviço de áudio (`audiosrv`) para registrar as propriedades do driver, as sessões de áudio ativas são migradas para o novo endpoint padrão e frequentemente inicializadas com `bMuted = TRUE` pelo sistema operacional.
+    3. **Ausência de Auto-Unmute para Sessões sem Perfil:** Em `crates/open-boom-wasapi/src/session_manager.rs`, o `SessionManager` apenas desmutava sessões caso houvesse um perfil salvo previamente em `app_volumes.json`. Sessões novas ficavam presas no estado mudo do Windows.
+* **Decisões:**
+  1. **Remoção Estrita de `eCommunications`:** `crates/open-boom-wasapi/src/device.rs` agora configura apenas `eConsole` e `eMultimedia`. O papel `eCommunications` permanece intacto nos dispositivos de comunicação do usuário (headsets, microfones, Discord), impedindo que o Windows aplique atenuação de comunicações no OpenBoom.
+  2. **Auto-Unmute de Resiliência em `apply_stored_profiles`:** Se uma sessão for detectada com `session.is_muted == true` e não possuir um perfil explícito em `stored_profiles` pedindo mudo, o OpenBoom automaticamente desmuta a sessão via `ISimpleAudioVolume::SetMute(FALSE, NULL)`.
+  3. **Enumeração no Boot e em Transições:** Invocação imediata de `enumerate_sessions()` na inicialização do `AppState::new_runtime()`, ao ligar a chave mestre de áudio, e ao aplicar mudanças de modo de ponte de áudio.
+* **Consequência:** Abas do Chrome, jogos e tocadores de mídia tocam perfeitamente sem serem silenciados pelo Windows ao instalar o driver ou abrir o aplicativo.

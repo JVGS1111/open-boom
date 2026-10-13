@@ -66,6 +66,12 @@ export function runI18nTests(): TestResult[] {
     assert(resolveEffectiveLocale("pt-BR") === "pt-BR", "Must resolve pt-BR");
     assert(resolveEffectiveLocale("es") === "es", "Must resolve es");
     assert(resolveEffectiveLocale("en") === "en", "Must resolve en");
+    // Unsupported or unknown options strictly fallback to "en"
+    assert(resolveEffectiveLocale("de" as any) === "en", "Unsupported German locale must fallback to en");
+    assert(resolveEffectiveLocale("fr" as any) === "en", "Unsupported French locale must fallback to en");
+    assert(resolveEffectiveLocale("ja" as any) === "en", "Unsupported Japanese locale must fallback to en");
+    assert(resolveEffectiveLocale("zh-CN" as any) === "en", "Unsupported Chinese locale must fallback to en");
+    assert(resolveEffectiveLocale("unknown" as any) === "en", "Unknown locale string must fallback to en");
     // "system" resolves to a valid SupportedLocale
     const sysLocale = resolveEffectiveLocale("system");
     assert(

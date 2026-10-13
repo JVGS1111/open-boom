@@ -2,7 +2,6 @@ import { Sliders, Volume2, VolumeX, Minus, X, Settings, Layers, ArrowUpCircle } 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MasterPowerSwitch } from "./MasterPowerSwitch";
 import { DeviceSelector, AudioDeviceInfo } from "./DeviceSelector";
-import { LanguageMenu } from "./LanguageMenu";
 import { useI18n } from "../i18n";
 
 interface TitlebarProps {
@@ -197,9 +196,6 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         >
           <Layers className="w-4 h-4" />
         </button>
-
-        {/* Dedicated Language Menu Dropdown */}
-        <LanguageMenu />
 
         {/* Update Notification Action Badge */}
         {hasUpdate && (

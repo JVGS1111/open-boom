@@ -472,6 +472,11 @@ impl SessionManager {
 
                 session.volume = profile.volume;
                 session.is_muted = profile.is_muted;
+            } else if session.is_muted && session.process_id != 0 {
+                // If Windows ducked or muted this session during driver installation or endpoint migration,
+                // and the user has not explicitly saved a mute profile for it, automatically unmute it.
+                let _ = self.dispatch_set_mute(session.process_id, false);
+                session.is_muted = false;
             }
             self.restored_pids.insert(session.process_id);
         }

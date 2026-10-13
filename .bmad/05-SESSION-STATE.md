@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 13/10/2026 - 09:42
-* **Sprint Ativa:** **Sprint 9 — Driver Virtual Open-Source, Purificação de Marca & Onboarding 7.1 (CONCLUÍDO)**
-* **Tarefa Atual:** Conclusão integral do **Épico 9** (Stories 9-1, 9-2, 9-3, 9-4) via `bmad-build-auto`. Renomeação de endpoint com atribuição `OpenBoom Spatial Audio (powered by VB-Cable)`, injeção automática de máscara de alto-falantes 7.1 (`0x63F`), expurgo total de marcas comerciais, bloqueio preventivo no boot com controles em cinza, modal de onboarding com instalação em 1 clique e resiliência a erros. Suíte com 226 testes Rust e 113 testes de UI passando (0 falhas). Pronto para compilação local, smoke test e commit.
+* **Data/Hora:** 13/10/2026 - 12:05
+* **Sprint Ativa:** **Sprint 9 — Refinamentos de UI, Ajustes de Update & Robustez i18n (CONCLUÍDO)**
+* **Tarefa Atual:** Conclusão dos ajustes solicitados pelo usuário: (1) remoção do menu de idiomas da tela inicial; (2) espaçamento, paddings e badges estruturados na aba de Updates; (3) garantia de fallback em inglês para idiomas de sistema não suportados; (4) prevenção de Communications Ducking e auto-unmute de sessões. Suíte com 226 testes Rust e 113 testes UI verdes. Compilação e smoke test executados com sucesso. Pronto para commit e push.
 
 
 ## O que foi concluído nesta sessão
@@ -354,3 +354,12 @@
 ## Bloqueios / Pendências
 * Nenhum bloqueio. Sistema estável com 226 testes Cargo verdes e 113 testes UI verdes.
 
+51. **Eliminação de Communications Ducking e Auto-Unmute de Sessões na Transição de Driver (ADR-054):**
+    - **Causa Raiz Identificada:** Em `crates/open-boom-wasapi/src/device.rs`, a chamada a `set_default_func(policy_ptr, pcwstr, eCommunications)` vinculava o driver virtual ao papel de comunicações do Windows, disparando a política nativa de "Atenuação de Comunicações" do Windows (*"Reduzir o volume de outros sons em 80%"* ou *"Desativar o som de todos os outros sons"*), mutando abas do Chrome e jogos ao instalar o driver ou abrir o app. Além disso, a reinicialização forçada do `audiosrv` migra sessões no Windows 11 frequentemente marcando-as como `bMuted = TRUE`.
+    - **Soluções Implementadas:**
+      - Removida a atribuição do papel `eCommunications` em `crates/open-boom-wasapi/src/device.rs`, restringindo estritamente a `eConsole` e `eMultimedia`.
+      - Implementado auto-unmute de resiliência em `crates/open-boom-wasapi/src/session_manager.rs`: se uma sessão ativa de processo estiver mutada e não possuir um perfil explícito em `stored_profiles` pedindo mudo, o OpenBoom a desmuta imediatamente via `ISimpleAudioVolume::SetMute(FALSE, NULL)`.
+      - Adicionado teste de regressão `test_session_manager_auto_unmutes_unprofiled_muted_sessions` em `session_manager_tests.rs`.
+      - Adicionada enumeração imediata de sessões no boot em `AppState::new_runtime()`, ao alternar o Master Power, e ao trocar o modo de ponte de áudio.
+      - Adicionada chamada a `fetchAudioSessions()` no hook de montagem inicial do frontend (`App.tsx`).
+    - **Verificação Geral:** 227 testes Rust verdes em Cargo, 113 testes de UI em React/Vite verdes, compilação de release e NSIS (`OpenBoom_0.5.2_x64-setup.exe`) concluídas com sucesso.

@@ -174,3 +174,25 @@ fn test_session_manager_automatic_profile_recovery() {
     assert!(manager.get_stored_profile("spotify.exe").is_none());
 }
 
+#[test]
+fn test_session_manager_auto_unmutes_unprofiled_muted_sessions() {
+    let mut manager = SessionManager::with_forced_synthetic(true);
+
+    // Simulate an app (e.g. chrome.exe) that was muted by Windows ducking or endpoint migration
+    manager.add_synthetic_session(ProcessAudioSession::new(4001, "chrome.exe", 1.0, true, true));
+
+    // Also add an app that was EXPLICITLY muted by the user (stored profile with is_muted: true)
+    manager.set_stored_profile(AppVolumeProfile::new("discord.exe", 0.7, true));
+    manager.add_synthetic_session(ProcessAudioSession::new(4002, "discord.exe", 0.7, true, true));
+
+    let sessions = manager.enumerate_sessions().expect("enumerate sessions");
+
+    // chrome.exe had no stored profile, so it must be automatically unmuted
+    let chrome = sessions.iter().find(|s| s.process_id == 4001).unwrap();
+    assert!(!chrome.is_muted, "Unprofiled muted session must be automatically unmuted");
+
+    // discord.exe had an explicit mute profile, so it must remain muted
+    let discord = sessions.iter().find(|s| s.process_id == 4002).unwrap();
+    assert!(discord.is_muted, "Explicitly muted profile must remain muted");
+}
+

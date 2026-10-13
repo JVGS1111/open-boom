@@ -52,23 +52,41 @@ export const LANGUAGE_OPTIONS: LanguageInfo[] = [
 
 /**
  * Detects the Windows host / browser environment system locale.
- * Defaults to "pt-BR" if language starts with "pt", "es" if "es", otherwise "en".
+ * Supported locales: Portuguese ("pt-BR"), Spanish ("es"), English ("en").
+ * For any unsupported system locale (e.g. German, French, Japanese, Chinese, Russian),
+ * it strictly defaults to English ("en").
  */
 export function getSystemLocale(): SupportedLocale {
-  if (typeof navigator !== "undefined" && navigator.language) {
-    const lang = navigator.language.toLowerCase();
-    if (lang.startsWith("pt")) {
-      return "pt-BR";
+  if (typeof navigator !== "undefined") {
+    const candidates: string[] = [];
+    if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+      candidates.push(...navigator.languages);
+    } else if (navigator.language) {
+      candidates.push(navigator.language);
     }
-    if (lang.startsWith("es")) {
-      return "es";
+
+    for (const raw of candidates) {
+      if (!raw || typeof raw !== "string") continue;
+      const lang = raw.toLowerCase().trim();
+      if (lang.startsWith("pt")) {
+        return "pt-BR";
+      }
+      if (lang.startsWith("es")) {
+        return "es";
+      }
+      if (lang.startsWith("en")) {
+        return "en";
+      }
     }
   }
+  // Default fallback for any unsupported system language or environment
   return "en";
 }
 
 /**
  * Resolves the effective locale given a language option.
+ * If option is "system" (or falsy), inspects host system locale.
+ * If option is unsupported or unrecognized, strictly falls back to "en".
  */
 export function resolveEffectiveLocale(option: LanguageOption): SupportedLocale {
   if (option === "system" || !option) {

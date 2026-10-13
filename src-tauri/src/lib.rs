@@ -150,6 +150,9 @@ impl AppState {
         if let Ok(profiles) = store.load_app_volumes() {
             session_mgr_instance.register_stored_profiles(profiles);
         }
+        // Enumerate active sessions on boot to restore saved volume profiles and auto-unmute
+        // any sessions that Windows ducked or muted during driver initialization or endpoint migration.
+        let _ = session_mgr_instance.enumerate_sessions();
         let session_manager = Arc::new(Mutex::new(session_mgr_instance));
 
         let volume_sync = Arc::new(EndpointVolumeSync::with_synthetic_fallback(true));
@@ -228,6 +231,9 @@ impl AppState {
             }
         }
         let _ = self.volume_sync.rebind_endpoint(None);
+        if let Ok(mut mgr) = self.session_manager.lock() {
+            let _ = mgr.enumerate_sessions();
+        }
         Ok(())
     }
 
@@ -313,6 +319,9 @@ impl AppState {
         }
 
         let _ = self.volume_sync.rebind_endpoint(None);
+        if let Ok(mut mgr) = self.session_manager.lock() {
+            let _ = mgr.enumerate_sessions();
+        }
 
         Ok(sanitized)
     }

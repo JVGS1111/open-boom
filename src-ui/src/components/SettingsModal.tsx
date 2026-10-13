@@ -131,7 +131,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     >
       <div
         ref={modalRef}
-        className="w-[520px] max-h-[90vh] bg-surface-card border border-border-default rounded-xl shadow-2xl p-5 relative overflow-y-auto flex flex-col gap-3.5"
+        className="w-[560px] max-w-[95vw] max-h-[90vh] bg-surface-card border border-border-default rounded-2xl shadow-2xl p-5 sm:p-6 relative overflow-y-auto flex flex-col gap-4"
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
@@ -456,61 +456,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* TAB 2: APPLICATION UPDATES */}
         {activeTab === "updates" && (
-          <div className="flex flex-col gap-3.5 animate-in fade-in duration-150">
+          <div className="flex flex-col gap-4 animate-in fade-in duration-150">
             {/* Version & Status Banner */}
-            <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3.5 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-surface-elevated border border-border-default flex items-center justify-center text-amber-400">
-                    <ArrowUpCircle className="w-4 h-4" />
+            <div className="bg-surface-base/80 border border-border-subtle rounded-xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-surface-elevated border border-border-default flex items-center justify-center text-amber-400 shrink-0 shadow-sm">
+                    <ArrowUpCircle className="w-5 h-5" />
                   </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-text-primary">
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-semibold text-text-primary tracking-wide">
                       {t.settings.updatesTitle}
                     </h3>
-                    <p className="text-[11px] text-text-muted">
+                    <p className="text-[11px] text-text-muted leading-relaxed">
                       {t.settings.updatesSubtitle}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 font-mono text-[11px]">
-                  <span className="px-2 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-secondary">
-                    {t.settings.currentVersionLabel}: <strong className="text-text-primary">{updateInfo?.currentVersion || "0.5.2"}</strong>
-                  </span>
+                <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
+                  <div className="px-3 py-1.5 rounded-lg bg-surface-elevated border border-border-subtle text-text-secondary flex items-center gap-1.5 whitespace-nowrap shadow-xs">
+                    <span className="text-text-muted">{t.settings.currentVersionLabel}:</span>
+                    <strong className="text-text-primary font-semibold">{updateInfo?.currentVersion || "0.5.2"}</strong>
+                  </div>
                   {updateInfo?.latestVersion && (
-                    <span className={`px-2 py-0.5 rounded border ${
+                    <div className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
                       updateInfo.isAvailable
                         ? "bg-amber-400/10 border-amber-400/30 text-amber-400 font-bold"
                         : "bg-surface-elevated border-border-subtle text-text-secondary"
                     }`}>
-                      {t.settings.latestVersionLabel}: <strong>{updateInfo.latestVersion}</strong>
-                    </span>
+                      <span className={updateInfo.isAvailable ? "text-amber-400/80" : "text-text-muted"}>
+                        {t.settings.latestVersionLabel}:
+                      </span>
+                      <strong className={updateInfo.isAvailable ? "text-amber-300 font-bold" : "text-text-primary font-semibold"}>
+                        {updateInfo.latestVersion}
+                      </strong>
+                    </div>
                   )}
                 </div>
               </div>
 
               {/* Status Message */}
               {updateError ? (
-                <div className="bg-status-offline/10 border border-status-offline/30 rounded p-2 text-status-offline text-xs flex items-center gap-2">
+                <div className="bg-status-offline/10 border border-status-offline/30 rounded-lg p-3 text-status-offline text-xs flex items-center gap-2.5 leading-relaxed">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>{updateError}</span>
                 </div>
               ) : isUpdateReadyToRestart ? (
-                <div className="bg-status-online/15 border border-status-online/40 rounded p-2.5 text-status-online text-xs flex items-center gap-2">
+                <div className="bg-status-online/15 border border-status-online/40 rounded-lg p-3 text-status-online text-xs flex items-center gap-2.5 leading-relaxed">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-status-online" />
                   <span className="font-semibold">{t.settings.updateReadyMessage}</span>
                 </div>
               ) : updateInfo?.isAvailable ? (
-                <div className="bg-amber-400/15 border border-amber-400/40 rounded p-2.5 text-amber-400 text-xs flex items-center gap-2">
+                <div className="bg-amber-400/15 border border-amber-400/40 rounded-lg p-3 text-amber-400 text-xs flex items-center gap-2.5 leading-relaxed">
                   <Sparkles className="w-4 h-4 shrink-0" />
                   <span className="font-semibold">
                     {t.settings.updateAvailableMessage} (v{updateInfo.latestVersion})
-                    {updateInfo.publishedAt && ` ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${t.settings.publishedOn} ${new Date(updateInfo.publishedAt).toLocaleDateString()}`}
+                    {updateInfo.publishedAt && ` • ${t.settings.publishedOn} ${new Date(updateInfo.publishedAt).toLocaleDateString()}`}
                   </span>
                 </div>
               ) : (
-                <div className="bg-surface-elevated/70 border border-border-subtle rounded p-2 text-text-secondary text-xs flex items-center gap-2">
+                <div className="bg-surface-elevated/70 border border-border-subtle rounded-lg p-3 text-text-secondary text-xs flex items-center gap-2.5 leading-relaxed">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-accent-cyan" />
                   <span>{t.settings.upToDateMessage}</span>
                 </div>
@@ -518,23 +524,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Release Notes Preview */}
               {updateInfo?.isAvailable && updateInfo.releaseNotes && (
-                <div className="flex flex-col gap-1.5 bg-surface-elevated/50 border border-border-subtle rounded p-2.5">
+                <div className="flex flex-col gap-2 bg-surface-elevated/50 border border-border-subtle rounded-lg p-3.5">
                   <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider font-mono">
                     {t.settings.releaseNotesTitle}
                   </span>
-                  <div className="text-[11px] text-text-secondary whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed select-text font-sans">
+                  <div className="text-[11px] text-text-secondary whitespace-pre-wrap max-h-36 overflow-y-auto leading-relaxed select-text font-sans pr-1">
                     {updateInfo.releaseNotes}
                   </div>
                 </div>
               )}
 
               {/* Action Button Area */}
-              <div className="flex items-center justify-end gap-2 pt-1">
+              <div className="flex items-center justify-end gap-2.5 pt-1.5">
                 {isUpdateReadyToRestart ? (
                   <button
                     type="button"
                     onClick={onRestartApplication}
-                    className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs transition-all shadow-[0_0_12px_rgba(16,185,129,0.35)] flex items-center gap-1.5 cursor-pointer"
+                    className="px-4.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs transition-all shadow-[0_0_12px_rgba(16,185,129,0.35)] flex items-center gap-2 cursor-pointer"
                   >
                     <RotateCw className="w-3.5 h-3.5" />
                     <span>{t.settings.restartApplicationButton}</span>
@@ -544,7 +550,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="button"
                     onClick={onInstallUpdate}
                     disabled={isDownloadingUpdate}
-                    className="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-semibold text-xs transition-all shadow-[0_0_12px_rgba(251,191,36,0.35)] flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="px-4.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-semibold text-xs transition-all shadow-[0_0_12px_rgba(251,191,36,0.35)] flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isDownloadingUpdate ? (
                       <>
@@ -563,7 +569,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="button"
                     onClick={onCheckForUpdates}
                     disabled={isCheckingUpdates}
-                    className="px-3.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-surface-card border border-border-default text-text-primary text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 rounded-lg bg-surface-elevated hover:bg-surface-card border border-border-default text-text-primary text-xs font-medium transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 shadow-xs"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 text-accent-cyan ${isCheckingUpdates ? "animate-spin" : ""}`} />
                     <span>{isCheckingUpdates ? t.settings.checkingForUpdates : t.settings.checkForUpdatesButton}</span>
@@ -573,12 +579,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {/* Toggle 1: Check for updates on startup */}
-            <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex items-center justify-between">
-              <div className="flex flex-col gap-0.5 pr-3">
+            <div className="bg-surface-base/80 border border-border-subtle rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-1 pr-3">
                 <span className="text-xs font-semibold text-text-primary">
                   {t.settings.checkUpdatesOnStartupTitle}
                 </span>
-                <span className="text-[11px] text-text-muted leading-tight">
+                <span className="text-[11px] text-text-muted leading-relaxed">
                   {t.settings.checkUpdatesOnStartupDesc}
                 </span>
               </div>
@@ -604,12 +610,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {/* Toggle 2: Automatically install updates when available */}
-            <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex items-center justify-between">
-              <div className="flex flex-col gap-0.5 pr-3">
+            <div className="bg-surface-base/80 border border-border-subtle rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-1 pr-3">
                 <span className="text-xs font-semibold text-text-primary">
                   {t.settings.autoInstallUpdatesTitle}
                 </span>
-                <span className="text-[11px] text-text-muted leading-tight">
+                <span className="text-[11px] text-text-muted leading-relaxed">
                   {t.settings.autoInstallUpdatesDesc}
                 </span>
               </div>

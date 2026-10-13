@@ -234,6 +234,7 @@ export const App: React.FC = () => {
       }
     };
     checkDriverStatus();
+    fetchAudioSessions();
   }, []);
 
   const handleInstallVirtualDriver = async () => {

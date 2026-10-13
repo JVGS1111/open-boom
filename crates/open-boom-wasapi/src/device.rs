@@ -539,7 +539,7 @@ impl AudioDeviceManager {
         use windows::Win32::System::Com::{
             CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
         };
-        use windows::Win32::Media::Audio::{eCommunications, eConsole, eMultimedia, ERole};
+        use windows::Win32::Media::Audio::{eConsole, eMultimedia, ERole};
 
         const CLSID_POLICY_CONFIG: GUID = GUID::from_u128(0x870af99c_171d_4f9e_af0d_e63df40c2bc9);
         const IID_IPOLICY_CONFIG: GUID = GUID::from_u128(0xf8679f50_850a_41cf_9c72_430f290290c8);
@@ -577,9 +577,12 @@ impl AudioDeviceManager {
                     device_id.encode_utf16().chain(std::iter::once(0)).collect();
                 let pcwstr = PCWSTR::from_raw(wide_id.as_ptr());
 
+                // Set default endpoints for Console and Multimedia streams (games, media players, browser).
+                // We deliberately DO NOT assign eCommunications to prevent Windows Communications Ducking
+                // ("When Windows detects communications activity: Mute all other sounds") from muting
+                // or lowering volume on browser tabs, games, and media streams.
                 let hr_console = set_default_func(policy_ptr, pcwstr, eConsole);
                 let hr_multi = set_default_func(policy_ptr, pcwstr, eMultimedia);
-                let _hr_comm = set_default_func(policy_ptr, pcwstr, eCommunications);
 
                 if hr_console.is_err() || hr_multi.is_err() {
                     return Err(EngineError::DeviceInitialization(format!(
