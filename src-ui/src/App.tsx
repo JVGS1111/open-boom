@@ -24,7 +24,9 @@ import {
   isPresetDirty,
   toPresetSlug,
 } from "./components/PresetSelectorPopover";
-import { I18nProvider, LanguageOption } from "./i18n";
+import { DriverOnboardingModal } from "./components/DriverOnboardingModal";
+import { AlertTriangle } from "lucide-react";
+import { I18nProvider, LanguageOption, resolveEffectiveLocale, TRANSLATIONS } from "./i18n";
 
 /**
  * Calculates automatic negative preamp attenuation offset from positive filter gains:
@@ -181,6 +183,15 @@ export const App: React.FC = () => {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasRunStartupCheckRef = useRef(false);
 
+  // Virtual Driver Gating & Onboarding State (Story 9-3 & 9-4, CAP-3, CAP-4, CAP-5)
+  const [isDriverMissing, setIsDriverMissing] = useState(false);
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
+  const [isInstallingDriver, setIsInstallingDriver] = useState(false);
+  const [driverInstallError, setDriverInstallError] = useState<string | null>(null);
+
+  const effectiveLocale = resolveEffectiveLocale(language);
+  const t = TRANSLATIONS[effectiveLocale] || TRANSLATIONS.en;
+
   // Soundstage Configurator Modal State (Story 2.3 & 2.4, FR7)
   const [isConfiguratorOpen, setIsConfiguratorOpen] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState<boolean[]>([
@@ -200,6 +211,50 @@ export const App: React.FC = () => {
       await invoke("dispatch_command", { cmd: commandObj });
     } catch {
       // Fallback for browser preview
+    }
+  };
+
+  // Check virtual driver presence on boot (Story 9-3, CAP-4)
+  useEffect(() => {
+    const checkDriverStatus = async () => {
+      try {
+        const status = await invoke<{
+          has_virtual_driver: boolean;
+          device_name?: string;
+          device_id?: string;
+        }>("check_virtual_driver_status");
+        if (status && !status.has_virtual_driver) {
+          setIsDriverMissing(true);
+          setIsOnboardingModalOpen(true);
+        } else {
+          setIsDriverMissing(false);
+        }
+      } catch {
+        // Fallback in browser preview
+      }
+    };
+    checkDriverStatus();
+  }, []);
+
+  const handleInstallVirtualDriver = async () => {
+    setIsInstallingDriver(true);
+    setDriverInstallError(null);
+    try {
+      await invoke("install_virtual_driver");
+      setIsDriverMissing(false);
+      setIsOnboardingModalOpen(false);
+      setNotification(t.driverOnboarding.featureSurround);
+    } catch (err: unknown) {
+      const errStr = typeof err === "string" ? err : (err as any)?.message || "";
+      if (errStr.includes("UAC_DENIED")) {
+        setDriverInstallError(t.driverOnboarding.uacDeniedError);
+      } else if (errStr.includes("NETWORK_ERROR")) {
+        setDriverInstallError(t.driverOnboarding.networkError);
+      } else {
+        setDriverInstallError(errStr || t.driverOnboarding.genericError);
+      }
+    } finally {
+      setIsInstallingDriver(false);
     }
   };
 
@@ -1549,6 +1604,16 @@ export const App: React.FC = () => {
         onDeleteCustomPreset={handleDeleteCustomPreset}
       />
 
+      {/* Driver Onboarding Modal (Story 9-3 & 9-4, CAP-3, CAP-4, CAP-5) */}
+      <DriverOnboardingModal
+        isOpen={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+        onInstallDriver={handleInstallVirtualDriver}
+        isInstalling={isInstallingDriver}
+        installError={driverInstallError}
+        onRetry={handleInstallVirtualDriver}
+      />
+
       {/* Fallback Notification Banner */}
       <NotificationBanner
         message={notification}
@@ -1577,12 +1642,35 @@ export const App: React.FC = () => {
           setSettingsInitialTab("updates");
           setIsSettingsOpen(true);
         }}
+        disabled={isDriverMissing}
       />
+
+      {/* First-Run Driver Missing Gating Banner (Story 9-3, CAP-4) */}
+      {isDriverMissing && (
+        <div className="bg-amber-950/70 border-b border-amber-500/40 px-4 py-2 flex items-center justify-between text-xs text-amber-200 animate-fade-in shrink-0 z-20">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-medium">{t.driverOnboarding.gatingBannerMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsOnboardingModalOpen(true)}
+            className="px-3 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-semibold text-[11px] transition-colors cursor-pointer"
+          >
+            {t.driverOnboarding.openSetupButton}
+          </button>
+        </div>
+      )}
 
       {/* 2. Main Studio Content Area */}
       <main className="flex-1 p-3 flex gap-3 overflow-hidden relative min-h-0">
         {/* Left soundstage panel: 3D Surround Dial */}
-        <section className="w-[280px] shrink-0 bg-surface-base/60 border border-border-subtle rounded-xl flex items-center justify-center p-2 relative overflow-hidden">
+        <section
+          className={`w-[280px] shrink-0 bg-surface-base/60 border border-border-subtle rounded-xl flex items-center justify-center p-2 relative overflow-hidden transition-opacity ${
+            isDriverMissing ? "opacity-40 pointer-events-none select-none cursor-not-allowed" : ""
+          }`}
+          title={isDriverMissing ? t.driverOnboarding.gatingTooltip : undefined}
+        >
           <SoundstageDial
             enabled={masterPower && surroundEnabled && !bypassActive}
             intensity={surroundIntensity}
@@ -1597,7 +1685,12 @@ export const App: React.FC = () => {
 
         {/* Right rack panel: Dual EQ & Effects Rack (60% EQ / 40% Effects) */}
         <section className="flex-1 min-w-0 flex flex-col gap-2.5 overflow-hidden h-full">
-          <div className="flex-[6] min-h-0 flex flex-col">
+          <div
+            className={`flex-[6] min-h-0 flex flex-col transition-opacity ${
+              isDriverMissing ? "opacity-40 pointer-events-none select-none cursor-not-allowed" : ""
+            }`}
+            title={isDriverMissing ? t.driverOnboarding.gatingTooltip : undefined}
+          >
             <EqualizerPreview
               activePreset={activeEqPreset}
               isPresetDirty={presetDirty}
@@ -1614,7 +1707,7 @@ export const App: React.FC = () => {
               modules={effectModules}
               onToggleModule={handleToggleEffect}
               onAmountChange={handleEffectAmountChange}
-              disabled={!masterPower || bypassActive}
+              disabled={!masterPower || bypassActive || isDriverMissing}
             />
           </div>
         </section>

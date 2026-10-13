@@ -71,8 +71,22 @@ fn test_virtual_bridge_mode_a_detection_when_device_present() {
     assert!(bridge.virtual_device().is_some());
     assert_eq!(
         bridge.virtual_device().unwrap().name,
-        "Boom Audio Virtual Device"
+        AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME
     );
+}
+
+#[test]
+fn test_rename_virtual_endpoint_friendly_name() {
+    let device_manager = AudioDeviceManager::with_forced_synthetic_and_virtual(true, true);
+    let renamed = device_manager
+        .rename_virtual_endpoint(None)
+        .expect("rename virtual endpoint must succeed");
+    assert_eq!(renamed, AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME);
+
+    let custom = device_manager
+        .rename_virtual_endpoint(Some("Custom OpenBoom Virtual Endpoint (powered by VB-Cable)"))
+        .expect("rename with custom string must succeed");
+    assert_eq!(custom, "Custom OpenBoom Virtual Endpoint (powered by VB-Cable)");
 }
 
 #[test]

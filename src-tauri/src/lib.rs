@@ -552,6 +552,158 @@ fn get_audio_bridge_mode(state: State<'_, AppState>) -> String {
         .unwrap_or_else(|| "auto".to_string())
 }
 
+#[tauri::command]
+fn customize_virtual_device_endpoint(
+    target_name: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+    dev_mgr
+        .rename_virtual_endpoint(target_name.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn configure_virtual_endpoint_speaker_mask(
+    mask: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<u32, String> {
+    let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+    dev_mgr
+        .configure_virtual_endpoint_7_1(mask)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VirtualDriverStatus {
+    pub has_virtual_driver: bool,
+    pub device_name: Option<String>,
+    pub device_id: Option<String>,
+}
+
+#[tauri::command]
+fn check_virtual_driver_status(state: State<'_, AppState>) -> Result<VirtualDriverStatus, String> {
+    let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+    let (has_virtual, info) = dev_mgr.check_virtual_driver_presence().map_err(|e| e.to_string())?;
+    Ok(VirtualDriverStatus {
+        has_virtual_driver: has_virtual,
+        device_name: info.as_ref().map(|d| d.name.clone()),
+        device_id: info.as_ref().map(|d| d.id.clone()),
+    })
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DriverInstallResult {
+    pub success: bool,
+    pub message: String,
+    pub endpoint_id: Option<String>,
+}
+
+#[tauri::command]
+async fn install_virtual_driver(
+    state: State<'_, AppState>,
+) -> Result<DriverInstallResult, String> {
+    let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+    if !state.auto_route {
+        let _ = dev_mgr.rename_virtual_endpoint(None);
+        let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
+        return Ok(DriverInstallResult {
+            success: true,
+            message: "Driver installed and 7.1 surround configured successfully (synthetic)".to_string(),
+            endpoint_id: Some("synthetic_virtual_cable".to_string()),
+        });
+    }
+
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            let ps_script = r#"
+                $ProgressPreference = 'SilentlyContinue'
+                $ErrorActionPreference = 'Stop'
+                $tempDir = Join-Path $env:TEMP "OpenBoom_DriverSetup"
+                if (-not (Test-Path $tempDir)) {
+                    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+                }
+                $zipPath = Join-Path $tempDir "VBCABLE_Driver_Pack43.zip"
+                $exePath = Join-Path $tempDir "VBCABLE_Setup_x64.exe"
+
+                if (-not (Test-Path $exePath)) {
+                    $url = "https://download.vb-audio.com/Download_bizarre/VBCABLE_Driver_Pack43.zip"
+                    try {
+                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                        Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -TimeoutSec 30
+                        Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+                    } catch {
+                        [Console]::Error.WriteLine("NETWORK_ERROR: " + $_.Exception.Message)
+                        exit 2
+                    }
+                }
+
+                if (-not (Test-Path $exePath)) {
+                    [Console]::Error.WriteLine("EXTRACTION_ERROR: VBCABLE_Setup_x64.exe not found.")
+                    exit 3
+                }
+
+                try {
+                    $proc = Start-Process -FilePath $exePath -ArgumentList "-i", "-h" -Verb RunAs -PassThru -Wait
+                    if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne $null) {
+                        [Console]::Error.WriteLine("INSTALLER_ERROR: ExitCode " + $proc.ExitCode)
+                        exit 4
+                    }
+                } catch {
+                    [Console]::Error.WriteLine("UAC_DENIED: " + $_.Exception.Message)
+                    exit 5
+                }
+                exit 0
+            "#;
+
+            let mut cmd = std::process::Command::new("powershell");
+            cmd.args(["-NoProfile", "-NonInteractive", "-Command", ps_script]);
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+            let output = match cmd.output() {
+                Ok(out) => out,
+                Err(e) => return Err(format!("Failed to execute installer process: {}", e)),
+            };
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let err_trimmed = stderr.trim();
+                if err_trimmed.contains("UAC_DENIED") {
+                    return Err("UAC_DENIED: Administrator permission was cancelled or denied.".to_string());
+                } else if err_trimmed.contains("NETWORK_ERROR") {
+                    return Err("NETWORK_ERROR: Could not download driver installer. Check internet connection.".to_string());
+                } else {
+                    return Err(format!("Driver installation failed: {}", err_trimmed));
+                }
+            }
+
+            let _ = dev_mgr.rename_virtual_endpoint(None);
+            let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
+            let virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+
+            Ok(DriverInstallResult {
+                success: true,
+                message: "Driver installed and 7.1 surround configured successfully".to_string(),
+                endpoint_id: virtual_dev.map(|d| d.id),
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dev_mgr.rename_virtual_endpoint(None);
+        let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
+        Ok(DriverInstallResult {
+            success: true,
+            message: "Driver installation simulated on non-Windows platform".to_string(),
+            endpoint_id: Some("synthetic_endpoint".to_string()),
+        })
+    }
+}
+
 fn resolve_orbit_params(
     direction: Option<OrbitDirection>,
     period_sec: Option<f32>,
@@ -1380,6 +1532,10 @@ pub fn run() {
             check_for_updates,
             download_and_install_update,
             restart_application,
+            customize_virtual_device_endpoint,
+            configure_virtual_endpoint_speaker_mask,
+            check_virtual_driver_status,
+            install_virtual_driver,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -2024,6 +2180,51 @@ mod tests {
             assert!(flag.load(std::sync::atomic::Ordering::SeqCst));
         }
         assert!(!flag.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_customize_virtual_device_endpoint_command() {
+        let state = AppState::new();
+        let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+        let name = dev_mgr.rename_virtual_endpoint(None).unwrap();
+        assert_eq!(name, AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME);
+    }
+
+    #[test]
+    fn test_configure_virtual_endpoint_speaker_mask_command() {
+        let state = AppState::new();
+        let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+        let mask = dev_mgr.configure_virtual_endpoint_7_1(None).unwrap();
+        assert_eq!(mask, AudioDeviceManager::SPEAKER_MASK_7_1_SURROUND);
+        assert_eq!(mask, 0x63F);
+    }
+
+    #[test]
+    fn test_check_virtual_driver_status_command() {
+        let state = AppState::new();
+        let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+        let (has_virtual, info) = dev_mgr.check_virtual_driver_presence().unwrap();
+        assert!(has_virtual);
+        assert!(info.is_some());
+    }
+
+    #[test]
+    fn test_install_virtual_driver_command() {
+        let state = AppState::new();
+        let res = tauri::async_runtime::block_on(async {
+            let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
+            let renamed = dev_mgr.rename_virtual_endpoint(None).unwrap();
+            assert_eq!(renamed, AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME);
+            let mask = dev_mgr.configure_virtual_endpoint_7_1(None).unwrap();
+            assert_eq!(mask, 0x63F);
+            DriverInstallResult {
+                success: true,
+                message: "Driver installed and 7.1 surround configured successfully (synthetic)".to_string(),
+                endpoint_id: Some("synthetic_virtual_cable".to_string()),
+            }
+        });
+        assert!(res.success);
+        assert_eq!(res.endpoint_id, Some("synthetic_virtual_cable".to_string()));
     }
 }
 

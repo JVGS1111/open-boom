@@ -170,3 +170,110 @@ fn test_set_default_device_com_lifecycle_no_access_violation() {
         }
     }
 }
+
+#[test]
+fn test_extract_endpoint_guid() {
+    let wasapi_id = "{0.0.0.00000000}.{5bdbd9fc-3e1a-42ae-b9ab-d171a20a285d}";
+    assert_eq!(
+        AudioDeviceManager::extract_endpoint_guid(wasapi_id),
+        Some("{5bdbd9fc-3e1a-42ae-b9ab-d171a20a285d}".to_string())
+    );
+
+    let pure_guid = "{f625f981-599a-4e3d-a57f-514e8bc2fe72}";
+    assert_eq!(
+        AudioDeviceManager::extract_endpoint_guid(pure_guid),
+        Some("{f625f981-599a-4e3d-a57f-514e8bc2fe72}".to_string())
+    );
+
+    let invalid = "synthetic_device_without_guid";
+    assert_eq!(AudioDeviceManager::extract_endpoint_guid(invalid), None);
+
+    let malformed = "{1234-too-short}";
+    assert_eq!(AudioDeviceManager::extract_endpoint_guid(malformed), None);
+}
+
+#[test]
+fn test_normalize_endpoint_friendly_name() {
+    // Legacy brand names must be purged and normalized with attribution
+    assert_eq!(
+        AudioDeviceManager::normalize_endpoint_friendly_name("Boom Audio"),
+        AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME
+    );
+    assert_eq!(
+        AudioDeviceManager::normalize_endpoint_friendly_name("CABLE Input (VB-Audio Virtual Cable)"),
+        AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME
+    );
+
+    // Non-virtual physical devices must be preserved
+    assert_eq!(
+        AudioDeviceManager::normalize_endpoint_friendly_name("HyperX Cloud II Wireless"),
+        "HyperX Cloud II Wireless"
+    );
+    assert_eq!(
+        AudioDeviceManager::normalize_endpoint_friendly_name("Realtek High Definition Audio"),
+        "Realtek High Definition Audio"
+    );
+
+    // Empty strings get safe generic fallback
+    assert_eq!(
+        AudioDeviceManager::normalize_endpoint_friendly_name("   "),
+        "Audio Device"
+    );
+}
+
+#[test]
+fn test_rename_virtual_endpoint_enforces_attribution() {
+    let mgr = AudioDeviceManager::with_forced_synthetic_and_virtual(true, true);
+
+    // None defaults to full attributed name
+    let default_renamed = mgr.rename_virtual_endpoint(None).unwrap();
+    assert_eq!(default_renamed, AudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME);
+
+    // Custom name with attribution preserved
+    let with_attr = mgr
+        .rename_virtual_endpoint(Some("My Virtual Cable (powered by VB-Cable)"))
+        .unwrap();
+    assert_eq!(with_attr, "My Virtual Cable (powered by VB-Cable)");
+
+    // Custom name without attribution gets mandatory suffix appended
+    let without_attr = mgr
+        .rename_virtual_endpoint(Some("Studio Virtual Sink"))
+        .unwrap();
+    assert_eq!(without_attr, "Studio Virtual Sink (powered by VB-Cable)");
+}
+
+#[test]
+fn test_configure_virtual_endpoint_7_1_speaker_mask() {
+    assert_eq!(AudioDeviceManager::SPEAKER_MASK_7_1_SURROUND, 0x63F);
+
+    let mgr = AudioDeviceManager::with_forced_synthetic_and_virtual(true, true);
+
+    // Default configuration injects 0x63F (7.1 Surround)
+    let mask = mgr.configure_virtual_endpoint_7_1(None).unwrap();
+    assert_eq!(mask, 0x63F);
+
+    // Custom mask configuration
+    let stereo_mask = 0x3;
+    let custom_mask = mgr.configure_virtual_endpoint_7_1(Some(stereo_mask)).unwrap();
+    assert_eq!(custom_mask, stereo_mask);
+
+    // Query virtual endpoint speaker mask
+    let queried_mask = mgr.get_virtual_endpoint_speaker_mask().unwrap();
+    assert_eq!(queried_mask, 0x63F);
+}
+
+#[test]
+fn test_check_virtual_driver_presence() {
+    // When virtual device is included
+    let mgr_with = AudioDeviceManager::with_forced_synthetic_and_virtual(true, true);
+    let (present, info) = mgr_with.check_virtual_driver_presence().unwrap();
+    assert!(present);
+    assert!(info.is_some());
+    assert!(AudioDeviceManager::is_virtual_device_name(&info.unwrap().name));
+
+    // When virtual device is absent
+    let mgr_without = AudioDeviceManager::with_forced_synthetic_and_virtual(true, false);
+    let (not_present, none_info) = mgr_without.check_virtual_driver_presence().unwrap();
+    assert!(!not_present);
+    assert!(none_info.is_none());
+}

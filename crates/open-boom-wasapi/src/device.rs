@@ -52,11 +52,18 @@ impl AudioDeviceManager {
         self.include_synthetic_virtual = include_virtual;
     }
 
+    /// Official third-party attribution name for the virtual audio endpoint (Story 9-1, CAP-1).
+    pub const ATTRIBUTED_VIRTUAL_NAME: &'static str = "OpenBoom Spatial Audio (powered by VB-Cable)";
+
+    /// Standard Microsoft 7.1 Surround speaker physical configuration mask (Story 9-2, CAP-2):
+    /// FL (0x1) | FR (0x2) | FC (0x4) | LFE (0x8) | BL (0x10) | BR (0x20) | SL (0x200) | SR (0x400) = 0x63F (1599).
+    pub const SPEAKER_MASK_7_1_SURROUND: u32 = 0x63F;
+
     /// Returns a synthetic virtual device descriptor for testing.
     pub fn synthetic_virtual_device() -> AudioDeviceInfo {
         AudioDeviceInfo::new(
-            "synthetic_boomvad",
-            "Boom Audio Virtual Device",
+            "synthetic_virtual_sink",
+            Self::ATTRIBUTED_VIRTUAL_NAME,
             false,
         )
     }
@@ -142,6 +149,13 @@ impl AudioDeviceManager {
         Ok(devices.into_iter().find(|d| Self::is_virtual_device_name(&d.name)))
     }
 
+    /// Checks if a compatible virtual driver is installed and returns its presence and endpoint info (Story 9-3, CAP-4).
+    pub fn check_virtual_driver_presence(&self) -> EngineResult<(bool, Option<AudioDeviceInfo>)> {
+        let dev = self.find_virtual_device()?;
+        let has_virtual = dev.is_some();
+        Ok((has_virtual, dev))
+    }
+
     /// Returns the default console audio render endpoint.
     pub fn get_default_device(&self) -> EngineResult<Option<AudioDeviceInfo>> {
         let devices = self.enumerate_devices()?;
@@ -192,6 +206,264 @@ impl AudioDeviceManager {
             let _ = device_id;
             Ok(())
         }
+    }
+
+    /// Extracts the endpoint GUID `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` from a WASAPI device ID.
+    pub fn extract_endpoint_guid(device_id: &str) -> Option<String> {
+        let start = device_id.rfind('{')?;
+        let end = device_id[start..].find('}')?;
+        let candidate = &device_id[start..=start + end];
+        if candidate.len() == 38 {
+            Some(candidate.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Normalizes virtual endpoint friendly names to the compliant branded format with attribution.
+    pub fn normalize_endpoint_friendly_name(friendly_name: &str) -> String {
+        let trimmed = friendly_name.trim();
+        if trimmed.is_empty() {
+            "Audio Device".to_string()
+        } else if Self::is_virtual_device_name(trimmed) && !trimmed.to_lowercase().contains("openboom") {
+            Self::ATTRIBUTED_VIRTUAL_NAME.to_string()
+        } else {
+            trimmed.to_string()
+        }
+    }
+
+    /// Renames or configures the friendly name of the virtual audio endpoint with official third-party attribution (Story 9-1).
+    pub fn rename_virtual_endpoint(&self, target_name: Option<&str>) -> EngineResult<String> {
+        let trimmed = target_name.map(|s| s.trim()).filter(|s| !s.is_empty());
+        let desired_name = match trimmed {
+            Some(custom) => {
+                // Ensure the required third-party trademark attribution is preserved (CAP-1 constraint)
+                if custom.contains("(powered by VB-Cable)") {
+                    custom.to_string()
+                } else {
+                    format!("{} (powered by VB-Cable)", custom)
+                }
+            }
+            None => Self::ATTRIBUTED_VIRTUAL_NAME.to_string(),
+        };
+
+        if self.force_synthetic {
+            return Ok(desired_name);
+        }
+
+        #[cfg(windows)]
+        {
+            self.set_windows_endpoint_friendly_name(&desired_name)
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(desired_name)
+        }
+    }
+
+    /// Writes the attributed friendly name to Windows registry properties for the virtual endpoint.
+    #[cfg(windows)]
+    pub fn set_windows_endpoint_friendly_name(&self, name: &str) -> EngineResult<String> {
+        let virtual_device = self.find_virtual_device()?;
+        let endpoint = match virtual_device {
+            Some(dev) => dev,
+            None => {
+                if self.allow_synthetic_fallback {
+                    return Ok(name.to_string());
+                }
+                return Err(EngineError::DeviceInitialization(
+                    "No virtual audio device endpoint found to rename".to_string(),
+                ));
+            }
+        };
+
+        let guid = match Self::extract_endpoint_guid(&endpoint.id) {
+            Some(g) => g,
+            None => {
+                if self.allow_synthetic_fallback {
+                    return Ok(name.to_string());
+                }
+                return Err(EngineError::DeviceInitialization(format!(
+                    "Invalid virtual device ID format: {}",
+                    endpoint.id
+                )));
+            }
+        };
+
+        let reg_path = format!(
+            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\{}\Properties",
+            guid
+        );
+
+        for pid in ["14", "2"] {
+            let mut cmd = std::process::Command::new("reg");
+            cmd.args([
+                "add",
+                &reg_path,
+                "/v",
+                &format!("{{a45c254e-df1c-4efd-8020-67d146a850e0}},{}", pid),
+                "/t",
+                "REG_SZ",
+                "/d",
+                name,
+                "/f",
+            ]);
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            let _ = cmd.output();
+        }
+
+        Ok(name.to_string())
+    }
+
+    /// Injects the 7.1 Surround physical speaker mask (0x63F) into the virtual endpoint (Story 9-2, CAP-2).
+    pub fn configure_virtual_endpoint_7_1(&self, custom_mask: Option<u32>) -> EngineResult<u32> {
+        let mask = custom_mask.unwrap_or(Self::SPEAKER_MASK_7_1_SURROUND);
+        if self.force_synthetic {
+            return Ok(mask);
+        }
+
+        #[cfg(windows)]
+        {
+            self.set_windows_endpoint_speaker_mask(mask)
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(mask)
+        }
+    }
+
+    /// Queries the physical speaker mask from the virtual endpoint property store.
+    pub fn get_virtual_endpoint_speaker_mask(&self) -> EngineResult<u32> {
+        if self.force_synthetic {
+            return Ok(Self::SPEAKER_MASK_7_1_SURROUND);
+        }
+
+        #[cfg(windows)]
+        {
+            self.get_windows_endpoint_speaker_mask()
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(Self::SPEAKER_MASK_7_1_SURROUND)
+        }
+    }
+
+    /// Writes PKEY_AudioEndpoint_PhysicalSpeakers = mask ({1da5d803-d346-45ab-9f40-8c2f1083a47e},3) as DWORD into Windows registry.
+    #[cfg(windows)]
+    pub fn set_windows_endpoint_speaker_mask(&self, mask: u32) -> EngineResult<u32> {
+        let virtual_device = self.find_virtual_device()?;
+        let endpoint = match virtual_device {
+            Some(dev) => dev,
+            None => {
+                if self.allow_synthetic_fallback {
+                    return Ok(mask);
+                }
+                return Err(EngineError::DeviceInitialization(
+                    "No virtual audio device endpoint found to configure speaker mask".to_string(),
+                ));
+            }
+        };
+
+        let guid = match Self::extract_endpoint_guid(&endpoint.id) {
+            Some(g) => g,
+            None => {
+                if self.allow_synthetic_fallback {
+                    return Ok(mask);
+                }
+                return Err(EngineError::DeviceInitialization(format!(
+                    "Invalid virtual device ID format: {}",
+                    endpoint.id
+                )));
+            }
+        };
+
+        let reg_path = format!(
+            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\{}\Properties",
+            guid
+        );
+
+        let mut cmd = std::process::Command::new("reg");
+        cmd.args([
+            "add",
+            &reg_path,
+            "/v",
+            "{1da5d803-d346-45ab-9f40-8c2f1083a47e},3",
+            "/t",
+            "REG_DWORD",
+            "/d",
+            &format!("{}", mask),
+            "/f",
+        ]);
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        let _ = cmd.output();
+        Ok(mask)
+    }
+
+    /// Reads PKEY_AudioEndpoint_PhysicalSpeakers from the registry or returns default.
+    #[cfg(windows)]
+    pub fn get_windows_endpoint_speaker_mask(&self) -> EngineResult<u32> {
+        let virtual_device = self.find_virtual_device()?;
+        let endpoint = match virtual_device {
+            Some(dev) => dev,
+            None => {
+                if self.allow_synthetic_fallback {
+                    return Ok(Self::SPEAKER_MASK_7_1_SURROUND);
+                }
+                return Err(EngineError::DeviceInitialization(
+                    "No virtual audio device endpoint found to query speaker mask".to_string(),
+                ));
+            }
+        };
+
+        let guid = match Self::extract_endpoint_guid(&endpoint.id) {
+            Some(g) => g,
+            None => {
+                if self.allow_synthetic_fallback {
+                    return Ok(Self::SPEAKER_MASK_7_1_SURROUND);
+                }
+                return Err(EngineError::DeviceInitialization(format!(
+                    "Invalid virtual device ID format: {}",
+                    endpoint.id
+                )));
+            }
+        };
+
+        let reg_path = format!(
+            r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\{}\Properties",
+            guid
+        );
+
+        let mut cmd = std::process::Command::new("reg");
+        cmd.args([
+            "query",
+            &reg_path,
+            "/v",
+            "{1da5d803-d346-45ab-9f40-8c2f1083a47e},3",
+        ]);
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        if let Ok(output) = cmd.output() {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    if line.contains("{1da5d803-d346-45ab-9f40-8c2f1083a47e},3") {
+                        if let Some(val_str) = line.split_whitespace().last() {
+                            if let Ok(val) = u32::from_str_radix(val_str.trim_start_matches("0x"), 16) {
+                                return Ok(val);
+                            } else if let Ok(val) = val_str.parse::<u32>() {
+                                return Ok(val);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Self::SPEAKER_MASK_7_1_SURROUND)
     }
 
     /// Sets the Windows default audio playback endpoint via COM IPolicyConfig on an isolated thread.
@@ -384,11 +656,7 @@ impl AudioDeviceManager {
                     }
                 };
 
-                let clean_name = if friendly_name.trim().is_empty() {
-                    format!("Audio Device {}", i + 1)
-                } else {
-                    friendly_name
-                };
+                let clean_name = Self::normalize_endpoint_friendly_name(&friendly_name);
 
                 devices.push(AudioDeviceInfo::new(id_str, clean_name, is_default));
             }

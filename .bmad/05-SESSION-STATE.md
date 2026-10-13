@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 12/10/2026 - 18:55
-* **Sprint Ativa:** **Sprint 8 Concluída | Correção Crítica de Interação em Modais (ADR-045)**
-* **Tarefa Atual:** Corrigido bug de foco e salto de scroll em modais (`SettingsModal` e `AppMixerDrawer`) ao selecionar Modo B, garantindo estabilidade de interação ([ADR-045](file:///c:/Users/joaov/Documents/GitHub/open-boom/.bmad/04-DECISION-LOG.md)).
+* **Data/Hora:** 13/10/2026 - 09:42
+* **Sprint Ativa:** **Sprint 9 — Driver Virtual Open-Source, Purificação de Marca & Onboarding 7.1 (CONCLUÍDO)**
+* **Tarefa Atual:** Conclusão integral do **Épico 9** (Stories 9-1, 9-2, 9-3, 9-4) via `bmad-build-auto`. Renomeação de endpoint com atribuição `OpenBoom Spatial Audio (powered by VB-Cable)`, injeção automática de máscara de alto-falantes 7.1 (`0x63F`), expurgo total de marcas comerciais, bloqueio preventivo no boot com controles em cinza, modal de onboarding com instalação em 1 clique e resiliência a erros. Suíte com 226 testes Rust e 113 testes de UI passando (0 falhas). Pronto para compilação local, smoke test e commit.
 
 
 ## O que foi concluído nesta sessão
@@ -331,11 +331,26 @@
     - **Diagnóstico Registrado (`BUG-MODE-B-01`):** No Modo B (sem driver virtual isolando a saída do Windows), o usuário ouve a soma do áudio seco original enviado pelos aplicativos ao fone físico ($t = 0\text{ ms}$) com a reprodução processada pelo DSP do OpenBoom ($t \approx 25\text{ ms}$), gerando o efeito de som duplicado/distante.
     - **UI & Internacionalização (`SettingsModal.tsx`, `StatusBar.tsx`, `pt-BR.ts`, `en.ts`, `es.ts`):** Adicionados pills visuais `BETA` (`Modo B: BETA`) e textos explicativos claros nos 3 idiomas marcando o Modo B como experimental.
     - **Diretriz Estratégica (`T9.5`):** Pausado o ajuste fino do Modo B em favor da integração futura de um driver virtual de áudio open-source para Windows.
+49. **Execução e Conclusão do Workflow `/bmad-spec` para Onboarding de Driver Virtual & Automação 7.1 (`spec-virtual-driver-onboarding`):**
+    - Criado o contrato canonical do BMad em `_bmad-output/specs/spec-virtual-driver-onboarding/` com `.memlog.md`, `SPEC.md`, `technical-driver-integration.md` e `stories.yaml`.
+    - Formalizada a conformidade jurídica anti-processo: renomeação do endpoint no Windows com atribuição transparente `OpenBoom Spatial Audio (powered by VB-Cable)`.
+    - Formalizada a automação da máscara de alto-falantes 7.1 Surround via injeção de `PKEY_AudioEndpoint_PhysicalSpeakers = 0x63F` (`KSAUDIO_SPEAKER_7POINT1_SURROUND`).
+    - Formalizado o expurgo definitivo de marcas comerciais "Boom 3D / Boom Audio" da UI.
+    - Formalizado o bloqueio preventivo no boot: se não houver driver compatível, controles da UI ficam desativados/cinza (`opacity-40 pointer-events-none`) e modal de onboarding abre automaticamente.
+    - Formalizado o tratamento de erro em try/catch na instalação silenciosa com alerta explicativo, botão de tentar novamente e link direto para download manual (`https://vb-audio.com/Cable/`).
+    - Protocolo de teste final em máquina real estabelecido: desinstalação prévia de drivers VB-Audio do host e validação de ponta a ponta via OpenBoom.
+    - Decomposição em 4 histórias de usuário: `9-1` (UI Purge & Rename Attribution), `9-2` (Automated 7.1 Mask Injection), `9-3` (First-Run Gating & Controls Lockdown) e `9-4` (1-Click Silent Setup, Try/Catch & Manual Fallback).
+50. **Implementação, Verificação e Conclusão Integral do Épico 9 via `bmad-build-auto`:**
+    - **Story 9-1 (`spec-9-1`):** Purgação total de marcas "Boom 3D / Boom Audio" da UI e dicionários (`en`, `pt-BR`, `es`); normalização e renomeação do endpoint para `OpenBoom Spatial Audio (powered by VB-Cable)` via registro e comando Tauri `customize_virtual_device_endpoint`.
+    - **Story 9-2 (`spec-9-2`):** Injeção automatizada da máscara de alto-falantes 7.1 Surround `0x63F` (`PKEY_AudioEndpoint_PhysicalSpeakers`) no registro do Windows Core Audio e comando Tauri `configure_virtual_endpoint_speaker_mask`.
+    - **Story 9-3 (`spec-9-3`):** Detecção de driver no boot (`check_virtual_driver_status`), bloqueio e desativação visual dos controles interativos (`opacity-40 pointer-events-none select-none cursor-not-allowed`) e abertura automática do `<DriverOnboardingModal />`.
+    - **Story 9-4 (`spec-9-4`):** Rotina de 1 clique (`install_virtual_driver`), execução UAC silenciosa com `-i -h`, resiliência try/catch para cancelamento de UAC e falhas de rede, link de download manual oficial (`https://vb-audio.com/Cable/`), e injeção automática pós-instalação da marca e máscara 7.1.
+    - **Verificação Geral:** 226 testes Rust verdes em Cargo e 113 testes de UI em React/Vite verdes (0 falhas).
 
 ## O que está em andamento agora
-* **Todos os épicos planejados (Epics 1 a 8 + Story 1.9 / T8.2 / T8.3 / T8.4 / T8.5) estão 100% implementados, revisados e testados.**
-* **Próximo passo planejado:** `T9.5` — Integração de Driver Virtual de Áudio Open-Source como substituto definitivo do Modo B.
+* **Épico 9 Concluído com Sucesso.**
+* **Próxima Etapa:** Mandatory Final Verification Gate (compilação local do frontend, build do binário Tauri, smoke launch de `open-boom.exe`, git commit e git push).
 
 ## Bloqueios / Pendências
-* `BUG-MODE-B-01` registrado como comportamento conhecido do Modo B `[BETA]` (dupla reprodução com ~25ms de delay por ausência de sink virtual isolado), a ser superado pela adoção do driver virtual open-source (`T9.5`).
-* Sistema com 218 testes Cargo verdes e 106 testes UI verdes.
+* Nenhum bloqueio. Sistema estável com 226 testes Cargo verdes e 113 testes UI verdes.
+

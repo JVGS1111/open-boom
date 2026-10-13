@@ -1,0 +1,45 @@
+- id: "9-1"
+  title: Purge Brand References from UI and Endpoint Friendly Name Customization
+  description: >-
+    Purge all commercial Boom 3D / Boom Audio references from the frontend and
+    rename the virtual audio endpoint to OpenBoom Spatial Audio (powered by VB-Cable)
+    with explicit trademark attribution (CAP-1).
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Ensure full i18n parity in pt-BR, en, and es dictionaries. Do not break existing
+    virtual bridge heuristics in crates/open-boom-wasapi/src/device.rs.
+- id: "9-2"
+  title: Automated 7.1 Surround Physical Speaker Mask Injection
+  description: >-
+    Implement a Rust routine to write PKEY_AudioEndpoint_PhysicalSpeakers = 0x63F
+    into the virtual endpoint property store, activating 8-channel input without manual
+    Windows sound panel interaction (CAP-2).
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Use safe Windows Core Audio property store APIs with fallback to registry keys
+    under HKLM MMDevices Render. Verify 8-channel negotiation in stream pump.
+- id: "9-3"
+  title: First-Run Driver Detection Gating & Controls Lockdown
+  description: >-
+    Implement boot-time driver status check in backend and frontend. If no virtual driver
+    is available, disable/gray out main interactive controls and automatically display
+    the Driver Onboarding Modal (CAP-4).
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Check virtual devices on boot. Gray out Master Switch, Volume, 3D Dial, EQ and Rack
+    with opacity-40 and pointer-events-none. Show DriverOnboardingModal automatically.
+- id: "9-4"
+  title: 1-Click Silent Setup, Try/Catch Error Handling & Manual Fallback Link
+  description: >-
+    Implement background download and silent UAC execution (-i -h) wrapped in robust
+    try/catch error handling, displaying error alerts, manual download link and retry button
+    on failure, plus live host machine verification (CAP-3, CAP-5).
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Encapsulate Tauri install command in Result error handling. Catch UAC denial and network
+    drops. Render error banner with retry and external link to https://vb-audio.com/Cable/.
+    Conduct live smoke test on host machine.

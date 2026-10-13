@@ -20,6 +20,7 @@ interface TitlebarProps {
   isAppMixerOpen?: boolean;
   hasUpdate?: boolean;
   onOpenUpdates?: () => void;
+  disabled?: boolean;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
@@ -37,6 +38,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   isAppMixerOpen,
   hasUpdate = false,
   onOpenUpdates,
+  disabled = false,
 }) => {
   const { t } = useI18n();
 
@@ -97,7 +99,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       {/* Center Controls: Master Power, Device, Volume */}
       <div className="flex items-center gap-3 shrink-0">
         {/* Master Power Pill Switch (48px x 26px, UX-DR2, FR27) */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div
+          className={`flex items-center gap-2 shrink-0 transition-opacity ${
+            disabled ? "opacity-40 pointer-events-none select-none cursor-not-allowed" : ""
+          }`}
+          title={disabled ? t.driverOnboarding.gatingTooltip : undefined}
+        >
           <MasterPowerSwitch
             enabled={masterPower}
             onToggle={onTogglePower}
@@ -123,7 +130,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         <div className="h-4 w-px bg-border-subtle shrink-0" />
 
         {/* Master Volume & Boost Slider (0%–150%, UX-DR3) */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div
+          className={`flex items-center gap-2 shrink-0 transition-opacity ${
+            disabled ? "opacity-40 pointer-events-none select-none cursor-not-allowed" : ""
+          }`}
+          title={disabled ? t.driverOnboarding.gatingTooltip : undefined}
+        >
           <button
             type="button"
             onClick={onToggleMute}

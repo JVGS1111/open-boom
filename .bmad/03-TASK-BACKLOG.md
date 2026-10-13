@@ -74,12 +74,37 @@
 
 ---
 
-### Sprint 9 / Épico Pro: Driver Virtual Open-Source & Concepção do "Modo Gamer Pro"
+### Sprint 9 / Épico Pro: Driver Virtual Open-Source, Purificação de Marca & Concepção do "Modo Gamer Pro"
+- [X] **T9.6**: Expurgar Referências "Boom 3D / Boom Audio" da UI e Renomear Endpoint para `OpenBoom Spatial Audio (powered by VB-Cable)` (Story 9-1 / ADR-047 / ADR-052).
+- [X] **T9.7**: Automação da Máscara de Alto-Falantes Físicos 7.1 Surround no Windows (`PKEY_AudioEndpoint_PhysicalSpeakers = 0x63F`) (Story 9-2 / ADR-047 / ADR-052).
+- [X] **T9.8**: Bloqueio Preventivo no Boot & Modal de Onboarding (Gating com controles cinza/desativados se não houver driver) (Story 9-3 / ADR-052).
+- [X] **T9.9**: Instalação Silenciosa de 1 Clique, Resiliência Try/Catch, Link Manual de Fallback & Smoke Test na Máquina Host (Story 9-4 / ADR-052).
 - [ ] **T9.1**: Estudo de Viabilidade e Custos de Driver Virtual Próprio (Mapeamento do Windows Driver Kit SYSVAD, requisitos de assinatura Microsoft WHQL, token de hardware EV ~US$ 500/ano, e alternativa com drivers virtuais livres).
-- [ ] **T9.5**: Integração de Driver Virtual de Áudio Open-Source como Substituto Definitivo do Modo B e Desvinculação do `boomvad.sys` (Avaliar e integrar driver virtual open-source de baixa latência para Windows — ex: Virtual Audio Wire / Scream / SYSVAD open-source — eliminando o efeito de dupla reprodução do Modo B sem depender do driver proprietário do Boom 3D).
 - [ ] **T9.2**: Pipeline Acústico de Engenharia Reversa de Áudios de Jogos via REA (Metodologia de laboratório com espectrogramas FFT para identificar assinaturas espectrais de passos, recargas e tiros em CS2, Warzone, BF6 sem violar copyright de assets).
 - [ ] **T9.3**: Modelagem do DSP "Gamer Advantage" (Estágio de Peak Clarity EQ em tempo real + Compressor Dinâmico DRC para amplificar sons baixos/passos e atenuar tiros ensurdecedores).
 - [ ] **T9.4**: Estratégia de Produto Open-Core & Proteção Jurídica (Separação entre OpenBoom Core MIT/Apache e Módulo Pro comercial, compliance anticheat zero-hook, e blindagem de marcas registradas).
+
+---
+
+### Sprint 10 / Épico Comercial: Identidade Visual Gamer Red, Landing Page & Monetização Global em USD
+- [ ] **T10.1**: Identidade Visual Gamer Bipolar (Design System Sally / `bmad-ux` com paleta Crimson Red `#ef4444` / Dark Carbon `#0d0e12`, glow agressivo e modo dark gamer contrastando com o ciano audiófilo da versão open).
+- [ ] **T10.2**: Pesquisa de Mercado & Precificação Global em USD (Análise Mary / `bmad-agent-analyst` de competidores como SteelSeries Sonar, Dolby Atmos US$ 14.99 e Sound BlasterX, definindo modelo de pagamento único vs. assinatura).
+- [ ] **T10.3**: Arquitetura da Landing Page de Alta Conversão (Site moderno responsivo, demonstrações de áudio A/B interativas no browser com passos amplificados em CS2/Warzone, e checkout internacional via Stripe/Lemon Squeezy em USD).
+- [ ] **T10.4**: Estratégia de Aquisição & Marketing de Criadores (Mapeamento de canais de criadores de conteúdo de FPS tático, clips de "ouvir passos primeiro", e campanhas de lançamento).
+- [ ] **T10.5**: Mecanismo de Licenciamento Zero-Backend & Validação Offline (Arquitetura de verificação com chaves assimétricas Ed25519 em Rust sem necessidade de API/servidor dedicado, ou integração com chaves automáticas via MoR Gumroad/Lemon Squeezy - ADR-049).
+- [ ] **T10.6**: Mecanismo de Teste Grátis (Free Trial 7-14 Dias) sem Conta/Login (Armazenamento de data de expiração assinada localmente com timestamp protegido no registro para permitir teste imediato pelo gamer sem atrito - ADR-049).
+- [ ] **T10.7**: Filtro de Sanidade e Avaliação de Escopo MVP (Separar o que é essencial para o lançamento do que é "overkill", postergar abertura de CNPJ usando MoR em Pessoa Física e priorizar o fluxo mais enxuto possível - ADR-049).
+- [ ] **T10.8**: Estudo de Naming da Aplicação Paga & Redesenho do Logo Minimalista (Brainstorm entre opções como *Footsteps 3D*, *GamerAudio*, etc. e conceito visual de ondas sonoras finas com esfera de foco central - ADR-049).
+- [ ] **T10.9**: Posicionamento de Marketing "Zero-Ban Guarantee & 0% FPS Drop" (Criar copy, badges de conformidade com anticheat e provas de benchmarking para passar confiança máxima aos jogadores de CS2, Valorant e Warzone - ADR-050).
+- [ ] **T10.10**: Janela de Arbitragem com Micro-Influenciadores Pós-Cassino (Mapear pequenos streamers e criadores de FPS no Brasil órfãos de patrocínio de apostas/bets para fechar parcerias de divulgação por custo baixo ou modelo de afiliado/comissão - ADR-051).
+- [ ] **T10.11**: Formatos de Vídeos Virais A/B no TikTok e Shorts (Estruturar roteiros de alta retenção "Com vs. Sem OpenBoom" destacando passos ocultos no CS2/Warzone/Valorant que estouram no fone - ADR-051).
+- [ ] **T10.12**: Pipeline de Criadores Sintéticos com IA / UGC Faceless (Explorar ferramentas como Higgsfield, Kling e ElevenLabs para gerar criadores e narrações ultra-realistas com gameplay de fundo, eliminando a necessidade de expor imagem própria - ADR-051).
+
+---
+
+### Sprint 11: Roadmap v1.5 — Performance Ultra-Thin & Avaliação de Substituição do React
+- [ ] **T11.1**: Auditoria de Consumo de Recursos (Profiling de memória RAM do WebView2 vs. Engine Rust, identificando oportunidades de reduzir a pegada de background para < 20 MB).
+- [ ] **T11.2**: Estudo de Viabilidade para Des-Reactização da Interface (Avaliar migração da camada de apresentação para HTML/JS Vanilla sem frameworks ou UI nativa Rust via Slint/Iced/Egui acelerada por hardware, eliminando dependência de browser engines pesadas - ADR-050).
 
 
 

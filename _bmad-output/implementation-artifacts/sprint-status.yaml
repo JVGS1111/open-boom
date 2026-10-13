@@ -90,3 +90,10 @@ development_status:
   epic-8: done
   8-1-in-app-auto-update-mechanism: done
   epic-8-retrospective: optional
+
+  epic-9: done
+  9-1-purge-brand-references-endpoint-friendly-name-attribution: done
+  9-2-automated-7-1-surround-speaker-mask-injection: done
+  9-3-first-run-driver-detection-gating-controls-lockdown: done
+  9-4-one-click-silent-setup-try-catch-manual-fallback: done
+  epic-9-retrospective: optional

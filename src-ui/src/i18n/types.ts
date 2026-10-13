@@ -203,4 +203,27 @@ export interface TranslationDictionary {
     bridgeModeLoopbackWarningDesc: string;
     bridgeModeRestartNotice: string;
   };
+  driverOnboarding: {
+    modalTitle: string;
+    modalSubtitle: string;
+    description: string;
+    whyRequiredTitle: string;
+    whyRequiredDesc: string;
+    featureSurround: string;
+    featureNoEcho: string;
+    featureLowLatency: string;
+    installButton: string;
+    installingButton: string;
+    manualDownloadLink: string;
+    manualDownloadDesc: string;
+    retryButton: string;
+    dismissLater: string;
+    gatingBannerMessage: string;
+    gatingTooltip: string;
+    openSetupButton: string;
+    errorTitle: string;
+    uacDeniedError: string;
+    networkError: string;
+    genericError: string;
+  };
 }

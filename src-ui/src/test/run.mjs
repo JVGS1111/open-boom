@@ -65,6 +65,11 @@ const testFiles = [
     entry: path.join(__dirname, "Updater.test.tsx"),
     runnerName: "runUpdaterTests",
   },
+  {
+    name: "Driver Onboarding Modal & Audio Controls Gating Test Suite",
+    entry: path.join(__dirname, "DriverOnboarding.test.tsx"),
+    runnerName: "runDriverOnboardingTests",
+  },
 ];
 
 async function main() {

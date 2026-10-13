@@ -265,7 +265,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </div>
 
-            {/* Section 2.5: Audio Capture Bridge Mode (Driver Boom Audio vs. Loopback Emulation) */}
+            {/* Section 2.5: Audio Capture Bridge Mode (7.1 Surround Virtual Driver vs. Loopback Emulation) */}
             <div className="bg-surface-base/80 border border-border-subtle rounded-lg p-3 flex flex-col gap-2.5">
               <div className="flex flex-col gap-0.5">
                 <div className="flex items-center justify-between gap-2">

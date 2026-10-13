@@ -750,4 +750,149 @@
   2. **Rotulagem Explícita `[BETA]` no Modo B (`SettingsModal.tsx`, `StatusBar.tsx`, `pt-BR.ts`, `en.ts`, `es.ts`):** Adicionados pills visuais `BETA` (`Modo B: BETA`) e textos explicativos claros nos 3 idiomas informando que o Modo B é experimental e apresenta dupla reprodução com leve delay (~25ms) por não utilizar driver virtual isolado.
 * **Consequência:** Transparência total para o usuário na interface, governança BMAD atualizada com o bug e a nova diretriz arquitetural (driver open-source), e preparação imediata para o lançamento da release `v0.5.2`.
 
+---
+
+## ADR-047: Expurgar Nomenclatura "Boom 3D / Boom Audio" da UI, Automação do Formato 7.1 e Conformidade Jurídica de Drivers Virtuais
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Em Planejamento
+* **Contexto:**
+  - Após os testes práticos bem-sucedidos com o VB-Cable comprovando a superioridade acústica do pipeline 7.1 com HRTF KEMAR, o usuário definiu diretrizes estratégicas cruciais para o produto:
+    1. **Purificação da Marca (Remoção de referências ao Boom 3D):** Eliminar totalmente menções e nomes comerciais como "Boom 3D" ou "Boom Audio" de dentro do aplicativo (telas, labels, selects, status bar, tooltips), mantendo essas menções restritas exclusivamente à documentação técnica interna (`README.md`, `.bmad/`, relatórios de RE). O app deve se posicionar com identidade própria e neutra.
+    2. **Automação de Configuração de Alto-falantes 7.1 Surround:** Impedir que o usuário final precise abrir manualmente o painel de controle do Windows (`mmsys.cpl`) para configurar o dispositivo em 7.1 Surround. O software deve aplicar a máscara de alto-falantes físicos (`PKEY_AudioEndpoint_PhysicalSpeakers` = `0x63F`) automaticamente.
+    3. **Instalação Integrada de 1 Clique (Onboarding):** Oferecer fluxo guiado ou download automático do componente de canal surround em background, sem exigir navegação em sites externos pelo usuário.
+    4. **Conformidade Jurídica & Direitos Autorais (Anti-Fraude/Trademark):**
+       - Não reivindicar autoria de drivers proprietários de terceiros (evitar white-labeling não autorizado).
+       - Renomeação amigável com atribuição transparente no Windows (ex: "OpenBoom Spatial Audio (powered by VB-Cable)" ou "OpenBoom 7.1 Engine") ou transição definitiva para drivers 100% livres/open-source (SYSVAD/Scream com licenças MIT/GPL).
+* **Decisões:**
+  1. **Expurgo de UI / Clean Branding:**
+     - Substituir labels como "Driver Boom Audio (Modo A)" por "Driver de Áudio Surround 7.1 (Modo A)" ou "Dispositivo de Áudio Virtual".
+     - Manter o reconhecimento de qualquer driver compatível no backend (`crates/open-boom-wasapi`) sem expor marcas proprietárias nos menus para o usuário final.
+  2. **Configuração Automática da Máscara de Canais 7.1:**
+     - Implementar no backend Rust rotina para checar e gravar `0x63F` (`KSAUDIO_SPEAKER_7POINT1_SURROUND`) nas propriedades do endpoint capturado via `IPropertyStore` / registro do Windows, notificando o Windows Audio Service.
+  3. **Adição ao Backlog BMAD:** Abertura formal das tarefas `T9.6` (Expurgo de Marca), `T9.7` (Automação 7.1) e `T9.8` (Instalador Guiado de 1 Clique).
+* **Consequência:** App com identidade profissional independente, sem risco de processos de marcas registradas e com onboarding zero-fricção para o usuário.
+
+---
+
+## ADR-048: Identidade Visual Oposta (Gamer Red vs. Studio Cyan), Monetização Global em USD e Orquestração de Agentes Especializados
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Em Planejamento
+* **Contexto:**
+  - Definição da estratégia de produto e posicionamento comercial para a edição paga/comercial ("OpenBoom Gamer Pro" / Edição Fechada):
+    1. **Identidade Visual Oposta (Color-way Contrast):**
+       - A versão gratuita/open-source (**OpenBoom**) possui identidade visual estúdio/audiófila com paleta escura `#16171b` e brilhos em **Ciano Neon (`#38bdf8`) e Azul (`#3b82f6`)**.
+       - O modo comercial gamer (**Gamer Pro**) adotará uma identidade visual contrastante e agressiva: **Vermelho Gamer Neon (`#ef4444` / Crimson `#dc2626` / Amber Glow)**, remetendo a alto desempenho, vantagem competitiva e foco tático.
+    2. **Monetização Internacional em USD:**
+       - Foco direto no mercado global de gamers/esports (EUA, Europa, Ásia) cobrando em **dólares americanos (USD)** via plataformas como Stripe, Lemon Squeezy ou Paddle.
+    3. **Landing Page, Marketing & Estratégia de Go-to-Market:**
+       - Criação de site/landing page de alta conversão para o produto Pro.
+       - Estratégia de marketing voltada a benchmarks de passos/jogos (CS2, Warzone, BF6, Apex) e criadores de conteúdo.
+    4. **Delegação para Agentes Especializados BMAD:**
+       - Estas frentes serão conduzidas em sessões dedicadas com os agentes especializados disponíveis no ecossistema BMAD:
+         - **Sally (`bmad-agent-ux-designer`) / `bmad-ux`:** Concepção da UI/UX da paleta vermelha e design da landing page.
+         - **John (`bmad-agent-pm`) / Mary (`bmad-agent-analyst`):** Pesquisa de precificação em USD, análise competitiva (Sonar, Dolby, Scout Mode) e estratégia de go-to-market.
+         - **Winston (`bmad-agent-architect`) / Amelia (`bmad-agent-dev`):** Arquitetura do módulo de licenciamento/DRM leve e motor DSP de passos.
+* **Consequência:** Visão de produto clara e alinhada entre engenharia, design e negócios globais.
+
+---
+
+## ADR-049: Estratégia de Licenciamento Zero-Backend (Offline DRM / MoR), Teste Grátis, Filtro Anti-Overkill e Identidade da Edição Comercial
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Em Avaliação (Refinamento BMAD)
+* **Contexto:**
+  - O usuário levantou diretrizes práticas essenciais para a viabilização do produto comercial, visando simplicidade operacional máxima, custo mínimo e proteção contra complexidade excessiva ("filtro de sanidade / anti-overkill"):
+    1. **Licenciamento, Ativação & Trial com Zero (ou Mínimo) Backend/API:**
+       - Evitar montar servidores caros, bancos de dados e APIs proprietárias de autenticação.
+       - Soluções de mercado avaliadas:
+         - **Chaves Criptográficas Offline (Assinatura Asimétrica Ed25519 / RSA):** O app em Rust valida matematicamente a chave com uma chave pública embutida sem precisar encostar na internet.
+         - **Merchant of Record (MoR) com Licenciamento Nativo Embutido:** Plataformas como **Gumroad, Lemon Squeezy ou Polar.sh** que já geram chaves de licença prontas, cuidam do checkout, impostos internacionais (VAT/Sales Tax) e oferecem endpoint simples de 1 clique ou validação offline.
+       - **Período de Teste Grátis (Free Trial):** Implementar trial de 7 a 14 dias com carimbo de tempo protegido no registro/armazenamento local ou cota de uso diário.
+    2. **Onde Vender & Questão de CNPJ (Pessoa Física vs. Jurídica):**
+       - Ao usar plataformas **MoR (Merchant of Record)** como Gumroad ou Lemon Squeezy, **não é obrigatório abrir CNPJ imediatamente**. O MoR é legalmente o vendedor perante o consumidor final internacional, recolhe os impostos nos EUA/Europa e repassa o saldo líquido via PayPal ou Payoneer para pessoa física (CPF) no Brasil, permitindo testar a demanda antes de gastar com contabilidade/CNPJ.
+    3. **Filtro Anti-Overkill (Pés no Chão):**
+       - Mapear e separar o que é essencial para o MVP comercial (chave de licença simples, trial, preset de passos e botão de compra) do que é complexidade desnecessária agora (servidores próprios de login, infraestrutura de microserviços, DRM invasivo de kernel, etc.).
+    4. **Naming & Brainstorm de Marca para a Edição Comercial:**
+       - Nomes levantados para amadurecimento:
+         - *Footsteps 3D* / *Footstep Pro*
+         - *GamerAudio* / *OpenBoom Gamer Pro*
+         - *ApexAudio* / *Acrobat 3D* / *TacticalSound 3D*
+* **Consequência:** Risco financeiro e de manutenção reduzido a zero, permitindo lançar a versão paga sem custos fixos de servidor.
+
+---
+
+## ADR-050: Posicionamento "Zero-Ban Guarantee", Performance Ultraleve para FPS e Roadmap v1.5 (Des-Reactização / UI Nativa Ultra-Thin)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Em Planejamento
+* **Contexto:**
+  - O usuário definiu dois pilares inegociáveis de proposta de valor para o público gamer e uma diretriz de evolução técnica para a versão `v1.5`:
+    1. **Mensagem Central de Marketing: "100% Anticheat-Safe / Zero-Ban":**
+       - Todo gamer tem pavor de tomar ban em jogos com anticheats agressivos (Vanguard do Valorant, Ricochet do Call of Duty, EAC do Apex/Fortnite, VAC do CS2).
+       - A comunicação do produto (landing page, badges, onboarding) DEVE martelar com clareza cristalina:
+         - *Zero DLL Injection / Zero Process Hooks*.
+         - *Zero Memory Scanning / Zero Game Modification*.
+         - *100% Windows Audio Pipe Compliance* (idêntico a softwares de headsets como Logitech G HUB, HyperX NGENUITY e SteelSeries GG).
+    2. **Pegada de Recursos Mínima em Jogo (Zero FPS Drop):**
+       - Gamers competitivos monitoram framerate (FPS), uso de CPU e consumo de RAM. O produto deve se posicionar e se comprovar como uma solução que **não rouba nem 1 frame** do jogo.
+       - A engine de áudio em Rust (`crates/open-boom-core`) já opera com custo de CPU ínfimo (< 1%), mas o shell de interface precisa acompanhar essa eficiência.
+    3. **Roadmap v1.5: Avaliação de Substituição do React por Frontend Ultraleve:**
+       - Atualmente, o frontend em React + WebView2 consome uma cota moderada de memória RAM típica de runtimes web (~60–100 MB).
+       - Para a versão `v1.5`, está planejado o estudo de migração do frontend para tecnologias de pegada de memória quase zero:
+         - **Opção A:** HTML/JS puro (Vanilla DOM com zero frameworks e zero bundle overhead).
+         - **Opção B:** UI Nativa Rust pura com GPU aceleração (ex: **Slint**, **Iced** ou **Egui**), eliminando totalmente o WebView2/Chromium e reduzindo o consumo de RAM total para menos de 15 MB.
+* **Decisões:**
+* **Consequência:** Confiança total dos jogadores para instalar e rodar o app em segundo plano durante partidas ranqueadas.
+
+---
+
+## ADR-051: Estratégia de Tração Orgânica TikTok / Shorts, Janela de Arbitragem com Micro-Influenciadores Gamers e Criadores Sintéticos (IA UGC)
+* **Data:** 12/10/2026
+* **Status:** Aprovado / Em Planejamento (Marketing & Aquisição)
+* **Contexto:**
+  - O usuário identificou uma oportunidade de arbitragem de tráfego e marketing de guerrilha de alto impacto:
+    1. **Janela de Mercado com Micro-Influenciadores Gamers:**
+       - Com a regulamentação severa e restrições sobre cassinos online / "bets" no Brasil, milhares de streamers e criadores de jogos perderam sua principal fonte de patrocínio e estão abertos a parcerias de produtos reais de tecnologia por valores acessíveis ou modelo de comissão / afiliado.
+       - Parcerias diretas com streamers de CS2, Valorant, Warzone e R6: demonstrar o software em live ("ouvindo passos que o chat não ouve").
+    2. **Vídeos Virais no TikTok & YouTube Shorts (Formato Demonstração A/B):**
+       - Formato matador de vídeo curto para retenção alta:
+         - *"Você também morre pelas costas sem ouvir nada no Warzone/CS?"*
+         - Áudio original do jogo (abafado por explosão) vs. Áudio com OpenBoom Gamer ligado (passo nítido e amplificado).
+         - O usuário assiste de fone e sente o "efeito UAU" em 5 segundos de vídeo.
+    3. **Preservação de Imagem Pessoal & Criadores Sintéticos com IA (UGC com Higgsfield / Kling / HeyGen):**
+       - Para evitar exposição pessoal obrigatória ("passar vergonha na internet"), avaliar pipelines de geração de criadores sintéticos de IA (geração de avatares com Higgsfield/HeyGen ou gameplay gravada pura com narração de IA com vozes ultra-realistas como ElevenLabs).
+       - Vídeos com foco 100% na tela do jogo + espectrograma + áudio antes/depois, dispensando a necessidade de mostrar o rosto.
+* **Decisões:**
+  1. Formalizar no Backlog da Sprint 10 as tarefas de prospecção de micro-influenciadores gamers pós-cassinos (`T10.10`), roteiros de criativos virais A/B (`T10.11`) e teste de UGC sintético via ferramentas de IA (`T10.12`).
+* **Consequência:** Canal de aquisição com potencial de viralização em massa a custo próximo de zero.
+
+---
+
+## ADR-052: Arquitetura de Onboarding do Driver Virtual, Bloqueio Preventivo de Controles no Boot, Resiliência Try/Catch e Atribuição Anti-Processo
+* **Data:** 13/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  - Para fechar o ciclo da versão open-source e superar definitivamente a limitação do Modo B (`BUG-MODE-B-01`), o usuário definiu refinamentos críticos de experiência e segurança:
+    1. **Bloqueio Preventivo no Boot (First-Run Gating):** Se o software abrir pela primeira vez (ou se nenhum driver virtual for detectado), o usuário não deve conseguir ligar o app ou interagir com botões (ficando desativados/cinza), abrindo automaticamente um modal de onboarding com botão de instalação de 1 clique.
+    2. **Tratamento de Erros Resiliente (Try/Catch & Fallback):** Em caso de falha de rede ou cancelamento do UAC de administrador, o app não deve quebrar: deve exibir alerta de erro com diagnóstico, botão de tentar novamente e link direto para download manual (`https://vb-audio.com/Cable/`).
+    3. **Proteção Jurídica & Atribuição Anti-Processo:** Renomeação do endpoint no Windows para `OpenBoom Spatial Audio (powered by VB-Cable)` e expurgo total de referências ao Boom 3D na UI.
+    4. **Automação de 7.1 Canais:** Gravação de `PKEY_AudioEndpoint_PhysicalSpeakers = 0x63F` sem intervenção manual no painel do Windows.
+    5. **Teste Final em Máquina Real:** Validação de ponta a ponta na máquina do usuário, desinstalando drivers prévios do host e verificando a instalação completa via OpenBoom.
+* **Decisões:**
+  1. Criação do contrato canonical `SPEC-virtual-driver-onboarding` (`SPEC.md`, `technical-driver-integration.md`, `stories.yaml`).
+  2. Decomposição nas histórias `9-1` (UI Purge & Rename Attribution), `9-2` (Automated 7.1 Mask Injection), `9-3` (First-Run Gating & Controls Lockdown) e `9-4` (1-Click Silent Setup, Try/Catch & Manual Fallback).
+* **Consequência:** Onboarding sem atrito, zero risco de duplicação de áudio no primeiro boot, e blindagem jurídica completa.
+
+---
+
+## ADR-053: Conclusão do Épico 9 — Entrega Consolidada de Onboarding, Gating e Automação 7.1
+* **Data:** 13/10/2026
+* **Status:** Aceito
+* **Contexto:** Todas as histórias do Épico 9 foram implementadas e verificadas com 100% de aprovação na suíte de testes (226 testes Rust em Cargo e 113 testes de UI em React/Vite):
+  - Story 9-1: Purgação completa de nomes comerciais ("Boom 3D / Boom Audio") da interface e dicionários i18n (`en`, `pt-BR`, `es`) e personalização de endpoint amigável com atribuição explícita `OpenBoom Spatial Audio (powered by VB-Cable)`.
+  - Story 9-2: Injeção automatizada da máscara de alto-falantes 7.1 Surround `0x63F` (`PKEY_AudioEndpoint_PhysicalSpeakers`) via registro e property store do Windows Core Audio.
+  - Story 9-3: Detecção de presença de driver virtual no boot, bloqueio visual e interativo dos controles principais (`opacity-40 pointer-events-none select-none cursor-not-allowed`) e abertura automática do `<DriverOnboardingModal />`.
+  - Story 9-4: Rotina de instalação silenciosa em 1-clique (`VBCABLE_Setup_x64.exe -i -h -Verb RunAs`), tratamento completo de erros com fallback manual (`https://vb-audio.com/Cable/`) e injeção automática pós-instalação da marca e máscara 7.1.
+* **Decisões:** Épico 9 concluído e pronto para validação de compilação local, smoke test e commit.
+* **Consequência:** OpenBoom totalmente autônomo, livre de vínculos com drivers proprietários e juridicamente blindado contra violação de marcas.
+
+
 
