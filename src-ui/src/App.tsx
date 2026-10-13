@@ -244,6 +244,14 @@ export const App: React.FC = () => {
       setIsDriverMissing(false);
       setIsOnboardingModalOpen(false);
       setNotification(t.driverOnboarding.featureSurround);
+      try {
+        const enumerated = await invoke<AudioDeviceInfo[]>("get_audio_devices");
+        if (enumerated && enumerated.length > 0) {
+          setDevices(enumerated);
+        }
+      } catch {
+        // Fallback
+      }
     } catch (err: unknown) {
       const errStr = typeof err === "string" ? err : (err as any)?.message || "";
       if (errStr.includes("UAC_DENIED")) {

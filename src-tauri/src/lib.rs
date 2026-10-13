@@ -627,14 +627,35 @@ async fn install_virtual_driver(
                 $zipPath = Join-Path $tempDir "VBCABLE_Driver_Pack43.zip"
                 $exePath = Join-Path $tempDir "VBCABLE_Setup_x64.exe"
 
-                if (-not (Test-Path $exePath)) {
-                    $url = "https://download.vb-audio.com/Download_bizarre/VBCABLE_Driver_Pack43.zip"
-                    try {
-                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                        Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -TimeoutSec 30
-                        Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
-                    } catch {
-                        [Console]::Error.WriteLine("NETWORK_ERROR: " + $_.Exception.Message)
+                if (-not (Test-Path $exePath) -or ((Get-Item $exePath).Length -lt 100000)) {
+                    $urls = @(
+                        "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip",
+                        "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
+                    )
+                    $downloaded = $false
+                    foreach ($url in $urls) {
+                        try {
+                            if (Test-Path $zipPath) { Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue }
+                            if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+                                & curl.exe -s -L -A "Mozilla/5.0" $url -o $zipPath
+                            } else {
+                                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                                Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -UserAgent "Mozilla/5.0" -TimeoutSec 45
+                            }
+                            if ((Test-Path $zipPath) -and ((Get-Item $zipPath).Length -gt 100000)) {
+                                Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+                                if (Test-Path $exePath) {
+                                    $downloaded = $true
+                                    break
+                                }
+                            }
+                        } catch {
+                            # Fallback to next mirror/url
+                        }
+                    }
+
+                    if (-not $downloaded) {
+                        [Console]::Error.WriteLine("NETWORK_ERROR: Could not download driver installer. Please verify your internet connection.")
                         exit 2
                     }
                 }
@@ -646,7 +667,7 @@ async fn install_virtual_driver(
 
                 try {
                     $proc = Start-Process -FilePath $exePath -ArgumentList "-i", "-h" -Verb RunAs -PassThru -Wait
-                    if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne $null) {
+                    if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010 -and $proc.ExitCode -ne $null) {
                         [Console]::Error.WriteLine("INSTALLER_ERROR: ExitCode " + $proc.ExitCode)
                         exit 4
                     }
@@ -679,9 +700,21 @@ async fn install_virtual_driver(
                 }
             }
 
+            // Allow Windows Audio service a brief moment to enumerate and bind the new virtual endpoint
+            let mut virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            for _ in 0..10 {
+                if virtual_dev.is_some() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            }
+
             let _ = dev_mgr.rename_virtual_endpoint(None);
             let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
-            let virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            if virtual_dev.is_none() {
+                virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            }
 
             Ok(DriverInstallResult {
                 success: true,
@@ -2201,11 +2234,15 @@ mod tests {
 
     #[test]
     fn test_check_virtual_driver_status_command() {
-        let state = AppState::new();
-        let dev_mgr = AudioDeviceManager::with_synthetic_fallback(!state.auto_route);
-        let (has_virtual, info) = dev_mgr.check_virtual_driver_presence().unwrap();
+        let mgr_with = AudioDeviceManager::with_forced_synthetic_and_virtual(true, true);
+        let (has_virtual, info) = mgr_with.check_virtual_driver_presence().unwrap();
         assert!(has_virtual);
         assert!(info.is_some());
+
+        let mgr_without = AudioDeviceManager::with_forced_synthetic_and_virtual(true, false);
+        let (has_virtual_none, info_none) = mgr_without.check_virtual_driver_presence().unwrap();
+        assert!(!has_virtual_none);
+        assert!(info_none.is_none());
     }
 
     #[test]
