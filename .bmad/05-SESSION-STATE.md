@@ -374,3 +374,8 @@
       - Adicionados testes de regressão em `src-ui/src/test/I18n.test.tsx` cobrindo locales não suportados.
     - **Verificação Geral:** 226 testes Rust verdes, 113 testes UI verdes, build do frontend e do binário Rust compilados sem erros, smoke launch do executável validado em tempo real com processo saudável.
 
+53. **Extensão do Épico 9: Stories 9-5 (Aviso de Privacidade sobre Microfone) e 9-6 (Modo Inicial Desarmado/Standby) (ADR-056):**
+    - **Registro de Novas Histórias em `stories.yaml`, `sprint-status.yaml` e `03-TASK-BACKLOG.md`:**
+      - **Story 9-5 (`T9.11`):** *Aviso de Privacidade e Esclarecimento de Acesso a Microfone / Interceptação de Som*: Mensagem informativa clara em `DriverOnboardingModal.tsx`, `SettingsModal.tsx` e dicionários i18n explicando que o alerta de "Acesso ao Microfone" do Windows/antivírus decorre do agrupamento de APIs de loopback sob a permissão genérica de microfone, garantindo que o OpenBoom processa estritamente o áudio do PC e nunca grava a voz do usuário.
+      - **Story 9-6 (`T9.12`):** *Modo Inicial Desarmado (Standby / Nenhum Modo Selecionado) no Boot Sem Driver*: Impede que o app caia automaticamente no Modo B (Loopback Fallback com duplicação acústica `BUG-MODE-B-01`) no primeiro boot sem driver. O app inicializa desarmado com o áudio do Windows intocado e o motor desligado até que o driver seja instalado ou o usuário ative conscientemente o Modo B nas configurações.
+      - **Backlog Pós-1.0 (`T11.3`):** Investigação de Nomenclatura PnP de Dispositivo Virtual no Windows Shell movida para a Sprint 11 sem bloquear a release 1.0.

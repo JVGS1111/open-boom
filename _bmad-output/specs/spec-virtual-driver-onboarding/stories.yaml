@@ -43,3 +43,27 @@
     Encapsulate Tauri install command in Result error handling. Catch UAC denial and network
     drops. Render error banner with retry and external link to https://vb-audio.com/Cable/.
     Conduct live smoke test on host machine.
+- id: "9-5"
+  title: Privacy Notice & Audio Interception Microphone Permission Clarification
+  description: >-
+    Add clear, professional privacy and security disclaimers in DriverOnboardingModal,
+    SettingsModal, and i18n dictionaries (pt-BR, en, es) explaining that Windows and antivirus
+    notifications regarding "Microphone Access" occur solely because Windows classifies digital
+    audio loopback under its generic microphone permission, and that user voice is never recorded.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Add privacy notice banner/tooltip in DriverOnboardingModal and SettingsModal with full
+    pt-BR, en, and es parity. Reassure users that only system playback audio is processed.
+- id: "9-6"
+  title: First-Run Disarmed Standby State (No Audio Bridge Default Mode B)
+  description: >-
+    Ensure that when OpenBoom boots for the first time without an installed virtual driver,
+    it remains in a completely disarmed Standby state with the DSP audio pump disabled and
+    Windows physical audio untouched, rather than silently falling back to buggy Loopback Mode B.
+    Mode B must only be activated if the user explicitly enables it in settings.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Prevent automatic fallback into loopback Mode B on first boot when driver is missing.
+    Keep system audio unaltered, set bridge state to standby/inactive, and require explicit user opt-in.
