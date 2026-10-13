@@ -174,7 +174,7 @@ export const es: TranslationDictionary = {
     realTimeSafetyDesc: "Cero E/S de disco en el bucle de procesamiento de audio",
     generalTab: "General",
     updatesTitle: "Actualizaciones de la Aplicación",
-    updatesSubtitle: "Distribución de actualizaciones gratuita y open-source con GitHub Releases",
+    updatesSubtitle: "Actualizaciones en la aplicación",
     updateReadyMessage: "¡Actualización lista! Reinicia la aplicación para completar la instalación.",
     checkUpdatesOnStartupTitle: "Buscar actualizaciones al iniciar",
     checkUpdatesOnStartupDesc: "Comprueba silenciosamente en GitHub si hay una versión más reciente al iniciar OpenBoom.",

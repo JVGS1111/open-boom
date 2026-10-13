@@ -476,41 +476,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex flex-col gap-4 animate-in fade-in duration-150">
             {/* Version & Status Banner */}
             <div className="bg-surface-base/80 border border-border-subtle rounded-xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-lg bg-surface-elevated border border-border-default flex items-center justify-center text-amber-400 shrink-0 shadow-sm">
-                    <ArrowUpCircle className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-xs font-semibold text-text-primary tracking-wide">
-                      {t.settings.updatesTitle}
-                    </h3>
-                    <p className="text-[11px] text-text-muted leading-relaxed">
-                      {t.settings.updatesSubtitle}
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-surface-elevated border border-border-default flex items-center justify-center text-amber-400 shrink-0 shadow-sm">
+                  <ArrowUpCircle className="w-5 h-5" />
                 </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-xs font-semibold text-text-primary tracking-wide">
+                    {t.settings.updatesTitle}
+                  </h3>
+                  <p className="text-[11px] text-text-muted leading-relaxed">
+                    {t.settings.updatesSubtitle}
+                  </p>
+                </div>
+              </div>
 
-                <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
-                  <div className="px-3 py-1.5 rounded-lg bg-surface-elevated border border-border-subtle text-text-secondary flex items-center gap-1.5 whitespace-nowrap shadow-xs">
-                    <span className="text-text-muted">{t.settings.currentVersionLabel}:</span>
-                    <strong className="text-text-primary font-semibold">{updateInfo?.currentVersion || "0.5.2"}</strong>
-                  </div>
-                  {updateInfo?.latestVersion && (
-                    <div className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
-                      updateInfo.isAvailable
-                        ? "bg-amber-400/10 border-amber-400/30 text-amber-400 font-bold"
-                        : "bg-surface-elevated border-border-subtle text-text-secondary"
-                    }`}>
-                      <span className={updateInfo.isAvailable ? "text-amber-400/80" : "text-text-muted"}>
-                        {t.settings.latestVersionLabel}:
-                      </span>
-                      <strong className={updateInfo.isAvailable ? "text-amber-300 font-bold" : "text-text-primary font-semibold"}>
-                        {updateInfo.latestVersion}
-                      </strong>
-                    </div>
-                  )}
+              {/* Version details in list format */}
+              <div className="flex flex-col rounded-lg bg-surface-elevated/40 border border-border-subtle divide-y divide-border-subtle overflow-hidden">
+                <div className="flex items-center justify-between px-3.5 py-2.5 text-xs">
+                  <span className="text-text-muted font-medium">{t.settings.currentVersionLabel}</span>
+                  <span className="font-mono font-semibold text-text-primary">
+                    {updateInfo?.currentVersion || "0.5.2"}
+                  </span>
                 </div>
+                {updateInfo?.latestVersion && (
+                  <div className="flex items-center justify-between px-3.5 py-2.5 text-xs">
+                    <span className="text-text-muted font-medium">{t.settings.latestVersionLabel}</span>
+                    <span
+                      className={`font-mono ${
+                        updateInfo.isAvailable
+                          ? "text-amber-400 font-bold"
+                          : "text-text-primary font-semibold"
+                      }`}
+                    >
+                      {updateInfo.latestVersion}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Status Message */}
