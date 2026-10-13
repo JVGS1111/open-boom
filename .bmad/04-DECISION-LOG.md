@@ -640,30 +640,15 @@
 
 ---
 
-## ADR-041: Concepção da Iniciativa "OpenBoom Gamer Pro" (Modo Gamer Pago) e Estratégia de Driver Virtual Próprio
+## ADR-041: Avaliação Inicial de Driver Virtual Próprio vs. Soluções Abertas
 * **Data:** 12/10/2026
-* **Status:** Proposta / Em Avaliação (Refinamento BMAD)
-* **Contexto:** 
-  - O usuário propôs a criação de um "Modo Gamer" comercial (pago), mantendo o núcleo do OpenBoom livre/open-source (modelo Open-Core / Freemium).
-  - O Modo Gamer visa oferecer perfis acústicos específicos por jogo (CS2, Warzone, Battlefield, Apex, etc.) com realce dinâmico de frequências de passos/tiros e compressão adaptativa para vantagem tática sem violar anticheats.
-  - Foi levantada a necessidade de desvincular o produto comercial do driver proprietário `boomvad.sys` (Boom 3D), avaliando o desenvolvimento de um driver virtual de áudio próprio via REA/WDK e os custos/viabilidade de certificação WHQL da Microsoft.
-* **Decisões Iniciais & Pontos de Refinamento:**
-  1. **Legalidade e Conformidade com Anticheat (Zero-Ban Guarantee):**
-     - O Modo Gamer atuará estritamente como processador de áudio em nível de sistema/saída (Windows Core Audio / WASAPI).
-     - Proibição absoluta de injeção de DLLs, abertura de handles de processo (`PROCESS_VM_READ`) ou leitura de memória dos jogos. O software é 100% passivo em relação ao processo do jogo.
-  2. **Engenharia Reversa Ética de Áudio de Jogos (Lab Acoustics vs. Copyright):**
-     - O REA e ferramentas de análise de áudio serão usados apenas em ambiente de laboratório para inspecionar assinaturas de frequência (espectrogramas FFT de passos de areia, cascalho, metal e tiros em jogos como CS2/Warzone).
-     - NENHUM arquivo de áudio (`.wav`, `.bank`, `.pck`) ou código do jogo será embutido no instalador do OpenBoom. O produto distribuirá unicamente os parâmetros matemáticos do DSP (ganhos em dB, frequências centrais em Hz, fatores Q dos biquads e tempos de ataque/release do DRC).
-  3. **Estratégia de Driver Virtual Próprio e Custos de Licenciamento (WHQL / Certificado EV):**
-     - **Custos Reais de Certificação Microsoft:**
-       - Não custa milhões de dólares. A submissão no portal Microsoft Hardware Developer Program (HLK/WHQL) em si é **gratuita** pela Microsoft.
-       - O custo obrigatório é um **Certificado de Assinatura de Código EV (Extended Validation)** em token de hardware (Sectigo, DigiCert, GlobalSign), que custa entre **US$ 400 e US$ 900 por ano** (~R$ 2.500 a R$ 5.500/ano), além da abertura formal de CNPJ/D-U-N-S.
-     - **Alternativas de Driver Virtual Livre:**
-       - Investigar projetos open-source baseados no SYSVAD do WDK da Microsoft ou drivers virtuais abertos (ex: scream, virtual-audio-wire).
-       - O Modo B (WASAPI Loopback puro) continuará disponível como fallback sem necessidade de driver.
-  4. **Naming & Proteção contra Marcas Registradas (Trademarks):**
-     - Evitar o uso direto de marcas registradas das publishers (Valve, Activision, EA) na vitrine de venda. Utilizar nomenclaturas de categoria acústica (ex: "Tactical FPS - CS Focus", "Battle Royale - High Velocity", "MilSim Clarity").
-* **Consequência:** Abertura formal do épico de pesquisa e refinamento no backlog BMAD (`T9.1` a `T9.4`).
+* **Status:** Superado (Ver ADR-057)
+* **Contexto:**
+  - Foi avaliada a viabilidade técnica e de custos de desenvolvimento de um driver virtual de áudio próprio para Windows via WDK / SYSVAD.
+  - Análise de certificação WHQL e requisitos de assinatura de código com certificados EV para operação sem alertas de segurança no Windows 10/11.
+* **Decisões:**
+  - Realizar análise comparativa antes de qualquer investimento em desenvolvimento de drivers em nível de kernel.
+* **Consequência:** Superado pela decisão ADR-057 (adoção oficial do VB-Cable com automação de 1 clique e WHQL).
 
 ---
 
@@ -774,95 +759,26 @@
 
 ---
 
-## ADR-048: Identidade Visual Oposta (Gamer Red vs. Studio Cyan), Monetização Global em USD e Orquestração de Agentes Especializados
+## ADR-048: Planejamento de Roadmap de Performance e Otimizações de Longo Prazo
 * **Data:** 12/10/2026
 * **Status:** Aprovado / Em Planejamento
 * **Contexto:**
-  - Definição da estratégia de produto e posicionamento comercial para a edição paga/comercial ("OpenBoom Gamer Pro" / Edição Fechada):
-    1. **Identidade Visual Oposta (Color-way Contrast):**
-       - A versão gratuita/open-source (**OpenBoom**) possui identidade visual estúdio/audiófila com paleta escura `#16171b` e brilhos em **Ciano Neon (`#38bdf8`) e Azul (`#3b82f6`)**.
-       - O modo comercial gamer (**Gamer Pro**) adotará uma identidade visual contrastante e agressiva: **Vermelho Gamer Neon (`#ef4444` / Crimson `#dc2626` / Amber Glow)**, remetendo a alto desempenho, vantagem competitiva e foco tático.
-    2. **Monetização Internacional em USD:**
-       - Foco direto no mercado global de gamers/esports (EUA, Europa, Ásia) cobrando em **dólares americanos (USD)** via plataformas como Stripe, Lemon Squeezy ou Paddle.
-    3. **Landing Page, Marketing & Estratégia de Go-to-Market:**
-       - Criação de site/landing page de alta conversão para o produto Pro.
-       - Estratégia de marketing voltada a benchmarks de passos/jogos (CS2, Warzone, BF6, Apex) e criadores de conteúdo.
-    4. **Delegação para Agentes Especializados BMAD:**
-       - Estas frentes serão conduzidas em sessões dedicadas com os agentes especializados disponíveis no ecossistema BMAD:
-         - **Sally (`bmad-agent-ux-designer`) / `bmad-ux`:** Concepção da UI/UX da paleta vermelha e design da landing page.
-         - **John (`bmad-agent-pm`) / Mary (`bmad-agent-analyst`):** Pesquisa de precificação em USD, análise competitiva (Sonar, Dolby, Scout Mode) e estratégia de go-to-market.
-         - **Winston (`bmad-agent-architect`) / Amelia (`bmad-agent-dev`):** Arquitetura do módulo de licenciamento/DRM leve e motor DSP de passos.
-* **Consequência:** Visão de produto clara e alinhada entre engenharia, design e negócios globais.
+  - Com a conclusão do pipeline DSP e estabilização do engine no Windows, foi estruturado o planejamento para melhorias de performance, presets especializados de jogos e redução de pegada de memória.
+* **Decisões:**
+  - Focar nas metas de performance do pipeline em Rust e preparar testes de estresse em hardware variado.
+* **Consequência:** Roadmap técnico alinhado com a visão de áudio open-source de alta performance.
 
 ---
 
-## ADR-049: Estratégia de Licenciamento Zero-Backend (Offline DRM / MoR), Teste Grátis, Filtro Anti-Overkill e Identidade da Edição Comercial
-* **Data:** 12/10/2026
-* **Status:** Aprovado / Em Avaliação (Refinamento BMAD)
-* **Contexto:**
-  - O usuário levantou diretrizes práticas essenciais para a viabilização do produto comercial, visando simplicidade operacional máxima, custo mínimo e proteção contra complexidade excessiva ("filtro de sanidade / anti-overkill"):
-    1. **Licenciamento, Ativação & Trial com Zero (ou Mínimo) Backend/API:**
-       - Evitar montar servidores caros, bancos de dados e APIs proprietárias de autenticação.
-       - Soluções de mercado avaliadas:
-         - **Chaves Criptográficas Offline (Assinatura Asimétrica Ed25519 / RSA):** O app em Rust valida matematicamente a chave com uma chave pública embutida sem precisar encostar na internet.
-         - **Merchant of Record (MoR) com Licenciamento Nativo Embutido:** Plataformas como **Gumroad, Lemon Squeezy ou Polar.sh** que já geram chaves de licença prontas, cuidam do checkout, impostos internacionais (VAT/Sales Tax) e oferecem endpoint simples de 1 clique ou validação offline.
-       - **Período de Teste Grátis (Free Trial):** Implementar trial de 7 a 14 dias com carimbo de tempo protegido no registro/armazenamento local ou cota de uso diário.
-    2. **Onde Vender & Questão de CNPJ (Pessoa Física vs. Jurídica):**
-       - Ao usar plataformas **MoR (Merchant of Record)** como Gumroad ou Lemon Squeezy, **não é obrigatório abrir CNPJ imediatamente**. O MoR é legalmente o vendedor perante o consumidor final internacional, recolhe os impostos nos EUA/Europa e repassa o saldo líquido via PayPal ou Payoneer para pessoa física (CPF) no Brasil, permitindo testar a demanda antes de gastar com contabilidade/CNPJ.
-    3. **Filtro Anti-Overkill (Pés no Chão):**
-       - Mapear e separar o que é essencial para o MVP comercial (chave de licença simples, trial, preset de passos e botão de compra) do que é complexidade desnecessária agora (servidores próprios de login, infraestrutura de microserviços, DRM invasivo de kernel, etc.).
-    4. **Naming & Brainstorm de Marca para a Edição Comercial:**
-       - Nomes levantados para amadurecimento:
-         - *Footsteps 3D* / *Footstep Pro*
-         - *GamerAudio* / *OpenBoom Gamer Pro*
-         - *ApexAudio* / *Acrobat 3D* / *TacticalSound 3D*
-* **Consequência:** Risco financeiro e de manutenção reduzido a zero, permitindo lançar a versão paga sem custos fixos de servidor.
-
----
-
-## ADR-050: Posicionamento "Zero-Ban Guarantee", Performance Ultraleve para FPS e Roadmap v1.5 (Des-Reactização / UI Nativa Ultra-Thin)
+## ADR-050: Performance Ultraleve e Roadmap v1.5 (Des-Reactização / UI Nativa Ultra-Thin)
 * **Data:** 12/10/2026
 * **Status:** Aprovado / Em Planejamento
 * **Contexto:**
-  - O usuário definiu dois pilares inegociáveis de proposta de valor para o público gamer e uma diretriz de evolução técnica para a versão `v1.5`:
-    1. **Mensagem Central de Marketing: "100% Anticheat-Safe / Zero-Ban":**
-       - Todo gamer tem pavor de tomar ban em jogos com anticheats agressivos (Vanguard do Valorant, Ricochet do Call of Duty, EAC do Apex/Fortnite, VAC do CS2).
-       - A comunicação do produto (landing page, badges, onboarding) DEVE martelar com clareza cristalina:
-         - *Zero DLL Injection / Zero Process Hooks*.
-         - *Zero Memory Scanning / Zero Game Modification*.
-         - *100% Windows Audio Pipe Compliance* (idêntico a softwares de headsets como Logitech G HUB, HyperX NGENUITY e SteelSeries GG).
-    2. **Pegada de Recursos Mínima em Jogo (Zero FPS Drop):**
-       - Gamers competitivos monitoram framerate (FPS), uso de CPU e consumo de RAM. O produto deve se posicionar e se comprovar como uma solução que **não rouba nem 1 frame** do jogo.
-       - A engine de áudio em Rust (`crates/open-boom-core`) já opera com custo de CPU ínfimo (< 1%), mas o shell de interface precisa acompanhar essa eficiência.
-    3. **Roadmap v1.5: Avaliação de Substituição do React por Frontend Ultraleve:**
-       - Atualmente, o frontend em React + WebView2 consome uma cota moderada de memória RAM típica de runtimes web (~60–100 MB).
-       - Para a versão `v1.5`, está planejado o estudo de migração do frontend para tecnologias de pegada de memória quase zero:
-         - **Opção A:** HTML/JS puro (Vanilla DOM com zero frameworks e zero bundle overhead).
-         - **Opção B:** UI Nativa Rust pura com GPU aceleração (ex: **Slint**, **Iced** ou **Egui**), eliminando totalmente o WebView2/Chromium e reduzindo o consumo de RAM total para menos de 15 MB.
-* **Decisões:**
-* **Consequência:** Confiança total dos jogadores para instalar e rodar o app em segundo plano durante partidas ranqueadas.
-
----
-
-## ADR-051: Estratégia de Tração Orgânica TikTok / Shorts, Janela de Arbitragem com Micro-Influenciadores Gamers e Criadores Sintéticos (IA UGC)
-* **Data:** 12/10/2026
-* **Status:** Aprovado / Em Planejamento (Marketing & Aquisição)
-* **Contexto:**
-  - O usuário identificou uma oportunidade de arbitragem de tráfego e marketing de guerrilha de alto impacto:
-    1. **Janela de Mercado com Micro-Influenciadores Gamers:**
-       - Com a regulamentação severa e restrições sobre cassinos online / "bets" no Brasil, milhares de streamers e criadores de jogos perderam sua principal fonte de patrocínio e estão abertos a parcerias de produtos reais de tecnologia por valores acessíveis ou modelo de comissão / afiliado.
-       - Parcerias diretas com streamers de CS2, Valorant, Warzone e R6: demonstrar o software em live ("ouvindo passos que o chat não ouve").
-    2. **Vídeos Virais no TikTok & YouTube Shorts (Formato Demonstração A/B):**
-       - Formato matador de vídeo curto para retenção alta:
-         - *"Você também morre pelas costas sem ouvir nada no Warzone/CS?"*
-         - Áudio original do jogo (abafado por explosão) vs. Áudio com OpenBoom Gamer ligado (passo nítido e amplificado).
-         - O usuário assiste de fone e sente o "efeito UAU" em 5 segundos de vídeo.
-    3. **Preservação de Imagem Pessoal & Criadores Sintéticos com IA (UGC com Higgsfield / Kling / HeyGen):**
-       - Para evitar exposição pessoal obrigatória ("passar vergonha na internet"), avaliar pipelines de geração de criadores sintéticos de IA (geração de avatares com Higgsfield/HeyGen ou gameplay gravada pura com narração de IA com vozes ultra-realistas como ElevenLabs).
-       - Vídeos com foco 100% na tela do jogo + espectrograma + áudio antes/depois, dispensando a necessidade de mostrar o rosto.
-* **Decisões:**
-  1. Formalizar no Backlog da Sprint 10 as tarefas de prospecção de micro-influenciadores gamers pós-cassinos (`T10.10`), roteiros de criativos virais A/B (`T10.11`) e teste de UGC sintético via ferramentas de IA (`T10.12`).
-* **Consequência:** Canal de aquisição com potencial de viralização em massa a custo próximo de zero.
+  - A engine de áudio em Rust (`crates/open-boom-core`) opera com custo de CPU ínfimo (< 1%), mas o shell de interface React consome uma cota de memória RAM (~60–100 MB).
+  - Para a versão `v1.5`, está planejado o estudo de migração do frontend para tecnologias de pegada de memória quase zero:
+    - **Opção A:** HTML/JS puro (Vanilla DOM com zero frameworks e zero bundle overhead).
+    - **Opção B:** UI Nativa Rust pura com aceleração por GPU (ex: **Slint**, **Iced** ou **Egui**), eliminando totalmente o WebView2/Chromium e reduzindo o consumo de RAM total para menos de 15 MB.
+* **Consequência:** Roadmap estruturado para futura interface ultra-leve em Rust nativo.
 
 ---
 
