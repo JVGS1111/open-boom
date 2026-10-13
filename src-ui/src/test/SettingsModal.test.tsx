@@ -201,5 +201,34 @@ export function runSettingsModalTests(): TestResult[] {
     );
   });
 
+  test("Audio Capture Bridge section renders privacy notice banner and microphone explanation", () => {
+    const html = renderToStaticMarkup(
+      <SettingsModal
+        isOpen={true}
+        onClose={() => {}}
+        launchOnStartup={false}
+        onToggleStartup={() => {}}
+      />
+    );
+    assert(
+      html.includes('data-testid="settings-privacy-notice"'),
+      "Should render settings-privacy-notice container"
+    );
+    assert(
+      html.includes("Audio Interception &amp; Privacy Notice") ||
+        html.includes("Audio Interception & Privacy Notice") ||
+        html.includes("Interceptação de Áudio &amp; Privacidade") ||
+        html.includes("Interceptação de Áudio & Privacidade"),
+      "Should render privacy notice title in SettingsModal"
+    );
+    assert(
+      html.includes("generic microphone permission") ||
+        html.includes("permissão genérica de microfone") ||
+        html.includes("permissões genéricas de microfone") ||
+        html.includes("permissoes"),
+      "Should explain Windows microphone permission grouping in settings"
+    );
+  });
+
   return results;
 }

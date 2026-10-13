@@ -230,6 +230,15 @@ impl AudioStreamPump {
                     }
                 }
 
+                if !config.force_loopback && capture_device_opt.is_none() {
+                    // Safe Standby: No virtual sink device detected and Mode B loopback not explicitly forced.
+                    // Sleep without opening capture to prevent acoustic echo duplication (BUG-MODE-B-01).
+                    while is_running.load(Ordering::Relaxed) {
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                    return;
+                }
+
                 let using_process_loopback = capture_device_opt.is_none();
 
                 // Use 25ms render buffer when buffer_guard_enabled is active to prevent underruns

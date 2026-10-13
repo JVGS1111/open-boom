@@ -622,6 +622,33 @@ mod windows_loopback_mode_b_tests {
             );
         }
     }
+
+    #[test]
+    fn test_stream_pump_standby_when_virtual_device_absent_and_loopback_not_forced() {
+        let _guard = HARDWARE_AUDIO_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let coordinator = Arc::new(Mutex::new(AudioEngineCoordinator::new(
+            LoopbackConfig::default(),
+            RenderConfig {
+                allow_synthetic_fallback: true,
+                ..Default::default()
+            },
+        )));
+
+        let config = StreamPumpConfig {
+            target_device_id: None,
+            capture_device_id: Some("non_existent_virtual_endpoint_xyz_123".to_string()),
+            allow_synthetic: false,
+            buffer_guard_enabled: true,
+            force_loopback: false,
+        };
+
+        if let Ok(mut pump) = AudioStreamPump::start(coordinator, config) {
+            assert!(pump.is_running());
+            std::thread::sleep(Duration::from_millis(60));
+            pump.stop();
+            assert!(!pump.is_running());
+        }
+    }
 }
 
 

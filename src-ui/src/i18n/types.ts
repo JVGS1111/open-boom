@@ -142,6 +142,8 @@ export interface TranslationDictionary {
     virtualSinkTooltip: string;
     loopbackMode: string;
     loopbackModeTooltip: string;
+    standbyMode: string;
+    standbyModeTooltip: string;
     proAudioMmmss: string;
     headroom: string;
     headroomTooltip: string;
@@ -202,6 +204,8 @@ export interface TranslationDictionary {
     bridgeModeLoopbackWarningTitle: string;
     bridgeModeLoopbackWarningDesc: string;
     bridgeModeRestartNotice: string;
+    privacyNoticeTitle: string;
+    privacyNoticeDesc: string;
   };
   driverOnboarding: {
     modalTitle: string;
@@ -225,5 +229,7 @@ export interface TranslationDictionary {
     uacDeniedError: string;
     networkError: string;
     genericError: string;
+    privacyNoticeTitle: string;
+    privacyNoticeDesc: string;
   };
 }

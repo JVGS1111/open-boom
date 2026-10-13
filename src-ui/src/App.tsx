@@ -1771,6 +1771,7 @@ export const App: React.FC = () => {
         dspActive={masterPower && !bypassActive}
         masterPower={masterPower}
         usingVirtualBridge={usingVirtualBridge}
+        isStandby={isDriverMissing && audioBridgeMode !== "loopback"}
       />
     </div>
   </I18nProvider>

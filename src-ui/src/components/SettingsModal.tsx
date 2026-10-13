@@ -354,6 +354,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
+              {/* Privacy & Microphone Notice Banner */}
+              <div
+                data-testid="settings-privacy-notice"
+                role="note"
+                className="p-2.5 rounded-lg bg-surface-elevated/60 border border-border-subtle flex items-start gap-2.5 text-[11px] text-text-muted leading-tight"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-accent-cyan shrink-0 mt-0.5" />
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <span className="font-semibold text-text-secondary text-xs">
+                    {t.settings.privacyNoticeTitle}
+                  </span>
+                  <span className="text-[11px] text-text-muted leading-relaxed">
+                    {t.settings.privacyNoticeDesc}
+                  </span>
+                </div>
+              </div>
+
               <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
                 <RotateCw className="w-3 h-3 text-accent-cyan shrink-0" />
                 <span>{t.settings.bridgeModeRestartNotice}</span>

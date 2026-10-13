@@ -141,6 +141,8 @@ export const ptBR: TranslationDictionary = {
     virtualSinkTooltip: "Áudio capturado via dispositivo virtual com zero eco acústico (Modo A)",
     loopbackMode: "Modo Loopback (BETA)",
     loopbackModeTooltip: "Áudio capturado via loopback WASAPI sem drivers com exclusão de processo (Modo B — Experimental / Beta)",
+    standbyMode: "Standby (Requer Driver)",
+    standbyModeTooltip: "O áudio do sistema está intocado e o motor está em standby até a instalação do driver surround 7.1.",
     proAudioMmmss: "Pro Audio MMCSS",
     headroom: "Headroom:",
     headroomTooltip: "Headroom dinâmico até o teto de -0.2 dBFS do limitador terminal",
@@ -201,6 +203,8 @@ export const ptBR: TranslationDictionary = {
     bridgeModeLoopbackWarningTitle: "Modo B (Emulação Loopback Sem Driver) [BETA] Selecionado",
     bridgeModeLoopbackWarningDesc: "Modo Experimental (Beta): sem um driver virtual isolando a saída do Windows, o sistema reproduz o áudio seco original e a reprodução processada pelo DSP com leve atraso (~25ms) no mesmo fone físico, gerando efeito de som duplicado/distante.",
     bridgeModeRestartNotice: "A troca de modo comuta o canal de áudio e atualiza a captura instantaneamente em tempo real.",
+    privacyNoticeTitle: "Interceptação de Áudio & Privacidade",
+    privacyNoticeDesc: "O Windows e softwares antivírus podem alertar que o OpenBoom está acessando o microfone. Isso ocorre porque o Windows agrupa a captura de áudio digital sob a permissão genérica de microfone. O OpenBoom processa estritamente o som do sistema e jamais grava a sua voz.",
   },
   driverOnboarding: {
     modalTitle: "Driver de Áudio Surround 7.1 Necessário",
@@ -224,5 +228,7 @@ export const ptBR: TranslationDictionary = {
     uacDeniedError: "A permissão de administrador (UAC) foi cancelada ou negada.",
     networkError: "Não foi possível baixar o instalador do driver. Verifique sua conexão com a internet.",
     genericError: "Ocorreu um erro inesperado durante a instalação do driver.",
+    privacyNoticeTitle: "Aviso de Privacidade & Permissão de Microfone",
+    privacyNoticeDesc: "O Windows e softwares antivírus podem alertar que o OpenBoom está acessando o microfone. Isso ocorre unicamente porque a arquitetura de áudio do Windows agrupa a captura de retorno digital (loopback) sob a permissão geral de microfone. O OpenBoom processa estritamente o áudio reproduzido pelo computador para aplicar o surround 3D e equalizador — sua voz nunca é gravada ou transmitida.",
   },
 };

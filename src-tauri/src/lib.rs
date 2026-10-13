@@ -117,10 +117,12 @@ impl AppState {
 
         let is_routed_to_virtual = Arc::new(Mutex::new(false));
 
+        let should_start_pump = force_loopback || virtual_id.is_some();
+
         // Configure Windows default endpoint routing BEFORE starting AudioStreamPump
         // so endpoint resolution does not race with IPolicyConfig::SetDefaultEndpoint.
         if auto_route {
-            if force_loopback || !dsp_initially_active {
+            if force_loopback || !dsp_initially_active || !should_start_pump {
                 if let Some(ref p_id) = physical_id {
                     let _ = device_mgr.set_default_device(p_id);
                 }
@@ -133,20 +135,28 @@ impl AppState {
             }
         }
 
-        let pump_instance = AudioStreamPump::start(
-            coordinator.clone(),
-            StreamPumpConfig {
-                target_device_id: physical_id.clone(),
-                capture_device_id: if force_loopback { None } else { virtual_id.clone() },
-                allow_synthetic: !auto_route,
-                buffer_guard_enabled: buffer_guard,
-                force_loopback,
-            },
-        ).ok();
+        let pump_instance = if should_start_pump {
+            AudioStreamPump::start(
+                coordinator.clone(),
+                StreamPumpConfig {
+                    target_device_id: physical_id.clone(),
+                    capture_device_id: if force_loopback { None } else { virtual_id.clone() },
+                    allow_synthetic: !auto_route,
+                    buffer_guard_enabled: buffer_guard,
+                    force_loopback,
+                },
+            ).ok()
+        } else {
+            None
+        };
         let pump = Arc::new(Mutex::new(pump_instance));
 
         let autoeq_db = Arc::new(AutoEqDatabase::default());
-        let mut session_mgr_instance = SessionManager::with_synthetic_fallback(true);
+        let mut session_mgr_instance = if auto_route {
+            SessionManager::with_synthetic_fallback(true)
+        } else {
+            SessionManager::with_forced_synthetic(true)
+        };
         if let Ok(profiles) = store.load_app_volumes() {
             session_mgr_instance.register_stored_profiles(profiles);
         }
@@ -302,20 +312,25 @@ impl AppState {
         }
 
         // Hot-restart pump with updated bridge configuration
+        let should_start_pump = force_loopback || virtual_id.is_some();
         if let Ok(mut pump_guard) = self.pump.lock() {
             if let Some(mut existing) = pump_guard.take() {
                 existing.stop();
             }
-            *pump_guard = AudioStreamPump::start(
-                self.coordinator.clone(),
-                StreamPumpConfig {
-                    target_device_id: physical_id,
-                    capture_device_id: if force_loopback { None } else { virtual_id },
-                    allow_synthetic: !self.auto_route,
-                    buffer_guard_enabled: buffer_guard,
-                    force_loopback,
-                },
-            ).ok();
+            *pump_guard = if should_start_pump {
+                AudioStreamPump::start(
+                    self.coordinator.clone(),
+                    StreamPumpConfig {
+                        target_device_id: physical_id,
+                        capture_device_id: if force_loopback { None } else { virtual_id },
+                        allow_synthetic: !self.auto_route,
+                        buffer_guard_enabled: buffer_guard,
+                        force_loopback,
+                    },
+                ).ok()
+            } else {
+                None
+            };
         }
 
         let _ = self.volume_sync.rebind_endpoint(None);
@@ -451,20 +466,25 @@ fn set_audio_device(device_id: Option<String>, state: State<'_, AppState>) -> Re
     let force_loopback = state.is_loopback_forced();
     let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
 
+    let should_start_pump = force_loopback || virtual_id.is_some();
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
             existing.stop();
         }
-        *pump_guard = AudioStreamPump::start(
-            state.coordinator.clone(),
-            StreamPumpConfig {
-                target_device_id: device_id.clone(),
-                capture_device_id: if force_loopback { None } else { virtual_id },
-                allow_synthetic: !state.auto_route,
-                buffer_guard_enabled: buffer_guard,
-                force_loopback,
-            },
-        ).ok();
+        *pump_guard = if should_start_pump {
+            AudioStreamPump::start(
+                state.coordinator.clone(),
+                StreamPumpConfig {
+                    target_device_id: device_id.clone(),
+                    capture_device_id: if force_loopback { None } else { virtual_id },
+                    allow_synthetic: !state.auto_route,
+                    buffer_guard_enabled: buffer_guard,
+                    force_loopback,
+                },
+            ).ok()
+        } else {
+            None
+        };
     }
 
     // If master power is currently OFF or in loopback mode, route Windows default directly to the physical device
@@ -497,21 +517,26 @@ fn trigger_device_fallback(state: State<'_, AppState>) -> Result<(), String> {
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
     let force_loopback = state.is_loopback_forced();
     let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
+    let should_start_pump = force_loopback || virtual_id.is_some();
 
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
             existing.stop();
         }
-        *pump_guard = AudioStreamPump::start(
-            state.coordinator.clone(),
-            StreamPumpConfig {
-                target_device_id: fallback_id.clone(),
-                capture_device_id: if force_loopback { None } else { virtual_id },
-                allow_synthetic: !state.auto_route,
-                buffer_guard_enabled: buffer_guard,
-                force_loopback,
-            },
-        ).ok();
+        *pump_guard = if should_start_pump {
+            AudioStreamPump::start(
+                state.coordinator.clone(),
+                StreamPumpConfig {
+                    target_device_id: fallback_id.clone(),
+                    capture_device_id: if force_loopback { None } else { virtual_id },
+                    allow_synthetic: !state.auto_route,
+                    buffer_guard_enabled: buffer_guard,
+                    force_loopback,
+                },
+            ).ok()
+        } else {
+            None
+        };
     }
 
     let _ = state.volume_sync.rebind_endpoint(fallback_id);
@@ -538,21 +563,26 @@ fn set_buffer_guard(enabled: bool, state: State<'_, AppState>) -> Result<(), Str
     let physical_id = state.active_physical_device_id.lock().ok().and_then(|g| g.clone());
     let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
     let force_loopback = state.is_loopback_forced();
+    let should_start_pump = force_loopback || virtual_id.is_some();
 
     if let Ok(mut pump_guard) = state.pump.lock() {
         if let Some(mut existing) = pump_guard.take() {
             existing.stop();
         }
-        *pump_guard = AudioStreamPump::start(
-            state.coordinator.clone(),
-            StreamPumpConfig {
-                target_device_id: physical_id,
-                capture_device_id: if force_loopback { None } else { virtual_id },
-                allow_synthetic: !state.auto_route,
-                buffer_guard_enabled: enabled,
-                force_loopback,
-            },
-        ).ok();
+        *pump_guard = if should_start_pump {
+            AudioStreamPump::start(
+                state.coordinator.clone(),
+                StreamPumpConfig {
+                    target_device_id: physical_id,
+                    capture_device_id: if force_loopback { None } else { virtual_id },
+                    allow_synthetic: !state.auto_route,
+                    buffer_guard_enabled: enabled,
+                    force_loopback,
+                },
+            ).ok()
+        } else {
+            None
+        };
     }
 
     Ok(())
@@ -628,6 +658,10 @@ async fn install_virtual_driver(
     if !state.auto_route {
         let _ = dev_mgr.rename_virtual_endpoint(None);
         let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
+        if let Ok(mut v_guard) = state.virtual_device_id.lock() {
+            *v_guard = Some("synthetic_virtual_cable".to_string());
+        }
+        let _ = state.apply_audio_bridge_mode("auto");
         return Ok(DriverInstallResult {
             success: true,
             message: "Driver installed and 7.1 surround configured successfully (synthetic)".to_string(),
@@ -2337,6 +2371,30 @@ mod tests {
         });
         assert!(res.success);
         assert_eq!(res.endpoint_id, Some("synthetic_virtual_cable".to_string()));
+    }
+
+    #[test]
+    fn test_first_run_disarmed_standby_state_when_driver_missing() {
+        let state = AppState::new();
+
+        let virtual_id = state.virtual_device_id.lock().unwrap().clone();
+        let force_loopback = state.is_loopback_forced();
+        if !force_loopback && virtual_id.is_none() {
+            let pump_guard = state.pump.lock().unwrap();
+            assert!(
+                pump_guard.is_none(),
+                "AudioStreamPump must be None (disarmed Standby) when virtual driver is absent in auto mode"
+            );
+        }
+
+        // When Mode B is explicitly opted into, pump starts
+        let _ = state.apply_audio_bridge_mode("loopback");
+        let pump_guard_loopback = state.pump.lock().unwrap();
+        assert!(
+            pump_guard_loopback.is_some(),
+            "AudioStreamPump must start when Mode B loopback is explicitly selected"
+        );
+        assert!(state.is_loopback_forced());
     }
 }
 

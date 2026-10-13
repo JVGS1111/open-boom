@@ -141,6 +141,8 @@ export const en: TranslationDictionary = {
     virtualSinkTooltip: "Audio captured via Virtual Audio Device sink with zero slapback echo (Mode A)",
     loopbackMode: "Loopback Mode (BETA)",
     loopbackModeTooltip: "Audio captured via driverless WASAPI loopback with process exclusion (Mode B — Experimental / Beta)",
+    standbyMode: "Standby (Driver Required)",
+    standbyModeTooltip: "System audio is untouched and audio engine is in standby until 7.1 surround driver is installed.",
     proAudioMmmss: "Pro Audio MMCSS",
     headroom: "Headroom:",
     headroomTooltip: "Dynamic Headroom to -0.2 dBFS Terminal Limiter Ceiling",
@@ -201,6 +203,8 @@ export const en: TranslationDictionary = {
     bridgeModeLoopbackWarningTitle: "Mode B (Driverless Loopback) [BETA] Active",
     bridgeModeLoopbackWarningDesc: "Experimental Mode (Beta): without a virtual sink driver isolating the Windows output, the OS plays the original dry stream and the delayed DSP-processed stream (~25ms) together on the same physical headphone, causing a double-reproduction / distant echo effect.",
     bridgeModeRestartNotice: "Changing capture modes automatically updates routing and audio capture in real time.",
+    privacyNoticeTitle: "Audio Interception & Privacy Notice",
+    privacyNoticeDesc: "Windows classifies digital audio loopback under its generic microphone permission. OpenBoom processes only PC sound output and never accesses, records, or transmits user voice.",
   },
   driverOnboarding: {
     modalTitle: "7.1 Surround Audio Driver Required",
@@ -224,5 +228,7 @@ export const en: TranslationDictionary = {
     uacDeniedError: "Administrator permission (UAC) was cancelled or denied.",
     networkError: "Could not download driver installer. Please verify your internet connection.",
     genericError: "An unexpected error occurred during driver installation.",
+    privacyNoticeTitle: "Privacy & Microphone Permission Notice",
+    privacyNoticeDesc: "Windows and antivirus software may notify you that OpenBoom is accessing your microphone. This occurs solely because Windows Core Audio groups internal digital audio loopback under its generic microphone permission. OpenBoom processes only system playback audio to apply 3D surround and EQ — your voice is never recorded or transmitted.",
   },
 };

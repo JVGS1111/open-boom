@@ -14,6 +14,7 @@ interface StatusBarProps {
   dspActive: boolean;
   masterPower?: boolean;
   usingVirtualBridge?: boolean;
+  isStandby?: boolean;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -28,6 +29,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   dspActive,
   masterPower = true,
   usingVirtualBridge = false,
+  isStandby = false,
 }) => {
   const { t } = useI18n();
   const isEngaged = masterPower && !bypassActive && dspActive;
@@ -145,7 +147,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         <div className="h-3 w-px bg-border-subtle shrink-0" />
 
-        {/* Virtual Bridge Capture Topology Badge (Story 1.8) */}
+        {/* Virtual Bridge / Standby / Loopback Capture Topology Badge */}
         {usingVirtualBridge ? (
           <div
             role="status"
@@ -155,9 +157,19 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           >
             <Radio className="w-3 h-3 text-status-online shrink-0" />
             <span className="font-medium tracking-wide shrink-0 whitespace-nowrap">
-              <span className="hidden sm:inline">{t.statusBar.virtualSink}</span>
-              <span className="inline sm:hidden">{t.statusBar.virtualSink}</span>
+              {t.statusBar.virtualSink}
             </span>
+          </div>
+        ) : isStandby ? (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="status-bar-standby-badge"
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-mono text-amber-300/90 shrink-0 whitespace-nowrap select-none"
+            title={t.statusBar.standbyModeTooltip}
+          >
+            <Radio className="w-3 h-3 text-amber-400 opacity-80 shrink-0 animate-pulse" />
+            <span className="font-medium tracking-wide shrink-0 whitespace-nowrap">{t.statusBar.standbyMode}</span>
           </div>
         ) : (
           <div

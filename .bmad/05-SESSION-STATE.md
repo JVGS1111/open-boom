@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 13/10/2026 - 12:05
-* **Sprint Ativa:** **Sprint 9 — Refinamentos de UI, Ajustes de Update & Robustez i18n (CONCLUÍDO)**
-* **Tarefa Atual:** Conclusão dos ajustes solicitados pelo usuário: (1) remoção do menu de idiomas da tela inicial; (2) espaçamento, paddings e badges estruturados na aba de Updates; (3) garantia de fallback em inglês para idiomas de sistema não suportados; (4) prevenção de Communications Ducking e auto-unmute de sessões. Suíte com 226 testes Rust e 113 testes UI verdes. Compilação e smoke test executados com sucesso. Pronto para commit e push.
+* **Data/Hora:** 13/10/2026 - 13:55
+* **Sprint Ativa:** **Sprint 9 — Refinamentos de UI, Ajustes de Update & Robustez i18n (ÉPICO 9 100% CONCLUÍDO)**
+* **Tarefa Atual:** Conclusão de todas as histórias do Épico 9: Story 9-5 (Aviso de Privacidade & Esclarecimento de Microfone) e Story 9-6 (Modo Inicial Desarmado Standby). Suíte de 228 testes Rust e 118 testes UI verdes. Mandatory Verification Gate aprovado. Pronto para commit, push e aguardar sinal do usuário para release.
 
 
 ## O que foi concluído nesta sessão
@@ -348,11 +348,24 @@
     - **Verificação Geral:** 226 testes Rust verdes em Cargo e 113 testes de UI em React/Vite verdes (0 falhas).
 
 ## O que está em andamento agora
-* **Épico 9 Concluído com Sucesso.**
-* **Próxima Etapa:** Mandatory Final Verification Gate (compilação local do frontend, build do binário Tauri, smoke launch de `open-boom.exe`, git commit e git push).
+* **Épico 9 100% Concluído:** Stories 9-1, 9-2, 9-3, 9-4, 9-5 e 9-6 finalizadas.
+* **Próxima Etapa:** Mandatory Final Verification Gate (compilação do binário Tauri, smoke launch de `open-boom.exe`, git commit e git push, aguardando sinal do usuário para release).
 
 ## Bloqueios / Pendências
-* Nenhum bloqueio. Sistema estável com 226 testes Cargo verdes e 113 testes UI verdes.
+* Nenhum bloqueio. Sistema ultra-estável com 228 testes Cargo verdes e 118 testes UI verdes.
+
+54. **Implementação e Conclusão das Stories 9-5 e 9-6 (Épico 9 Finalizado):**
+    - **Story 9-5 (`T9.11`):** *Aviso de Privacidade & Esclarecimento de Acesso a Microfone*:
+      - Adicionadas chaves `privacyNoticeTitle` e `privacyNoticeDesc` com paridade de 100% nos dicionários `en.ts`, `pt-BR.ts` e `es.ts`.
+      - Inserido banner visual de privacidade com ícone `ShieldCheck` em `DriverOnboardingModal.tsx` e banner informativo no seletor de modo em `SettingsModal.tsx`.
+      - Testes adicionados em `DriverOnboarding.test.tsx` e `SettingsModal.test.tsx`.
+    - **Story 9-6 (`T9.12`):** *Modo Inicial Desarmado Standby (No Audio Bridge Default Mode B)*:
+      - Em `crates/open-boom-wasapi/src/stream_pump.rs`, adicionado loop de Standby seguro em `run_windows_pump` quando `!config.force_loopback && capture_device_opt.is_none()`.
+      - Em `src-tauri/src/lib.rs`, `AppState::with_options`, `apply_audio_bridge_mode`, `set_audio_device`, `trigger_device_fallback` e `set_buffer_guard` agora checam `let should_start_pump = force_loopback || virtual_id.is_some()`. Sem driver virtual e sem modo B forçado, `pump` permanece `None` e o dispositivo padrão físico do Windows permanece intacto.
+      - Corrigida a inicialização de `SessionManager` em `AppState::with_options` usando modo sintético forçado quando `auto_route == false` para isolamento total e determinismo de testes unitários.
+      - No frontend, adicionado badge `Standby (Driver Required)` em `StatusBar.tsx` via prop `isStandby`, e chaves `standbyMode` e `standbyModeTooltip` em `en`, `pt-BR` e `es`.
+      - Testes unitários adicionados em `crates/open-boom-wasapi/tests/stream_pump_tests.rs`, `src-tauri/src/lib.rs` e `src-ui/src/test/DriverOnboarding.test.tsx`.
+    - **Resultado da Verificação:** Todos os 228 testes Cargo do workspace aprovados; todos os 118 testes de UI aprovados; build do frontend concluído em 1.90s.
 
 51. **Eliminação de Communications Ducking e Auto-Unmute de Sessões na Transição de Driver (ADR-054):**
     - **Causa Raiz Identificada:** Em `crates/open-boom-wasapi/src/device.rs`, a chamada a `set_default_func(policy_ptr, pcwstr, eCommunications)` vinculava o driver virtual ao papel de comunicações do Windows, disparando a política nativa de "Atenuação de Comunicações" do Windows (*"Reduzir o volume de outros sons em 80%"* ou *"Desativar o som de todos os outros sons"*), mutando abas do Chrome e jogos ao instalar o driver ou abrir o app. Além disso, a reinicialização forçada do `audiosrv` migra sessões no Windows 11 frequentemente marcando-as como `bMuted = TRUE`.

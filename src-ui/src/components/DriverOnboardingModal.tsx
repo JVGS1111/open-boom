@@ -112,6 +112,23 @@ export const DriverOnboardingModal: React.FC<DriverOnboardingModalProps> = ({
             {t.driverOnboarding.whyRequiredDesc}
           </div>
 
+          {/* Privacy & Microphone Notice Box */}
+          <div
+            data-testid="driver-privacy-notice"
+            role="note"
+            className="p-3.5 rounded-lg bg-[#14151a] border border-accent-cyan/20 flex items-start gap-3 text-xs text-text-muted leading-relaxed"
+          >
+            <ShieldCheck className="w-4 h-4 text-accent-cyan shrink-0 mt-0.5" />
+            <div className="flex-1 flex flex-col gap-1">
+              <span className="font-semibold text-text-secondary text-accent-cyan/90">
+                {t.driverOnboarding.privacyNoticeTitle}
+              </span>
+              <span className="text-[11px] text-text-muted leading-relaxed">
+                {t.driverOnboarding.privacyNoticeDesc}
+              </span>
+            </div>
+          </div>
+
           {/* Error Alert Banner if failure occurred */}
           {installError && (
             <div

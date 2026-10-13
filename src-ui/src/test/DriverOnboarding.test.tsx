@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { DriverOnboardingModal } from "../components/DriverOnboardingModal";
 import { Titlebar } from "../components/Titlebar";
+import { StatusBar } from "../components/StatusBar";
 import { I18nProvider } from "../i18n";
 
 export interface TestResult {
@@ -148,6 +149,112 @@ export function runDriverOnboardingTests(): TestResult[] {
     assert(
       html.includes("Descarga manual del controlador (Sitio oficial)"),
       "Should render Spanish manual download link"
+    );
+  });
+
+  test("8. DriverOnboardingModal renders privacy notice box and microphone clarification in English", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider initialLanguage="en">
+        <DriverOnboardingModal isOpen={true} onClose={() => {}} />
+      </I18nProvider>
+    );
+    assert(
+      html.includes('data-testid="driver-privacy-notice"'),
+      "Should render driver-privacy-notice container"
+    );
+    assert(
+      html.includes("Privacy &amp; Microphone Permission Notice") || html.includes("Privacy & Microphone Permission Notice"),
+      "Should render English privacy notice title"
+    );
+    assert(
+      html.includes("generic microphone permission"),
+      "Should explain Windows microphone permission grouping"
+    );
+    assert(
+      html.includes("your voice is never recorded or transmitted"),
+      "Should reassure user that voice is never recorded"
+    );
+  });
+
+  test("9. DriverOnboardingModal renders privacy notice box in Portuguese and Spanish", () => {
+    const ptHtml = renderToStaticMarkup(
+      <I18nProvider initialLanguage="pt-BR">
+        <DriverOnboardingModal isOpen={true} onClose={() => {}} />
+      </I18nProvider>
+    );
+    assert(
+      ptHtml.includes("Aviso de Privacidade &amp; Permissão de Microfone") || ptHtml.includes("Aviso de Privacidade & Permissão de Microfone"),
+      "Should render Portuguese privacy notice title"
+    );
+    assert(
+      ptHtml.includes("sua voz nunca é gravada ou transmitida"),
+      "Should render Portuguese voice guarantee"
+    );
+
+    const esHtml = renderToStaticMarkup(
+      <I18nProvider initialLanguage="es">
+        <DriverOnboardingModal isOpen={true} onClose={() => {}} />
+      </I18nProvider>
+    );
+    assert(
+      esHtml.includes("Aviso de Privacidad y Permiso de Micrófono"),
+      "Should render Spanish privacy notice title"
+    );
+    assert(
+      esHtml.includes("su voz nunca es grabada ni transmitida"),
+      "Should render Spanish voice guarantee"
+    );
+  });
+
+  test("10. StatusBar renders Standby badge when isStandby is true and usingVirtualBridge is false", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider initialLanguage="en">
+        <StatusBar
+          bypassActive={false}
+          onToggleBypass={() => {}}
+          latencyMs={12.5}
+          limiterGainReductionDb={0.0}
+          dspActive={false}
+          usingVirtualBridge={false}
+          isStandby={true}
+        />
+      </I18nProvider>
+    );
+    assert(
+      html.includes('data-testid="status-bar-standby-badge"'),
+      "Should render status-bar-standby-badge container"
+    );
+    assert(
+      html.includes("Standby (Driver Required)"),
+      "Should display English Standby mode label"
+    );
+    assert(
+      !html.includes("Loopback Mode"),
+      "Should not claim Loopback Mode when in Standby"
+    );
+  });
+
+  test("11. StatusBar renders Loopback Mode when usingVirtualBridge is false and isStandby is false", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider initialLanguage="en">
+        <StatusBar
+          bypassActive={false}
+          onToggleBypass={() => {}}
+          latencyMs={12.5}
+          limiterGainReductionDb={0.0}
+          dspActive={true}
+          usingVirtualBridge={false}
+          isStandby={false}
+        />
+      </I18nProvider>
+    );
+    assert(
+      html.includes("Loopback Mode"),
+      "Should display Loopback Mode when user explicitly enables it"
+    );
+    assert(
+      !html.includes('data-testid="status-bar-standby-badge"'),
+      "Should not render standby badge when Loopback Mode is active"
     );
   });
 
