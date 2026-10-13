@@ -19,6 +19,16 @@
 
 ---
 
+## 🗺️ Roadmap & Current Priorities (v0.6+)
+
+> [!IMPORTANT]
+> **Primary Engineering Focus:** With the core Windows DSP engine, 7.1 surround automation, and atomic persistence stable, development priorities are focused on cross-platform expansion and performance optimization:
+> 1. 🍎 **macOS Port:** CoreAudio `AudioServerPlugIn` virtual sink routing and Apple Silicon (ARM64 NEON) DSP vectorization.
+> 2. 🐧 **Linux Port:** Native PipeWire filter-chain virtual node integration and low-latency audio stream routing.
+> 3. ⚡ **Performance & Engine Optimization:** AVX2/FMA vector optimizations, sub-5ms buffer latency guarantees, zero heap allocations on real-time processing threads, and reduced background CPU footprint.
+
+---
+
 ## ⚡ Overview
 
 **OpenBoom** is a modern, high-fidelity, open-source alternative to proprietary audio enhancers like Boom 3D. Engineered in **Rust** and **Tauri v2** with a clean-room architectural design, OpenBoom transforms any standard headphones or speakers into an immersive 3D soundstage with zero kernel driver instability, sub-15ms round-trip latency, and zero telemetry.
