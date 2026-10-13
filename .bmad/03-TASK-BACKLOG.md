@@ -79,6 +79,7 @@
 - [X] **T9.7**: Automação da Máscara de Alto-Falantes Físicos 7.1 Surround no Windows (`PKEY_AudioEndpoint_PhysicalSpeakers = 0x63F`) (Story 9-2 / ADR-047 / ADR-052).
 - [X] **T9.8**: Bloqueio Preventivo no Boot & Modal de Onboarding (Gating com controles cinza/desativados se não houver driver) (Story 9-3 / ADR-052).
 - [X] **T9.9**: Instalação Silenciosa de 1 Clique, Resiliência Try/Catch, Link Manual de Fallback & Smoke Test na Máquina Host (Story 9-4 / ADR-052).
+- [X] **T9.10**: Refinamentos de UI: Remoção de Seletor de Idioma da Tela Inicial, Padding Confortável na Aba de Updates & Fallback em Inglês para Idiomas de Sistema Não Suportados (ADR-055).
 - [ ] **T9.1**: Estudo de Viabilidade e Custos de Driver Virtual Próprio (Mapeamento do Windows Driver Kit SYSVAD, requisitos de assinatura Microsoft WHQL, token de hardware EV ~US$ 500/ano, e alternativa com drivers virtuais livres).
 - [ ] **T9.2**: Pipeline Acústico de Engenharia Reversa de Áudios de Jogos via REA (Metodologia de laboratório com espectrogramas FFT para identificar assinaturas espectrais de passos, recargas e tiros em CS2, Warzone, BF6 sem violar copyright de assets).
 - [ ] **T9.3**: Modelagem do DSP "Gamer Advantage" (Estágio de Peak Clarity EQ em tempo real + Compressor Dinâmico DRC para amplificar sons baixos/passos e atenuar tiros ensurdecedores).

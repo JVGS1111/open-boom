@@ -363,3 +363,14 @@
       - Adicionada enumeração imediata de sessões no boot em `AppState::new_runtime()`, ao alternar o Master Power, e ao trocar o modo de ponte de áudio.
       - Adicionada chamada a `fetchAudioSessions()` no hook de montagem inicial do frontend (`App.tsx`).
     - **Verificação Geral:** 227 testes Rust verdes em Cargo, 113 testes de UI em React/Vite verdes, compilação de release e NSIS (`OpenBoom_0.5.2_x64-setup.exe`) concluídas com sucesso.
+52. **Refinamento de UI: Remoção do Seletor de Idioma da Tela Inicial, Layout da Aba de Updates & Fallback em Inglês:**
+    - **Remoção de Idioma da Tela Inicial:** Removido o `<LanguageMenu />` de `src-ui/src/components/Titlebar.tsx`. A seleção de idioma permanece totalmente acessível na modal de preferências (`SettingsModal.tsx`) com a grade visual completa e no menu de contexto nativo da bandeja do Windows (System Tray).
+    - **Refinamento de CSS na Tela de Atualizações (`SettingsModal.tsx`):**
+      - Aumento da largura da modal para `w-[560px] max-w-[95vw]` e paddings internos (`p-5 sm:p-6`, `p-4 sm:p-5`, `p-3.5 sm:p-4`).
+      - Redesenho responsivo do banner de versão com `whitespace-nowrap`, padding generoso `px-3 py-1.5` nas caixas de "Versão Atual" e "Última Versão", evitando quebras de linha e texto espremido.
+      - Cartões de status e toggles com bordas arredondadas `rounded-xl`, espaçamento balanceado e correção de caractere de bullet point.
+    - **Garantia de Fallback em Inglês (`src-ui/src/i18n/index.tsx`):**
+      - `getSystemLocale()` e `resolveEffectiveLocale()` reforçados para iterar candidatos de locale e retornar estritamente `"en"` sempre que o idioma do sistema não for suportado (ex.: alemão, francês, japonês, chinês, russo, etc.).
+      - Adicionados testes de regressão em `src-ui/src/test/I18n.test.tsx` cobrindo locales não suportados.
+    - **Verificação Geral:** 226 testes Rust verdes, 113 testes UI verdes, build do frontend e do binário Rust compilados sem erros, smoke launch do executável validado em tempo real com processo saudável.
+

@@ -913,3 +913,23 @@
   2. **Auto-Unmute de Resiliência em `apply_stored_profiles`:** Se uma sessão for detectada com `session.is_muted == true` e não possuir um perfil explícito em `stored_profiles` pedindo mudo, o OpenBoom automaticamente desmuta a sessão via `ISimpleAudioVolume::SetMute(FALSE, NULL)`.
   3. **Enumeração no Boot e em Transições:** Invocação imediata de `enumerate_sessions()` na inicialização do `AppState::new_runtime()`, ao ligar a chave mestre de áudio, e ao aplicar mudanças de modo de ponte de áudio.
 * **Consequência:** Abas do Chrome, jogos e tocadores de mídia tocam perfeitamente sem serem silenciados pelo Windows ao instalar o driver ou abrir o aplicativo.
+
+---
+
+## ADR-055: Refinamentos de UI: Remoção do Seletor de Idioma da Tela Inicial, Layout Espaçoso na Aba de Updates & Fallback em Inglês no i18n
+* **Data:** 13/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  1. O seletor de idiomas estava visível diretamente na barra de título (`Titlebar.tsx`) da tela inicial, sobrecarregando os controles da janela.
+  2. A aba de atualizações (`SettingsModal.tsx` Tab 2) apresentava layout comprimido/apertado, com as caixas de versão quebrando em duas linhas ("Current" / "Version: 0.5.2") e paddings escassos.
+  3. Indagação sobre o comportamento do sistema de internacionalização diante de idiomas de host não suportados pelo aplicativo.
+* **Decisões:**
+  1. **Remoção do Menu de Idioma da Barra de Título:** Retirado o `<LanguageMenu />` de `Titlebar.tsx`. A seleção de idioma segue acessível com layout enriquecido dentro de `SettingsModal.tsx` (Seção 1: Idioma & Interface) e pelo menu de contexto nativo da bandeja do Windows (System Tray).
+  2. **Refinamento Visual da Modal e Aba de Updates:**
+     - Largura da modal expandida de `w-[520px]` para `w-[560px] max-w-[95vw]` e paddings aumentados para `p-5 sm:p-6`.
+     - Banner de atualizações com `rounded-xl`, `p-4 sm:p-5`, ícone 36px e flexwrap responsivo.
+     - Badges de versão atual e versão mais recente estruturados com `whitespace-nowrap`, padding confortável `px-3 py-1.5 rounded-lg` e sombra suave, impedindo quebras de linha desagradáveis.
+     - Caixas de mensagem de status e switches com paddings ampliados (`p-3.5 sm:p-4`) e espaçamento balanceado.
+  3. **Garantia de Fallback Estrito em Inglês:** Reforçado `getSystemLocale()` e `resolveEffectiveLocale()` para iterar candidatos em `navigator.languages` e garantir que qualquer idioma não suportado (ex.: alemão, francês, japonês, etc.) caia estritamente em `"en"`. Adicionados testes de asserção em `I18n.test.tsx`.
+* **Consequência:** Interface limpa e despoluída na tela inicial, aba de atualizações elegante e legível, e previsibilidade plena no tratamento de idiomas do sistema operacional.
+
