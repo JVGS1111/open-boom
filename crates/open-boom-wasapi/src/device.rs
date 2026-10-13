@@ -295,6 +295,7 @@ impl AudioDeviceManager {
             guid
         );
 
+        let mut needs_elev = false;
         for pid in ["14", "2"] {
             let mut cmd = std::process::Command::new("reg");
             cmd.args([
@@ -310,7 +311,30 @@ impl AudioDeviceManager {
             ]);
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-            let _ = cmd.output();
+            if let Ok(out) = cmd.output() {
+                if !out.status.success() {
+                    needs_elev = true;
+                }
+            } else {
+                needs_elev = true;
+            }
+        }
+
+        if needs_elev {
+            let ps_cmd = format!(
+                "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render\\{}\\Properties' -Name '{{a45c254e-df1c-4efd-8020-67d146a850e0}},2' -Value '{}' -Type String -Force; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render\\{}\\Properties' -Name '{{a45c254e-df1c-4efd-8020-67d146a850e0}},14' -Value '{}' -Type String -Force; Restart-Service audiosrv -Force -ErrorAction SilentlyContinue",
+                guid, name, guid, name
+            );
+            let mut elev_cmd = std::process::Command::new("powershell");
+            elev_cmd.args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!("Start-Process powershell -ArgumentList '-NoProfile -Command \"{}\"' -Verb RunAs -Wait", ps_cmd),
+            ]);
+            use std::os::windows::process::CommandExt;
+            elev_cmd.creation_flags(0x08000000);
+            let _ = elev_cmd.output();
         }
 
         Ok(name.to_string())
@@ -398,7 +422,29 @@ impl AudioDeviceManager {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-        let _ = cmd.output();
+        let needs_elev = if let Ok(out) = cmd.output() {
+            !out.status.success()
+        } else {
+            true
+        };
+
+        if needs_elev {
+            let ps_cmd = format!(
+                "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render\\{}\\Properties' -Name '{{1da5d803-d346-45ab-9f40-8c2f1083a47e}},3' -Value {} -Type DWord -Force; Restart-Service audiosrv -Force -ErrorAction SilentlyContinue",
+                guid, mask
+            );
+            let mut elev_cmd = std::process::Command::new("powershell");
+            elev_cmd.args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!("Start-Process powershell -ArgumentList '-NoProfile -Command \"{}\"' -Verb RunAs -Wait", ps_cmd),
+            ]);
+            use std::os::windows::process::CommandExt;
+            elev_cmd.creation_flags(0x08000000);
+            let _ = elev_cmd.output();
+        }
+
         Ok(mask)
     }
 

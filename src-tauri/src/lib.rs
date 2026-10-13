@@ -254,7 +254,19 @@ impl AppState {
         };
 
         let physical_id = self.active_physical_device_id.lock().ok().and_then(|g| g.clone());
-        let virtual_id = self.virtual_device_id.lock().ok().and_then(|g| g.clone());
+        let virtual_id = {
+            let mut v_guard = self.virtual_device_id.lock().ok();
+            let mut current = v_guard.as_ref().and_then(|g| g.as_ref().cloned());
+            if current.is_none() && !force_loopback {
+                if let Ok(Some(dev)) = device_mgr.find_virtual_device() {
+                    current = Some(dev.id.clone());
+                    if let Some(ref mut g) = v_guard {
+                        **g = Some(dev.id);
+                    }
+                }
+            }
+            current
+        };
 
         // Adjust Windows endpoint routing before restarting stream pump
         if force_loopback || !dsp_active {
@@ -616,7 +628,8 @@ async fn install_virtual_driver(
 
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || {
+        let state_clone_for_update = state.clone();
+        let res = tauri::async_runtime::spawn_blocking(move || {
             let ps_script = r#"
                 $ProgressPreference = 'SilentlyContinue'
                 $ErrorActionPreference = 'Stop'
@@ -626,6 +639,7 @@ async fn install_virtual_driver(
                 }
                 $zipPath = Join-Path $tempDir "VBCABLE_Driver_Pack43.zip"
                 $exePath = Join-Path $tempDir "VBCABLE_Setup_x64.exe"
+                $setupScript = Join-Path $tempDir "ApplyDriverBranding.ps1"
 
                 if (-not (Test-Path $exePath) -or ((Get-Item $exePath).Length -lt 100000)) {
                     $urls = @(
@@ -665,10 +679,51 @@ async fn install_virtual_driver(
                     exit 3
                 }
 
+                $scriptContent = @'
+param([string]$setupExe)
+$ProgressPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'SilentlyContinue'
+
+if ($setupExe -and (Test-Path $setupExe)) {
+    $proc = Start-Process -FilePath $setupExe -ArgumentList "-i", "-h" -PassThru -Wait
+}
+
+Start-Sleep -Seconds 1
+$foundGuid = $null
+for ($i = 0; $i -lt 12; $i++) {
+    $renderKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render" -ErrorAction SilentlyContinue
+    foreach ($k in $renderKeys) {
+        $propsPath = Join-Path $k.PSPath "Properties"
+        if (Test-Path $propsPath) {
+            $p = Get-ItemProperty $propsPath -ErrorAction SilentlyContinue
+            $pName = $p.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+            if ($pName -like "*CABLE*" -or $pName -like "*VB-Audio*" -or $pName -like "*OpenBoom*") {
+                $foundGuid = $k.PSChildName
+                break
+            }
+        }
+    }
+    if ($foundGuid) { break }
+    Start-Sleep -Milliseconds 500
+}
+
+if ($foundGuid) {
+    $targetPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\$foundGuid\Properties"
+    $desiredName = "OpenBoom Spatial Audio (powered by VB-Cable)"
+    Set-ItemProperty -Path $targetPath -Name "{a45c254e-df1c-4efd-8020-67d146a850e0},2" -Value $desiredName -Type String -Force
+    Set-ItemProperty -Path $targetPath -Name "{a45c254e-df1c-4efd-8020-67d146a850e0},14" -Value $desiredName -Type String -Force
+    Set-ItemProperty -Path $targetPath -Name "{1da5d803-d346-45ab-9f40-8c2f1083a47e},3" -Value 1599 -Type DWord -Force
+}
+
+Restart-Service audiosrv -Force -ErrorAction SilentlyContinue
+exit 0
+'@
+                [System.IO.File]::WriteAllText($setupScript, $scriptContent)
+
                 try {
-                    $proc = Start-Process -FilePath $exePath -ArgumentList "-i", "-h" -Verb RunAs -PassThru -Wait
-                    if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010 -and $proc.ExitCode -ne $null) {
-                        [Console]::Error.WriteLine("INSTALLER_ERROR: ExitCode " + $proc.ExitCode)
+                    $elevatedProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$setupScript`"", "-setupExe", "`"$exePath`"" -Verb RunAs -PassThru -Wait
+                    if ($elevatedProc.ExitCode -ne 0 -and $elevatedProc.ExitCode -ne 3010 -and $elevatedProc.ExitCode -ne $null) {
+                        [Console]::Error.WriteLine("INSTALLER_ERROR: ExitCode " + $elevatedProc.ExitCode)
                         exit 4
                     }
                 } catch {
@@ -700,7 +755,8 @@ async fn install_virtual_driver(
                 }
             }
 
-            // Allow Windows Audio service a brief moment to enumerate and bind the new virtual endpoint
+            // Allow Windows Audio service a brief moment to finish restarting and re-enumerate endpoints
+            std::thread::sleep(std::time::Duration::from_millis(1500));
             let mut virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
             for _ in 0..10 {
                 if virtual_dev.is_some() {
@@ -723,7 +779,17 @@ async fn install_virtual_driver(
             })
         })
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+
+        // Immediately update AppState virtual_device_id and activate Mode A
+        if let Some(ref dev_id) = res.endpoint_id {
+            if let Ok(mut v_guard) = state_clone_for_update.virtual_device_id.lock() {
+                *v_guard = Some(dev_id.clone());
+            }
+            let _ = state_clone_for_update.apply_audio_bridge_mode("auto");
+        }
+
+        Ok(res)
     }
     #[cfg(not(windows))]
     {

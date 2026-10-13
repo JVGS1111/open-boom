@@ -252,6 +252,14 @@ export const App: React.FC = () => {
       } catch {
         // Fallback
       }
+      // Automatically restart application so WASAPI rebinds cleanly to the new 7.1 driver and activates Mode A
+      setTimeout(async () => {
+        try {
+          await invoke("restart_application");
+        } catch {
+          // Fallback
+        }
+      }, 1000);
     } catch (err: unknown) {
       const errStr = typeof err === "string" ? err : (err as any)?.message || "";
       if (errStr.includes("UAC_DENIED")) {
