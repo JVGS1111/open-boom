@@ -948,3 +948,26 @@
   2. **Criação da Story 9-6 (`T9.12`):** No primeiro boot sem driver virtual (ou enquanto nenhum driver for detectado), o OpenBoom não deve ativar automaticamente o Modo B. Deve inicializar em um estado desarmado/inativo (`Standby` / `Nenhum`), deixando o áudio do Windows intocado e o motor de áudio desligado até que o usuário instale o driver ou escolha conscientemente habilitar o Modo B nas configurações.
   3. **Registro de Backlog Pós-1.0 (`T11.3`):** Nomenclatura customizada de endpoint registrada para a Sprint 11 sem bloquear o lançamento da v1.0.
 * **Consequência:** Experiência de primeiro boot suave sem sustos de áudio duplicado, total transparência com alertas de segurança/antivírus e foco mantido no lançamento da versão 1.0.
+
+---
+
+## ADR-057: Descarte de Desenvolvimento de Driver de Kernel Próprio e Adoção Definitiva do VB-Audio Cable
+* **Data:** 13/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  - Havia sido registrado no backlog (tarefa `T9.1`) um item para estudo de viabilidade e custos de desenvolver um driver de kernel virtual próprio (Windows Driver Kit SYSVAD PortCls).
+  - O desenvolvimento de um driver de kernel proprietário ou aberto sob medida acarreta custos e barreiras desproporcionais:
+    1. Exigência de assinatura de código em nível de kernel pela Microsoft (certificado EV Hardware Token de ~US$ 500/ano + processo rigoroso de WHQL / HLK testing).
+    2. Risco de instabilidade de sistema (telas azuis BSOD) e manutenção contínua diante de atualizações do kernel do Windows.
+    3. Riscos de falso-positivo em anti-cheats de jogos (Vanguard, Easy Anti-Cheat, BattlEye) para drivers novos ou de pequena escala.
+  - O OpenBoom já possui integração nativa, robusta e automatizada com o **VB-Audio Virtual Cable**:
+    - Instalação silenciosa de 1 clique (`-i -h`) com elevação UAC padrão;
+    - Certificação WHQL oficial da Microsoft e total compatibilidade anti-cheat;
+    - Automação da máscara 7.1 surround (`0x63F`) via registro do Windows;
+    - Link manual oficial de fallback em caso de falha de download.
+* **Decisão:**
+  - Descartar definitivamente a criação/desenvolvimento de um driver de kernel próprio (`T9.1` cancelada no backlog).
+  - Adotar oficialmente e de forma permanente o **VB-Audio Virtual Cable** como o driver virtual padrão suportado pelo OpenBoom no Windows.
+* **Consequência:**
+  - Eliminação de custos recorrentes com certificados EV e testes WHQL.
+  - Foco total e direcionamento de esforço de engenharia para o que realmente agrega valor ao ecossistema open-source: **portabilidade (macOS CoreAudio e Linux PipeWire) e otimizações contínuas de performance da engine DSP**.

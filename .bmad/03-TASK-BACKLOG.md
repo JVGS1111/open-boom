@@ -5,6 +5,7 @@
 * `[/]` Em progresso (In Progress)
 * `[X]` Concluído (Done)
 * `[!]` Bloqueado (Blocked)
+* `[-]` Descartado (Discarded)
 
 ---
 
@@ -82,7 +83,7 @@
 - [X] **T9.10**: Refinamentos de UI: Remoção de Seletor de Idioma da Tela Inicial, Padding Confortável na Aba de Updates & Fallback em Inglês para Idiomas de Sistema Não Suportados (ADR-055).
 - [X] **T9.11**: Aviso de Privacidade e Esclarecimento de Acesso a Microfone / Interceptação de Som no Onboarding e Configurações (Story 9-5 / ADR-056).
 - [X] **T9.12**: Modo Inicial Desarmado (Standby / Nenhum Modo Selecionado) no Boot Sem Driver para Impedir Ativação Involuntária do Modo B Bugado (Story 9-6 / ADR-056).
-- [ ] **T9.1**: Estudo de Viabilidade e Custos de Driver Virtual Próprio (Mapeamento do Windows Driver Kit SYSVAD, requisitos de assinatura Microsoft WHQL, token de hardware EV ~US$ 500/ano, e alternativa com drivers virtuais livres).
+- [-] **T9.1**: [DESCARTADO - ADR-057] Estudo de Viabilidade e Custos de Driver Virtual Próprio (Descartado definitivamente; adotado o VB-Audio Virtual Cable oficial com automação de 1 clique, certificação WHQL e conformidade anti-cheat).
 - [ ] **T9.2**: Pipeline Acústico de Engenharia Reversa de Áudios de Jogos via REA (Metodologia de laboratório com espectrogramas FFT para identificar assinaturas espectrais de passos, recargas e tiros em CS2, Warzone, BF6 sem violar copyright de assets).
 - [ ] **T9.3**: Modelagem do DSP "Gamer Advantage" (Estágio de Peak Clarity EQ em tempo real + Compressor Dinâmico DRC para amplificar sons baixos/passos e atenuar tiros ensurdecedores).
 - [ ] **T9.4**: Estratégia de Produto Open-Core & Proteção Jurídica (Separação entre OpenBoom Core MIT/Apache e Módulo Pro comercial, compliance anticheat zero-hook, e blindagem de marcas registradas).

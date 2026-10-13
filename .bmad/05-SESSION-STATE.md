@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 13/10/2026 - 13:55
-* **Sprint Ativa:** **Sprint 9 — Refinamentos de UI, Ajustes de Update & Robustez i18n (ÉPICO 9 100% CONCLUÍDO)**
-* **Tarefa Atual:** Conclusão de todas as histórias do Épico 9: Story 9-5 (Aviso de Privacidade & Esclarecimento de Microfone) e Story 9-6 (Modo Inicial Desarmado Standby). Suíte de 228 testes Rust e 118 testes UI verdes. Mandatory Verification Gate aprovado. Pronto para commit, push e aguardar sinal do usuário para release.
+* **Data/Hora:** 13/10/2026 - 15:35
+* **Sprint Ativa:** **Lançamento v0.6.0 & Transição para Roadmap de Portabilidade (macOS/Linux) & Performance**
+* **Tarefa Atual:** Release v0.6.0 publicada no GitHub e gerada localmente. Decisão formal ADR-057 registrada: descarte definitivo de desenvolvimento de driver de kernel proprietário e adoção oficial do VB-Audio Virtual Cable (1-clique, WHQL, anti-cheat safe). Foco direcionado aos portes cross-platform (macOS CoreAudio, Linux PipeWire) e otimizações de performance/DSP.
 
 
 ## O que foi concluído nesta sessão
