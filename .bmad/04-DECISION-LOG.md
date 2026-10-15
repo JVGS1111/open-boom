@@ -887,3 +887,23 @@
 * **Consequência:**
   - Eliminação de custos recorrentes com certificados EV e testes WHQL.
   - Foco total e direcionamento de esforço de engenharia para o que realmente agrega valor ao ecossistema open-source: **portabilidade (macOS CoreAudio e Linux PipeWire) e otimizações contínuas de performance da engine DSP**.
+
+---
+
+## ADR-058: Porte macOS CoreAudio — Fronteira HAL Testável e Plano de Dados Real (Story 10-1)
+* **Data:** 15/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  - A Story 10-1 entregou a primeira versão do crate `open-boom-coreaudio`, mas uma revisão adversarial (`bad_spec`) constatou que o plano de dados do HAL era inerte: os IOProcs não copiavam quadros, `read_samples` sintetizava um tom de 440 Hz e `write_samples` descartava o buffer. O adapter passava em todos os critérios de aceite sem mover áudio algum.
+  - A trait `AudioHostBackend` (ADR-037) e a vetorização por arquitetura (SSE2/NEON) já eram corretas, mas a fronteira com o CoreAudio não era testável nem funcional.
+* **Decisões:**
+  1. **Fronteira `AudioHal` explícita (`hal.rs`):** a captura/render passa a ser negociada por `AudioHal`/`HalStream`, com duas implementações: `CoreAudioHal` (FFI real: `AudioObject*`/`AudioDeviceCreateIOProcID`) e `MockHal` determinístico e headless. Os IOProcs reais recebem o ponteiro para o anel SPSC como *client data*, provando que o plano de dados move amostras de verdade.
+  2. **Anéis SPSC Float32 (`ring_buffer.rs`):** o IOProc de captura publica e o de render consome através de `SampleRing` livre de locks; `read_samples` apenas drena o anel e `write_samples` apenas enfileira. O tom de 440 Hz existe somente no caminho sintético explícito (`MockHal` com tom), nunca em produção.
+  3. **Troca de dispositivo real:** `switch_device` atualiza `kAudioHardwarePropertyDefaultOutputDevice`; o HAL real registra um *listener* de dispositivo padrão (`take_default_output_changed`) para recuperação de perda em < 500 ms. Nomes de dispositivo são lidos via `kAudioDevicePropertyDeviceNameCFString` + `CFStringGetCString` + `CFRelease`.
+  4. **Pump de tempo real sem lock no caminho DSP:** o `CoreAudioStreamPump` possui seu próprio `AudioProcessor`, faz *pacing* pela disponibilidade do anel de captura (sem `sleep` fixo) e consome a fila SPSC de comandos sem mutex; apenas publica telemetria brevemente após o bloco.
+  5. **Latência honesta:** `round_trip_latency_ms` deriva dos buffers configurados (240 frames => 5+5+2 = 12 ms). Removida a alegação de "< 15 ms garantido" para qualquer configuração; o valor < 15 ms só se sustenta na configuração padrão documentada.
+  6. **Enumeração sem fixtures sintéticas em produção:** `CoreAudioDeviceManager::new()` usa o HAL real com `allow_synthetic = false`; fixtures só aparecem em modo forçado/sintético explícito.
+  7. **`dot_product_64` correto e NEON:** consome exatamente `HRTF_TAPS` (falha rápida para slices curtas, sem truncamento silencioso) e usa `vfmaq_f32` em `aarch64`, com testes de equivalência e de limites.
+  8. **Glue mínimo `cfg(windows)` no `open-boom-wasapi`:** alias `VolumeContextGuid` e consumo de argumentos do pump permitem que o conjunto de crates compile fora do Windows sem alterar o comportamento Windows.
+  9. **CI macOS:** novo job `macos-latest` compila a FFI CoreAudio e roda os testes de `open-boom-core`, `open-boom-coreaudio` e `open-boom-storage`.
+* **Consequência:** O adapter macOS passa a mover áudio real pelo CoreAudio HAL, é inteiramente testável sem hardware via `MockHal` (24 testes verdes no crate) e não reporta mais garantias de latência que a aritmética de configuração não sustenta.

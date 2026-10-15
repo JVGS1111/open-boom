@@ -34,6 +34,7 @@ jobs:
           workspaces: |
             crates/open-boom-core
             crates/open-boom-wasapi
+            crates/open-boom-coreaudio
             crates/open-boom-storage
             src-tauri
 
@@ -53,3 +54,38 @@ jobs:
 
       - name: Cargo check release
         run: cargo check --release --workspace
+
+  macos-test:
+    name: macOS CoreAudio Test (arm64)
+    # Pin an Apple Silicon runner/target so the NEON path is the one actually compiled.
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain (aarch64-apple-darwin)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/open-boom-core
+            crates/open-boom-coreaudio
+            crates/open-boom-storage
+            src-tauri
+
+      - name: Check off-Windows wasapi glue
+        run: cargo check --locked --target aarch64-apple-darwin -p open-boom-wasapi
+
+      - name: Build CoreAudio adapter (compiles the macOS FFI + NEON path)
+        run: cargo build --locked --target aarch64-apple-darwin -p open-boom-coreaudio
+
+      - name: Run platform-agnostic and CoreAudio tests
+        run: |
+          cargo test --locked --target aarch64-apple-darwin -p open-boom-core
+          cargo test --locked --target aarch64-apple-darwin -p open-boom-coreaudio
+          cargo test --locked --target aarch64-apple-darwin -p open-boom-storage

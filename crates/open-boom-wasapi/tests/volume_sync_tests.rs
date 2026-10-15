@@ -10,7 +10,7 @@
 //! 7. Synthetic simulation and fallback mode resilience.
 
 use open_boom_wasapi::{
-    EndpointVolumeSync, VolumeSyncEvent, OPEN_BOOM_VOLUME_CONTEXT_GUID,
+    EndpointVolumeSync, VolumeContextGuid, VolumeSyncEvent, OPEN_BOOM_VOLUME_CONTEXT_GUID,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -142,7 +142,7 @@ fn test_feedback_loop_suppression_guid_context() {
     );
 
     // Notification with a different external GUID (e.g. from Windows Shell / SNDVOL) is accepted
-    let external_guid = windows_core::GUID::from_u128(0x11223344_5566_7788_9900_aabbccddeeff);
+    let external_guid = VolumeContextGuid::from_u128(0x11223344_5566_7788_9900_aabbccddeeff);
     let processed_external = sync.simulate_os_volume_change(
         0.75,
         false,

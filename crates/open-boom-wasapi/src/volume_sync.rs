@@ -27,10 +27,30 @@ use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
 };
 
+/// Platform-neutral alias for the COM event context GUID carried by volume notifications.
+///
+/// On Windows this is `windows_core::GUID`; on other platforms a lightweight
+/// equivalent keeps the crate compiling without pulling in `windows-rs`.
+#[cfg(windows)]
+pub use windows_core::GUID as VolumeContextGuid;
+
+/// Platform-neutral equivalent of `windows_core::GUID` used off-Windows.
+#[cfg(not(windows))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct VolumeContextGuid(pub u128);
+
+#[cfg(not(windows))]
+impl VolumeContextGuid {
+    /// Constructs a GUID-equivalent value from a 128-bit integer.
+    pub const fn from_u128(value: u128) -> Self {
+        Self(value)
+    }
+}
+
 /// Dedicated COM event context GUID identifying volume adjustments originating from OpenBoom.
 /// Any `OnNotify` event matching this GUID is recognized as an internal echo and suppressed.
-pub const OPEN_BOOM_VOLUME_CONTEXT_GUID: windows_core::GUID =
-    windows_core::GUID::from_u128(0x7b003e8a_8422_4f1e_98c1_4a8df2d00100);
+pub const OPEN_BOOM_VOLUME_CONTEXT_GUID: VolumeContextGuid =
+    VolumeContextGuid::from_u128(0x7b003e8a_8422_4f1e_98c1_4a8df2d00100);
 
 /// Volume synchronization event delivered when the OS master volume or mute state changes.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -388,7 +408,7 @@ impl EndpointVolumeSync {
         &self,
         volume: f32,
         is_muted: bool,
-        context_guid: Option<windows_core::GUID>,
+        context_guid: Option<VolumeContextGuid>,
     ) -> bool {
         // Feedback Suppression Rule 1: Check OpenBoom context GUID
         if let Some(guid) = context_guid {

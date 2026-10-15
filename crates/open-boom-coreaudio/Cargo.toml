@@ -1,0 +1,15 @@
+[package]
+name = "open-boom-coreaudio"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+open-boom-core = { path = "../open-boom-core" }
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+coreaudio-sys = { workspace = true }
+libc = { workspace = true }

@@ -54,6 +54,13 @@ impl AudioStreamPump {
         let is_running = Arc::new(AtomicBool::new(true));
         let is_running_clone = is_running.clone();
 
+        #[cfg(not(windows))]
+        {
+            // Off-Windows the real pump is not compiled; keep the arguments consumed
+            // so the crate still builds cleanly on macOS/Linux.
+            let _ = (&coordinator, &config);
+        }
+
         #[cfg(windows)]
         let handle = std::thread::Builder::new()
             .name("open-boom-audio-pump".to_string())
@@ -77,14 +84,16 @@ impl AudioStreamPump {
         let handle = std::thread::Builder::new()
             .name("open-boom-audio-pump".to_string())
             .spawn(move || {
-                // Synthetic / headless loop for non-Windows platforms
+                // No WASAPI stack off-Windows, so there is no capture/render loop to run.
+                // Keep the handle alive (and the running flag true) until stopped so the
+                // lifecycle and telemetry behave identically to the Windows build.
                 while is_running_clone.load(Ordering::Relaxed) {
                     std::thread::sleep(std::time::Duration::from_millis(10));
                 }
             })
             .map_err(|e| {
                 EngineError::DeviceInitialization(format!(
-                    "Failed to spawn synthetic pump thread: {}",
+                    "Failed to spawn audio pump keep-alive thread: {}",
                     e
                 ))
             })?;

@@ -26,4 +26,6 @@ pub use resampler::{Resampler, MAX_RESAMPLER_CHANNELS};
 pub use session_manager::{AppVolumeProfile, ProcessAudioSession, SessionManager};
 pub use stream_pump::{AudioStreamPump, StreamPumpConfig};
 pub use virtual_bridge::{BridgeMode, VirtualAudioBridge, VirtualBridgeConfig};
-pub use volume_sync::{EndpointVolumeSync, VolumeSyncEvent, OPEN_BOOM_VOLUME_CONTEXT_GUID};
+pub use volume_sync::{
+    EndpointVolumeSync, VolumeContextGuid, VolumeSyncEvent, OPEN_BOOM_VOLUME_CONTEXT_GUID,
+};

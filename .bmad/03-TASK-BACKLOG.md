@@ -94,6 +94,11 @@
 - [ ] **T10.2**: Estudo de Viabilidade para Des-Reactização da Interface (Avaliar migração da camada de apresentação para HTML/JS Vanilla sem frameworks ou UI nativa Rust via Slint/Iced/Egui acelerada por hardware, eliminando dependência de browser engines pesadas - ADR-050).
 - [ ] **T10.3**: Investigação de Nomenclatura PnP de Dispositivo Virtual no Windows Shell pós-1.0 (Explorar injeção em interfaces de dispositivo de baixo nível ou INF customizado para customizar o rótulo do driver sem quebrar assinaturas de driver ou caches do audiosrv - ADR-056).
 
+---
+
+### Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10)
+- [X] **T12.1**: Crate `open-boom-coreaudio` — Adaptador CoreAudio HAL de Captura & Render (Story 10-1 / ADR-058). Trait hexagonal `AudioHostBackend` em `open-boom-core`, fronteira `AudioHal` com FFI CoreAudio real + `MockHal` determinístico headless, anéis SPSC Float32 entre os IOProcs e o pump, prioridade de tempo real `pthread_setschedparam(SCHED_RR)`, vetorização NEON (64 taps HRTF) em Apple Silicon com equivalência escalar testada, enumeração/troca do endpoint padrão (CFString + `CFRelease`) e job CI `macos-latest`.
+
 
 
 

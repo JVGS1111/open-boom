@@ -4,6 +4,7 @@
 use std::sync::Arc;
 use open_boom_core::dsp::pipeline::AudioProcessor;
 use open_boom_core::ring_buffer::SpscQueue;
+use open_boom_core::traits::AudioHostBackend;
 use open_boom_core::types::{AudioCommand, AudioDeviceInfo, EngineResult, TelemetrySnapshot};
 use crate::device::AudioDeviceManager;
 use crate::loopback_capture::{LoopbackCapture, LoopbackConfig};
@@ -304,5 +305,41 @@ impl AudioEngineCoordinator {
     /// Returns whether the anti-pumping peak-hold buffer guard is enabled.
     pub fn is_buffer_guard_enabled(&self) -> bool {
         self.processor.is_buffer_guard_enabled()
+    }
+}
+
+/// Adapts the Windows WASAPI coordinator onto the platform-agnostic
+/// [`AudioHostBackend`] hexagonal boundary (ADR-037).
+impl AudioHostBackend for AudioEngineCoordinator {
+    fn start(&mut self) -> EngineResult<()> {
+        AudioEngineCoordinator::start(self)
+    }
+
+    fn stop(&mut self) -> EngineResult<()> {
+        AudioEngineCoordinator::stop(self)
+    }
+
+    fn is_running(&self) -> bool {
+        AudioEngineCoordinator::is_running(self)
+    }
+
+    fn process_chunk(&mut self, input: &[f32], output: &mut [f32]) {
+        self.process_audio_chunk(input, output);
+    }
+
+    fn enumerate_devices(&self) -> EngineResult<Vec<AudioDeviceInfo>> {
+        AudioEngineCoordinator::enumerate_devices(self)
+    }
+
+    fn switch_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        AudioEngineCoordinator::switch_device(self, device_id)
+    }
+
+    fn round_trip_latency_ms(&self) -> f32 {
+        AudioEngineCoordinator::round_trip_latency_ms(self)
+    }
+
+    fn current_device_id(&self) -> Option<String> {
+        AudioEngineCoordinator::current_device_id(self).map(|id| id.to_string())
     }
 }

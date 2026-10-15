@@ -8,6 +8,7 @@
 
 pub mod dsp;
 pub mod ring_buffer;
+pub mod traits;
 pub mod types;
 
 // Re-export common types
@@ -16,6 +17,7 @@ pub use dsp::graphic_eq_stage::GraphicEqStage;
 pub use dsp::parametric_stage::ParametricStage;
 pub use dsp::pipeline::AudioProcessor;
 pub use ring_buffer::SpscQueue;
+pub use traits::AudioHostBackend;
 pub use types::{
     AppVolumeProfile, AudioCommand, AudioDeviceInfo, EngineError, EngineResult,
     OrbitDirection, ParametricFilterPod, ParametricFilterType, ProcessAudioSession,

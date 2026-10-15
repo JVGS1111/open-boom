@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/open-boom-core",
     "crates/open-boom-wasapi",
+    "crates/open-boom-coreaudio",
     "crates/open-boom-storage",
     "src-tauri",
 ]
@@ -20,6 +21,8 @@ serde_json = "1.0"
 thiserror = "2.0"
 windows = "0.58.0"
 tauri = { version = "2.0", features = ["tray-icon"] }
+libc = "0.2"
+coreaudio-sys = { version = "0.2", default-features = false, features = ["core_audio"] }
 
 [profile.test]
 opt-level = 1

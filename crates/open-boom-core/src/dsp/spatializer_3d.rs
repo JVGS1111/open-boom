@@ -12,6 +12,9 @@ use crate::types::{
 /// FIR filter tap length for HRTF impulse responses (64 taps = 1.33ms at 48 kHz).
 pub const HRTF_TAPS: usize = 64;
 
+/// The NEON path strides 8 floats per iteration, so the tap count must be a multiple of 8.
+const _: () = assert!(HRTF_TAPS % 8 == 0);
+
 /// Sub-block frame size for orbital HRTF coefficient updates (32 samples = ~0.67ms at 48 kHz).
 pub const ORBIT_SUB_BLOCK_SAMPLES: usize = 32;
 
@@ -232,18 +235,59 @@ pub fn compute_interpolated_hrtf(
     (out_left, out_right)
 }
 
-/// Computes a vector dot product of 64 floats using SSE2 intrinsics on x86_64,
-/// with scalar fallback for other architectures.
+/// Computes a vector dot product over exactly [`HRTF_TAPS`] taps.
+///
+/// Uses NEON fused-multiply-add on `aarch64` (Apple Silicon), SSE2 on `x86_64`,
+/// and a scalar fallback on every other architecture. Both slices must contain at
+/// least [`HRTF_TAPS`] elements; any extra tail is ignored and a shorter slice fails
+/// fast via a bounds check rather than silently truncating the convolution.
 #[inline(always)]
 fn dot_product_64(a: &[f32], b: &[f32]) -> f32 {
+    let a = &a[..HRTF_TAPS];
+    let b = &b[..HRTF_TAPS];
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { dot_product_64_neon(a, b) }
+    }
     #[cfg(target_arch = "x86_64")]
     {
         unsafe { dot_product_64_sse(a, b) }
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         dot_product_64_scalar(a, b)
     }
+}
+
+/// 64-tap dot product using ARM NEON fused-multiply-add on Apple Silicon.
+///
+/// Processes 8 floats per iteration across two independent accumulators to hide the
+/// FMA latency chain, then horizontally sums the two 4-lane accumulators.
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+#[allow(dead_code)]
+unsafe fn dot_product_64_neon(a: &[f32], b: &[f32]) -> f32 {
+    use core::arch::aarch64::*;
+
+    let mut acc0 = vdupq_n_f32(0.0);
+    let mut acc1 = vdupq_n_f32(0.0);
+
+    let a_ptr = a.as_ptr();
+    let b_ptr = b.as_ptr();
+
+    let mut i = 0usize;
+    while i < HRTF_TAPS {
+        acc0 = vfmaq_f32(acc0, vld1q_f32(a_ptr.add(i)), vld1q_f32(b_ptr.add(i)));
+        acc1 = vfmaq_f32(
+            acc1,
+            vld1q_f32(a_ptr.add(i + 4)),
+            vld1q_f32(b_ptr.add(i + 4)),
+        );
+        i += 8;
+    }
+
+    vaddvq_f32(vaddq_f32(acc0, acc1))
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -293,7 +337,7 @@ unsafe fn dot_product_64_sse(a: &[f32], b: &[f32]) -> f32 {
 #[allow(dead_code)]
 fn dot_product_64_scalar(a: &[f32], b: &[f32]) -> f32 {
     let mut sum = 0.0f32;
-    for i in 0..64 {
+    for i in 0..HRTF_TAPS {
         sum += a[i] * b[i];
     }
     sum
@@ -673,5 +717,103 @@ impl Spatializer3D {
 
         let surround_chs = [fl, fr, c, lfe, rl, rr, sl, sr];
         self.process_frame(&surround_chs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Independent scalar reference implementing the exact same left-to-right
+    /// summation order used by the scalar fallback.
+    fn scalar_reference(a: &[f32; HRTF_TAPS], b: &[f32; HRTF_TAPS]) -> f32 {
+        let mut sum = 0.0f32;
+        for i in 0..HRTF_TAPS {
+            sum += a[i] * b[i];
+        }
+        sum
+    }
+
+    /// Asserts the SIMD dot product matches the scalar reference for `a · b`.
+    ///
+    /// The tolerance is a *scaled absolute* bound: absolute below unit magnitude and
+    /// relative above it, which accommodates both the FMA/Lane reordering of the SIMD
+    /// paths and the large dynamic range of the adversarial vectors below.
+    fn assert_dot_product_equivalent(a: &[f32; HRTF_TAPS], b: &[f32; HRTF_TAPS]) {
+        let expected = scalar_reference(a, b);
+        let actual = dot_product_64(a, b);
+
+        if expected.is_nan() {
+            assert!(actual.is_nan(), "expected NaN, got {actual}");
+            return;
+        }
+        if expected.is_infinite() {
+            assert_eq!(actual, expected, "infinite results must keep their sign");
+            return;
+        }
+
+        let tolerance = 1e-4 * expected.abs().max(1.0);
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "SIMD dot product diverged: actual={actual}, expected={expected}, tolerance={tolerance}"
+        );
+    }
+
+    #[test]
+    fn test_dot_product_64_simd_equivalence_to_scalar() {
+        // 1. Regular small-magnitude signal.
+        let mut regular_a = [0.0f32; HRTF_TAPS];
+        let mut regular_b = [0.0f32; HRTF_TAPS];
+        for i in 0..HRTF_TAPS {
+            regular_a[i] = ((i as f32) * 0.137).sin();
+            regular_b[i] = ((i as f32) * 0.071).cos() * 0.5;
+        }
+        assert_dot_product_equivalent(&regular_a, &regular_b);
+
+        // 2. Extreme magnitude (values near f32::MAX overflow to +Inf consistently).
+        assert_dot_product_equivalent(&[1.0e20; HRTF_TAPS], &[1.0e20; HRTF_TAPS]);
+
+        // 3. Adversarial cancellation: large alternating signs that nearly cancel.
+        let mut cancel_a = [0.0f32; HRTF_TAPS];
+        let mut cancel_b = [0.0f32; HRTF_TAPS];
+        for i in 0..HRTF_TAPS {
+            cancel_a[i] = if i % 2 == 0 { 1.0e3 } else { -1.0e3 };
+            cancel_b[i] = if i % 4 == 0 { -1.0e3 } else { 1.0e3 };
+        }
+        assert_dot_product_equivalent(&cancel_a, &cancel_b);
+
+        // 4. NaN propagation: a NaN input yields NaN on every path.
+        let mut nan_a = [1.0f32; HRTF_TAPS];
+        nan_a[7] = f32::NAN;
+        assert_dot_product_equivalent(&nan_a, &[1.0f32; HRTF_TAPS]);
+
+        // 5. Infinite inputs keep the correct infinity sign.
+        assert_dot_product_equivalent(&[f32::INFINITY; HRTF_TAPS], &[1.0f32; HRTF_TAPS]);
+        assert_dot_product_equivalent(&[f32::NEG_INFINITY; HRTF_TAPS], &[1.0f32; HRTF_TAPS]);
+
+        // 6. A perfectly representable input must match bit-for-bit on every path.
+        let exact_a = [1.0f32; HRTF_TAPS];
+        let exact_b = [2.0f32; HRTF_TAPS];
+        assert_eq!(dot_product_64(&exact_a, &exact_b), 128.0);
+    }
+
+    #[test]
+    fn test_dot_product_64_slice_bounds_safety() {
+        // Longer slices are accepted and only the first HRTF_TAPS taps contribute,
+        // rather than reading the tail or silently truncating the convolution.
+        let a_long = [1.0f32; HRTF_TAPS + 8];
+        let b_long = [2.0f32; HRTF_TAPS + 8];
+        assert_eq!(dot_product_64(&a_long, &b_long), 128.0);
+
+        // Shorter slices fail fast instead of silently producing a truncated result.
+        let a_short = [1.0f32; HRTF_TAPS - 1];
+        let b_short = [2.0f32; HRTF_TAPS - 1];
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            dot_product_64(&a_short, &b_short)
+        }));
+        assert!(
+            result.is_err(),
+            "a slice shorter than HRTF_TAPS must panic rather than truncate silently"
+        );
     }
 }
