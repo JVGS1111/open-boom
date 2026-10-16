@@ -793,7 +793,10 @@ mod real {
         } else {
             for frame_idx in 0..frames {
                 let mut frame = [0.0f32; ENGINE_CHANNELS];
-                context.ring.pop_frames(&mut frame, ENGINE_CHANNELS);
+                let popped = context.ring.pop_frames(&mut frame, ENGINE_CHANNELS);
+                if popped == 0 {
+                    frame = [0.0, 0.0];
+                }
                 let base = frame_idx * output_channels;
                 out[base] = frame[0];
                 out[base + 1] = frame[1];

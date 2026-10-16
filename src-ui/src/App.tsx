@@ -572,8 +572,9 @@ export const App: React.FC = () => {
         const enumerated = await invoke<AudioDeviceInfo[]>("get_audio_devices");
         if (enumerated && enumerated.length > 0) {
           setDevices(enumerated);
-          // If activeDeviceId is default, pick default device
-          if (activeDeviceId === "default") {
+          // If activeDeviceId is default or doesn't exist in current devices, pick default device
+          const deviceExists = enumerated.some((d) => d.id === activeDeviceId);
+          if (activeDeviceId === "default" || !deviceExists) {
             const defaultDev = enumerated.find((d) => d.is_default) || enumerated[0];
             setActiveDeviceId(defaultDev.id);
           }

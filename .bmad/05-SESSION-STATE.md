@@ -1,9 +1,17 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 16/10/2026 - 10:25
+* **Data/Hora:** 16/10/2026 - 11:15
 * **Sprint Ativa:** **Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10) [CONCLUÍDO 100%]**
-* **Tarefa Atual:** Resolução do bug de áudio mudo no macOS (T12.9 / ADR-061). Fluxo de áudio validado e corrigido: BlackHole 16ch vinculado para captura e saída física padrão (alto-falantes/fones) para render. 235 testes Cargo passando, 118 testes UI passando, pacote `.app` e instalador `.dmg` gerados com sucesso, smoke launch do binário aprovado no macOS. Código commitado e enviado ao repositório remoto, aguardando sinal explícito do usuário para release.
+* **Tarefa Atual:** Concluída resolução de áudio mudo e TCC no macOS:
+  1. Adicionado `NSMicrophoneUsageDescription` em `Info.plist` e configurado no `tauri.conf.json`, permitindo ao macOS TCC conceder leitura nos buffers do CoreAudio/BlackHole.
+  2. Implementada validação defensiva contra AudioDeviceIDs obsoletos/inválidos no `AppState::with_options`, `stream_pump.rs` e `App.tsx`, com fallback automático para o dispositivo de saída físico padrão do sistema (`Alto-falantes MacBook Air`).
+  3. Limpeza de logs de debug em `hal.rs`.
+  4. Executados com sucesso 235 testes Cargo e build do frontend Vite.
+  5. Gerados pacotes `.app` e instalador `.dmg` em `target/release/bundle/`.
+  6. Substituído e desquarentenado `/Applications/OpenBoom.app`.
+  7. Smoke test de inicialização executado e validado com o processo em execução saudável.
+  8. Código commitado e enviado ao repositório remoto, aguardando sinal explícito do usuário para release.
 
 
 ## O que foi concluído nesta sessão

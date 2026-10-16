@@ -89,9 +89,14 @@ impl CoreAudioStreamPump {
             };
 
             // 2. Resolve physical render target device (Headphones/Speakers)
-            let render_id = config.target_device_id.clone().or_else(|| {
-                coord.device_manager().get_physical_default_device().ok().flatten().map(|d| d.id)
-            });
+            let render_id = config
+                .target_device_id
+                .as_ref()
+                .filter(|id| coord.device_manager().get_device_by_id(id).ok().flatten().is_some())
+                .cloned()
+                .or_else(|| {
+                    coord.device_manager().get_physical_default_device().ok().flatten().map(|d| d.id)
+                });
 
             if let Some(ref cap_id) = capture_id {
                 let _ = coord.set_capture_device(Some(cap_id.clone()));
@@ -100,7 +105,7 @@ impl CoreAudioStreamPump {
                 let _ = coord.set_render_device(Some(rend_id.clone()));
             }
 
-            let _ = coord.start();
+            coord.start()?;
             (
                 coord.capture().ring(),
                 coord.render().ring(),

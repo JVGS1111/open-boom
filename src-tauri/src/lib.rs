@@ -121,6 +121,7 @@ impl AppState {
             .active_output_device
             .clone()
             .filter(|id| !id.trim().is_empty() && id != "default")
+            .filter(|id| device_mgr.get_device_by_id(id).ok().flatten().is_some())
             .or_else(|| physical_default.as_ref().map(|d| d.id.clone()));
         let virtual_dev = device_mgr.find_virtual_device().ok().flatten();
         let virtual_id = virtual_dev.as_ref().map(|d| d.id.clone());
