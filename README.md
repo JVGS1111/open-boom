@@ -39,7 +39,7 @@
 
 > [!IMPORTANT]
 > ### 🔊 Virtual Audio Device Requirement for 100% Echo-Free Experience (Mode A)
-> To achieve the **commercial-grade, 100% echo-free experience with genuine 7.1 surround ingestion**, Windows requires a **Virtual Audio Sink Device** to act as the default silent system playback endpoint:
+> To achieve the **reference-grade, 100% echo-free experience with genuine 7.1 surround ingestion**, Windows requires a **Virtual Audio Sink Device** to act as the default silent system playback endpoint:
 > 
 > * **With Boom 3D installed (Recommended):** OpenBoom automatically detects and pairs with the `Boom Audio` virtual driver (`boomvad.sys`). Windows directs all system audio silently into this virtual sink, and OpenBoom's DSP pipeline processes and delivers the enhanced audio directly to your physical headphones/speakers with **zero slapback echo**.
 > * **With Free Virtual Cables:** OpenBoom also seamlessly recognizes alternatives like **VB-Audio Virtual Cable**, **VoiceMeeter**, or **VAC**.
@@ -226,5 +226,5 @@ at your option.
 ---
 
 <p align="center">
-  Built with ❤️ for audiophiles, gamers, and music creators.
+  Built with ❤️ for audiophiles, sound enthusiasts, and music creators.
 </p>

@@ -16,7 +16,7 @@ However, the PRD dodges a make-or-break technical decision in §10 OQ-1 regardin
 ---
 
 ## Substance over theater — strong
-The PRD is remarkably free of filler, corporate buzzwords, and decorative theater. The 4 Jobs-To-Be-Done in §2.1 (Immersive Gamer, Headphone Audiophile, Media Consumer, Multitasking Power User) map directly to 4 distinct, concrete functional pillars (3D Surround HRTF, AutoEq biquad engine, Night Mode compressor, and Per-App WASAPI mixer). There is zero persona theater; each persona drives specific functional requirements and real-world acceptance criteria.
+The PRD is remarkably free of filler, corporate buzzwords, and decorative theater. The 4 Jobs-To-Be-Done in §2.1 (Spatial Audio Enthusiast, Headphone Audiophile, Media Consumer, Multitasking Power User) map directly to 4 distinct, concrete functional pillars (3D Surround HRTF, AutoEq biquad engine, Night Mode compressor, and Per-App WASAPI mixer). There is zero persona theater; each persona drives specific functional requirements and real-world acceptance criteria.
 
 The non-functional requirements in §8 avoid generic boilerplate ("must be fast and reliable") in favor of strict, domain-accurate real-time audio engineering constraints: real-time `AVRT` / `Pro Audio` thread priorities, absolute ban on heap allocations (`malloc` / `new`) in the real-time audio callback to prevent GC/lock pauses, callback execution budgets (<60% buffer time), SSE2/AVX vector intrinsics, and exact resource ceilings (<40 MB RAM, <2.0% CPU, <15ms latency). The reverse-engineering findings in `addendum.md` §2 (`BoomEngine.dll`, `AVFIRFilterSSE`, channel azimuth geometry) substantiate that the team has verified real assembly behavior rather than speculating.
 
@@ -67,7 +67,7 @@ However, the Assumptions mechanism suffers from incomplete roundtrip indexing. W
 The PRD is structured cleanly for downstream consumption by UX designers, software architects, and story authoring workflows:
 - **Glossary (§3):** Comprehensive, providing 15 clear, domain-specific definitions that are consistently used throughout the requirements.
 - **Identifiers:** Contiguous, unique identifiers without gaps or collisions (FR-1 through FR-29, UJ-1 through UJ-4, SM-1 through SM-6, SM-C1, SM-C2).
-- **Protagonists:** All four User Journeys have named protagonists carrying distinct contexts (Alex / Gamer, Marcus / Competitive FPS, Elena / Cinema, David / Multitasker).
+- **Protagonists:** All four User Journeys have named protagonists carrying distinct contexts (Alex / Headphones, Marcus / Spatial Audio, Elena / Cinema, David / Multitasker).
 - **Traceability:** Functional Requirements clearly indicate which UJs they realize (e.g. FR-1 realizing UJ-1, UJ-2, UJ-3), and Success Metrics explicitly map to the FRs they validate.
 
 The single downstream hazard is the aforementioned scope collision where downstream teams writing stories for MVP Phase 1 might mistakenly attempt to implement Night Mode (FR-18) to fulfill UJ-3.

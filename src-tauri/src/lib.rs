@@ -854,10 +854,18 @@ exit 0
             }
             let pkg_path = temp_dir.join("BlackHole16ch.pkg");
 
-            // 1. Resolve download URL (Homebrew Cask API with fallback to Existential Audio CDN)
-            let mut download_url = "https://existential.audio/downloads/BlackHole16ch.pkg".to_string();
+            // 1. Resolve download URL (Homebrew Cask API with fallback to known versioned release)
+            let mut download_url = "https://existential.audio/downloads/BlackHole16ch-0.7.1.pkg".to_string();
             let brew_api_output = std::process::Command::new("curl")
-                .args(["-s", "-L", "--max-time", "10", "https://formulae.brew.sh/api/cask/blackhole-16ch.json"])
+                .args([
+                    "-s",
+                    "-L",
+                    "--max-time",
+                    "10",
+                    "-H",
+                    "Accept: application/json",
+                    "https://formulae.brew.sh/api/cask/blackhole-16ch.json",
+                ])
                 .output();
 
             if let Ok(output) = brew_api_output {
@@ -873,13 +881,15 @@ exit 0
                 }
             }
 
-            // 2. Download BlackHole installer package via curl
+            // 2. Download BlackHole installer package via curl with realistic UA and Accept header
             let curl_res = std::process::Command::new("curl")
                 .args([
                     "-s",
                     "-L",
                     "-A",
-                    "Mozilla/5.0",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "-H",
+                    "Accept: */*",
                     &download_url,
                     "-o",
                     pkg_path.to_str().unwrap_or("/tmp/OpenBoom_DriverSetup/BlackHole16ch.pkg"),
@@ -888,18 +898,37 @@ exit 0
                 ])
                 .output();
 
-            let pkg_valid = match curl_res {
+            let mut pkg_valid = match curl_res {
                 Ok(out) => out.status.success() && pkg_path.exists() && std::fs::metadata(&pkg_path).map(|m| m.len()).unwrap_or(0) > 10_000,
                 Err(_) => false,
             };
+
+            // Secondary fallback download if first attempt was blocked or incomplete
+            if !pkg_valid {
+                let _ = std::process::Command::new("curl")
+                    .args([
+                        "-s",
+                        "-L",
+                        "-H",
+                        "Accept: */*",
+                        "https://existential.audio/downloads/BlackHole16ch-0.7.1.pkg",
+                        "-o",
+                        pkg_path.to_str().unwrap_or("/tmp/OpenBoom_DriverSetup/BlackHole16ch.pkg"),
+                        "--max-time",
+                        "90",
+                    ])
+                    .output();
+
+                pkg_valid = pkg_path.exists() && std::fs::metadata(&pkg_path).map(|m| m.len()).unwrap_or(0) > 10_000;
+            }
 
             if !pkg_valid {
                 return Err("NETWORK_ERROR: Could not download driver installer. Check internet connection.".to_string());
             }
 
-            // 3. Elevated installation via osascript and instant coreaudiod restart
+            // 3. Elevated installation via osascript and instant CoreAudio restart
             let script = format!(
-                "do shell script \"installer -pkg '{}' -target / && killall -9 coreaudiod\" with administrator privileges",
+                "do shell script \"installer -pkg '{}' -target / && (launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null || killall -9 coreaudiod 2>/dev/null || true)\" with administrator privileges with prompt \"OpenBoom requer autorização de administrador para instalar o driver de áudio virtual surround 7.1.\"",
                 pkg_path.display()
             );
 
@@ -971,6 +1000,35 @@ exit 0
             endpoint_id: Some("synthetic_endpoint".to_string()),
         })
     }
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Invalid URL scheme: only http and https are allowed".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open URL in browser: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|e| format!("Failed to open URL in browser: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("Failed to open URL in browser: {}", e))?;
+    }
+    Ok(())
 }
 
 fn resolve_orbit_params(
@@ -1936,6 +1994,7 @@ pub fn run() {
             configure_virtual_endpoint_speaker_mask,
             check_virtual_driver_status,
             install_virtual_driver,
+            open_external_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
@@ -2696,7 +2755,15 @@ mod tests {
         );
         assert!(state.is_loopback_forced());
     }
+
+    #[test]
+    fn test_open_external_url_security_scheme_validation() {
+        assert!(open_external_url("file:///etc/passwd".to_string()).is_err());
+        assert!(open_external_url("javascript:alert(1)".to_string()).is_err());
+        assert!(open_external_url("data:text/html;base64,...".to_string()).is_err());
+    }
 }
+
 
 
 

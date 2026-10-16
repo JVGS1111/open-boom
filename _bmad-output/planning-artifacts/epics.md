@@ -345,9 +345,9 @@ So that I can dial in the ideal amount of immersion with immediate visual and ac
 
 ### Story 2.3: 8-Channel Virtual Speaker Configurator Soundstage Modal
 
-As a gamer or cinema watcher,
+As a cinema or spatial audio listener,
 I want to open a top-down polar soundstage modal to mute individual virtual speakers and adjust their relative trim gains,
-So that I can isolate dialogue, boost rear footsteps, or customize surround channel balance.
+So that I can isolate dialogue, boost rear surround cues, or customize channel balance.
 
 **Acceptance Criteria:**
 
@@ -480,7 +480,7 @@ So that my headphones achieve a flat Harman target response without clipping or 
 
 As a listener,
 I want to select from 15 factory genre presets and save, rename, or delete my own custom EQ presets stored safely in JSON,
-So that I can switch profiles instantly for gaming, EDM, classical music, or movies.
+So that I can switch profiles instantly for multimedia, EDM, classical music, or movies.
 
 **Acceptance Criteria:**
 
@@ -567,7 +567,7 @@ So that compressed audio streams (YouTube, Spotify) regain upper-frequency brill
 
 ### Story 4.4: Night Mode Dynamic Range Compressor (DRC)
 
-As a late-night movie watcher or gamer,
+As a late-night movie or media watcher,
 I want a Night Mode soft-knee dynamic compressor with fast attack and dialogue leveling,
 So that sudden explosions and gunshots are automatically tamed while quiet whispers remain clearly audible.
 

@@ -18,5 +18,5 @@
 
 ## 3. Filosofia de Desenvolvimento
 * **Zero Bloat / Zero Telemetria:** Foco estrito em processamento de sinal limpo e leve.
-* **Baixa Latência:** Buffer mínimo sem introduzir clipping ou delay perceptível em jogos e streaming.
-* **Acessibilidade:** Sem necessidade de assinaturas de drivers caros no kernel; aproveitamento de APIs modernas de áudio do Windows (WASAPI / APO / Loopback).
+* **Baixa Latência:** Buffer mínimo sem introduzir clipping ou delay perceptível em reprodução de mídia e streaming.
+* **Acessibilidade:** Sem necessidade de certificados proprietários de drivers no kernel; aproveitamento de APIs modernas de áudio do Windows (WASAPI / APO / Loopback).

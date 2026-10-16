@@ -14,7 +14,7 @@
 * **Decisão:** Estruturar a pasta `.bmad/` com Briefing, Arquitetura, Milestones, Task Backlog, Decision Log e Session State.
 * **Consequência:** Toda sessão recupera imediatamente o estado atual, próximas ações e decisões anteriores sem ambiguidades.
 
-## ADR-003: Estratégia de Áudio no Windows (Evitar Driver de Kernel Pago)
+## ADR-003: Estratégia de Áudio no Windows (Evitar Driver de Kernel Proprietário / Fechado)
 * **Data:** 10/10/2026
 * **Status:** Aceito
 * **Contexto:** O Boom 3D original utiliza um driver de kernel proprietário (`boomvad.sys`) assinado com certificado WHQL comercial.
@@ -105,7 +105,7 @@
   3. **Multi-Canal 7.1 Real para o HRTF:** O dispositivo virtual expõe topologia 7.1 (8 canais), permitindo que jogos e reprodutores enviem áudio posicional 3D genuíno para a convolução HRTF binaural do OpenBoom.
   4. **Uso Contínuo do REA MCP e Decompilator:** Formalizado o uso ativo das ferramentas do REA MCP e do repositório `decompilator` para extração das rotinas de processamento (`CreateAudioProcessor`, `AVBoomAudioProcessor`, `AVFIRFilterSSE`, `AVFIFOProcessor`, `GetEqualizerPresetGains`) e controle de volume (`BoomVolumeControl`), servindo como especificação matemática para a implementação em Rust.
   5. **Adição da Story 1.8 ao Backlog:** Criada a Story 1.8 (`1-8-virtual-audio-device-bridge-rea-reverse-engineering`) para orquestrar a ponte com o dispositivo virtual e a documentação das evidências de engenharia reversa.
-* **Consequência:** Interceptação transparente de 100% dos sons do Windows, fidelidade acústica comercial sem eco, capacidade de áudio 7.1 surround verdadeiro e alinhamento milimétrico com a engenharia reversa do Boom 3D.
+* **Consequência:** Interceptação transparente de 100% dos sons do Windows, fidelidade acústica de referência sem eco, capacidade de áudio 7.1 surround verdadeiro e alinhamento milimétrico com a engenharia reversa do Boom 3D.
 
 ---
 
@@ -234,7 +234,7 @@
   4. **Filtragem de Dispositivos Virtuais na Interface:** Criado `enumerate_physical_devices()`, que remove `Boom Audio` e outros adaptadores virtuais do seletor da UI, permitindo que o usuário visualize e selecione apenas fones e caixas reais.
   5. **Proteção de Retry no `AudioStreamPump`:** Implementado loop de retry de até 10 iterações com delay de 500µs contra variações transitórias de padding do WASAPI, eliminando descartes acidentais de buffers.
   6. **Isolamento de Testes Unitários:** `AppState::new()` desativa o chaveamento de sistema por padrão (`auto_route: false`), reservando o roteamento dinâmico para `AppState::new_runtime()` executado no entrypoint da aplicação.
-* **Consequência:** Eliminação definitiva de eco acústico, ativação imediata e audível de todos os efeitos de DSP no headset físico do usuário, abstração total da complexidade de drivers virtuais (idêntico ao comportamento comercial do Boom 3D) e suíte completa de testes (96 testes) verde no workspace.
+* **Consequência:** Eliminação definitiva de eco acústico, ativação imediata e audível de todos os efeitos de DSP no headset físico do usuário, abstração total da complexidade de drivers virtuais (idêntico ao comportamento de referência do Boom 3D) e suíte completa de testes (96 testes) verde no workspace.
 
 ---
 
@@ -244,7 +244,7 @@
 * **Contexto:** Com o pipeline de áudio ativo e o roteamento operando em tempo real no headset físico (`HyperX Cloud II Wireless`), o usuário observou que o efeito do botão 3D Surround é perceptível porém sutil ("fraquinho") em reprodução estéreo comum (YouTube/Spotify), questionando se isso é intencional ou se deve ser registrado para ajuste e cobertura pelos próximos épicos.
 * **Decisões & Justificativas Técnicas:**
   1. **Natureza Acústica do HRTF Puro (Epic 2):** O algoritmo implementado no Epic 2 (`Spatializer3D`) executa convolução com tabelas KEMAR de 64 taps (ITD 0.2–0.7ms, ILD e notch de pinna a 6 kHz). Para um sinal estéreo convencional (2 canais), o motor simula o posicionamento de dois monitores frontais a $\pm 30^\circ$ em câmara anecóica. Em fones de ouvido, o HRTF puro atua primordialmente como *crossfeed binaural*, reduzindo a separação artificial extrema do estéreo tradicional e projetando o áudio para fora da cabeça ("out-of-head localization"). Por design acústico, ele não introduz cauda de reverberação artificial, coloração agressiva ou distorção de fase.
-  2. **Origem da Assinatura Dramática do Boom 3D Comercial (Evidências REA):** Conforme constatado na engenharia reversa de `BoomEngine.dll` e `Audio.dll` (`Effect` enum: `SurroundSound`, `Ambience`, `Fidelity`, `DRC`, `Spatial`), o efeito "3D expansivo e cinematográfico" do produto comercial é um resultado sinérgico de 4 componentes simultâneos:
+  2. **Origem da Assinatura Dramática do Boom 3D de Referência (Evidências REA):** Conforme constatado na engenharia reversa de `BoomEngine.dll` e `Audio.dll` (`Effect` enum: `SurroundSound`, `Ambience`, `Fidelity`, `DRC`, `Spatial`), o efeito "3D expansivo e cinematográfico" do produto de referência é um resultado sinérgico de 4 componentes simultâneos:
      - **HRTF Spatializer:** Posicionamento angular dos canais.
      - **Ambience (`Effect::Ambience` - Epic 4, Story 4.1):** Reflexões iniciais e reverberação de sala (Schroeder / FDN Reverb), que conferem sensação física de tamanho do ambiente.
      - **Spatial Widener (`Effect::Spatial` - Epic 4, Story 4.2):** Expansão estéreo via processamento Mid/Side e micro-delay de Haas, que projeta o som muito além da envergadura física dos fones.
@@ -582,7 +582,7 @@
 ## ADR-038: Sistema de Atualização In-App a Custo Zero via GitHub Releases API (Spec 8.1)
 * **Data:** 12/10/2026
 * **Status:** Aprovado / Implementado
-* **Contexto:** O usuário solicitou um mecanismo de atualização integrado ao OpenBoom que funcione sem necessidade de servidores pagos ou infraestrutura de terceiros, verificando atualizações ao abrir o aplicativo, exibindo um botão indicador de destaque no cabeçalho quando houver nova versão, levando direto para `Configurações -> Atualizações`, e oferecendo switches de verificação automática na abertura e atualização automática com botão de reinicialização no mesmo slot de ação.
+* **Contexto:** O usuário solicitou um mecanismo de atualização integrado ao OpenBoom que funcione sem necessidade de servidores dedicados ou infraestrutura proprietária, verificando atualizações ao abrir o aplicativo, exibindo um botão indicador de destaque no cabeçalho quando houver nova versão, levando direto para `Configurações -> Atualizações`, e oferecendo switches de verificação automática na abertura e atualização automática com botão de reinicialização no mesmo slot de ação.
 * **Decisões:**
   1. **Integração Direta com GitHub Releases (`check_for_updates`, `download_and_install_update`, `restart_application`):**
      - Consulta assíncrona ao endpoint público `https://api.github.com/repos/JVGS1111/open-boom/releases/latest` sem custo de hospedagem.
@@ -763,7 +763,7 @@
 * **Data:** 12/10/2026
 * **Status:** Aprovado / Em Planejamento
 * **Contexto:**
-  - Com a conclusão do pipeline DSP e estabilização do engine no Windows, foi estruturado o planejamento para melhorias de performance, presets especializados de jogos e redução de pegada de memória.
+  - Com a conclusão do pipeline DSP e estabilização do engine no Windows, foi estruturado o planejamento para melhorias de performance, presets acústicos especializados e redução de pegada de memória.
 * **Decisões:**
   - Focar nas metas de performance do pipeline em Rust e preparar testes de estresse em hardware variado.
 * **Consequência:** Roadmap técnico alinhado com a visão de áudio open-source de alta performance.
@@ -875,10 +875,10 @@
   - O desenvolvimento de um driver de kernel proprietário ou aberto sob medida acarreta custos e barreiras desproporcionais:
     1. Exigência de assinatura de código em nível de kernel pela Microsoft (certificado EV Hardware Token de ~US$ 500/ano + processo rigoroso de WHQL / HLK testing).
     2. Risco de instabilidade de sistema (telas azuis BSOD) e manutenção contínua diante de atualizações do kernel do Windows.
-    3. Riscos de falso-positivo em anti-cheats de jogos (Vanguard, Easy Anti-Cheat, BattlEye) para drivers novos ou de pequena escala.
+    3. Riscos de falso-positivo em sistemas de integridade e segurança de drivers para drivers novos ou de pequena escala.
   - O OpenBoom já possui integração nativa, robusta e automatizada com o **VB-Audio Virtual Cable**:
     - Instalação silenciosa de 1 clique (`-i -h`) com elevação UAC padrão;
-    - Certificação WHQL oficial da Microsoft e total compatibilidade anti-cheat;
+    - Certificação WHQL oficial da Microsoft e total estabilidade de sistema;
     - Automação da máscara 7.1 surround (`0x63F`) via registro do Windows;
     - Link manual oficial de fallback em caso de falha de download.
 * **Decisão:**

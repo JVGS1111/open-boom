@@ -24,7 +24,7 @@ deferred:
 ## Boundaries & Constraints
 
 **Always:**
-- Use public GitHub Releases endpoints (`https://api.github.com/repos/JVGS1111/open-boom/releases/latest` or Tauri release assets) without requiring paid servers or services.
+- Use public GitHub Releases endpoints (`https://api.github.com/repos/JVGS1111/open-boom/releases/latest` or Tauri release assets) without requiring dedicated servers or proprietary services.
 - Provide a responsive update indicator button in the header Titlebar only when a newer version exists (`is_available == true`).
 - Clicking the Titlebar update button directly opens Settings with the Updates view active (`onOpenSettings("updates")`).
 - In Settings, provide:
@@ -39,7 +39,7 @@ deferred:
 
 **Never:**
 - Block application startup or audio processing with network requests. Update checks must be asynchronous and non-blocking.
-- Introduce paid services, third-party backend proxies, or analytics trackers.
+- Introduce proprietary cloud services, third-party backend proxies, or analytics trackers.
 - Force-restart the application while the user is actively listening without explicit user interaction or confirmation.
 
 ## I/O & Edge-Case Matrix

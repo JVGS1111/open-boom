@@ -13,7 +13,7 @@ sources:
 
 ## Why
 
-To deliver pristine spatial audio without acoustic duplication (`BUG-MODE-B-01`), OpenBoom requires an isolated virtual audio sink. Historically coupled to Boom 3D's proprietary `boomvad.sys`, the application must transition to an autonomous, legally unassailable open-source distribution model. By providing a 1-click assisted onboarding flow for a WHQL-signed virtual driver, gating application controls until a driver is present, automating 8-channel 7.1 surround mask configuration, and strictly attributing third-party technology (`powered by VB-Cable`), OpenBoom eliminates user friction and trademark liability while guaranteeing zero anticheat conflicts.
+To deliver pristine spatial audio without acoustic duplication (`BUG-MODE-B-01`), OpenBoom requires an isolated virtual audio sink. Historically coupled to Boom 3D's proprietary `boomvad.sys`, the application must transition to an autonomous, legally unassailable open-source distribution model. By providing a 1-click assisted onboarding flow for a WHQL-signed virtual driver, gating application controls until a driver is present, automating 8-channel 7.1 surround mask configuration, and strictly attributing third-party technology (`powered by VB-Cable`), OpenBoom eliminates user friction and trademark liability while guaranteeing driver integrity and system stability.
 
 ## Capabilities
 
@@ -39,7 +39,7 @@ To deliver pristine spatial audio without acoustic duplication (`BUG-MODE-B-01`)
 
 ## Constraints
 
-- **WHQL Signature Integrity:** The driver package must maintain valid Microsoft WHQL digital signatures; no unsigned `.sys` files or `testsigning` modes that would trigger anticheat bans (Vanguard, EAC, Ricochet) are permitted.
+- **WHQL Signature Integrity:** The driver package must maintain valid Microsoft WHQL digital signatures; no unsigned `.sys` files or `testsigning` modes that would compromise system integrity or stability are permitted.
 - **Legal Attribution & Trademark Safety:** The renamed endpoint must explicitly retain `(powered by VB-Cable)` to avoid false white-labeling claims or trademark infringement.
 - **Fail-Safe Physical DAC Routing:** System must guarantee immediate restoration of the user's physical audio device when Master Power is switched off, on application shutdown, or during uninstallation.
 - **Direct Windows API Integration:** Endpoint renaming and speaker mask configuration must be executed via Windows Core Audio `IPropertyStore` and the Windows MMDevice registry keys without requiring third-party configuration tools.

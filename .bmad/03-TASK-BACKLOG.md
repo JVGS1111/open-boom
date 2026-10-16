@@ -83,8 +83,8 @@
 - [X] **T9.10**: Refinamentos de UI: Remoção de Seletor de Idioma da Tela Inicial, Padding Confortável na Aba de Updates & Fallback em Inglês para Idiomas de Sistema Não Suportados (ADR-055).
 - [X] **T9.11**: Aviso de Privacidade e Esclarecimento de Acesso a Microfone / Interceptação de Som no Onboarding e Configurações (Story 9-5 / ADR-056).
 - [X] **T9.12**: Modo Inicial Desarmado (Standby / Nenhum Modo Selecionado) no Boot Sem Driver para Impedir Ativação Involuntária do Modo B Bugado (Story 9-6 / ADR-056).
-- [-] **T9.1**: [DESCARTADO - ADR-057] Estudo de Viabilidade e Custos de Driver Virtual Próprio (Descartado definitivamente; adotado o VB-Audio Virtual Cable oficial com automação de 1 clique, certificação WHQL e conformidade anti-cheat).
-- [ ] **T9.2**: Curvas de Equalização e Otimização para Jogos & Mídia (Presets para jogos de ação, FPS e filmes sem violar anticheats).
+- [-] **T9.1**: [DESCARTADO - ADR-057] Estudo de Viabilidade e Custos de Driver Virtual Próprio (Descartado definitivamente; adotado o VB-Audio Virtual Cable oficial com automação de 1 clique, certificação WHQL e estabilidade comprovada).
+- [ ] **T9.2**: Curvas de Equalização e Otimização Acústica (Presets calibrados para ação, cinema, podcasts e música).
 - [ ] **T9.3**: Compliance e Governança Open-Source (Garantia de conformidade de licenciamento MIT/Apache-2.0, guias de contribuição e proteção de marcas).
 
 ---

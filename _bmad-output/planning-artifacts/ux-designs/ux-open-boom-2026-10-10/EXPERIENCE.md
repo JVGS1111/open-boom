@@ -73,7 +73,7 @@ This specification defines the information architecture, behavioral component co
 
 OpenBoom speaks like professional, high-end audio hardware: concise, unembellished, unambiguous, and immediate.
 
-* **Purity over Marketing:** Never use adjectives like *"Magical sound"*, *"Revolutionary spatial audio"*, or *"Supercharge your PC"*. Use technical audio facts: *"Binaural 7.1 HRTF Convolution"*, *"Dynamic Range Compression"*, *"Harmonic Exciter"*.
+* **Purity and Precision:** Never use exaggerated hype or promotional slogans like *"Magical sound"*, *"Revolutionary spatial audio"*, or *"Supercharge your PC"*. Use technical audio facts: *"Binaural 7.1 HRTF Convolution"*, *"Dynamic Range Compression"*, *"Harmonic Exciter"*.
 * **Status Readouts:**
   * Engine Active: `DSP Streaming (48 kHz / 32-bit Float)`
   * Bypass Active: `Hardware Passthrough (Bypassed)`
@@ -210,13 +210,13 @@ OpenBoom speaks like professional, high-end audio hardware: concise, unembellish
 
 ## 8. Key Flows
 
-### Flow 1: Marcus — Competitive FPS Gamer Calibrating Positional Audio
-1. **Context:** Marcus launches *Counter-Strike 2*. Footstep cues and spatial orientation are critical to his match performance.
+### Flow 1: Marcus — Spatial Audio Listener Calibrating Positional Soundstage
+1. **Context:** Marcus starts a multi-channel spatial audio simulation. Spatial orientation and directional cues are critical to his listening experience.
 2. **Setup:** Marcus opens OpenBoom from the system tray. The main HUD displays on his secondary monitor.
 3. **Spatial Tuning:** Marcus grabs the 3D Surround Dial and dials it to `75%`. The soundstage widens instantly over his stereo headset.
-4. **Speaker Fine-Tuning:** Marcus clicks the calibration icon to open the **8-Channel Virtual Speaker Configurator**. He notices gunshots in the rear left sound slightly muffled; he selects the Rear Left speaker node and bumps its gain to `+3.0 dB`.
-5. **Fidelity Boost:** On the Effects Rack, Marcus clicks the **Fidelity** tile and sets it to `50%`, enhancing high-frequency transient detail for weapon reloads and defuse audio cues.
-6. **Climax Beat:** Marcus enters a match round. An enemy attempts a flank from behind through upper tunnels. With the customized rear azimuth HRTF and high-frequency exciter active, Marcus identifies the exact angle instantly, spins around, and secures the clutch round. He presses `Ctrl+Shift+B` to test with and without OpenBoom, marveling at how flat and directional-less raw Windows stereo sounds in comparison.
+4. **Speaker Fine-Tuning:** Marcus clicks the calibration icon to open the **8-Channel Virtual Speaker Configurator**. He notices ambient cues in the rear left sound slightly subdued; he selects the Rear Left speaker node and bumps its gain to `+3.0 dB`.
+5. **Fidelity Boost:** On the Effects Rack, Marcus clicks the **Fidelity** tile and sets it to `50%`, enhancing high-frequency transient detail for acoustic cues.
+6. **Climax Beat:** Marcus listens to an immersive multichannel sequence. With the customized rear azimuth HRTF and high-frequency exciter active, Marcus identifies the exact angle and distance of surround effects instantly. He presses `Ctrl+Shift+B` to test with and without OpenBoom, marveling at how flat and directional-less raw stereo sounds in comparison.
 
 ### Flow 2: Elena — Audiophile Calibrating Headphone Curves with AutoEq
 1. **Context:** Elena connects her Sennheiser HD 600 headphones to her PC to listen to a new lossless orchestral release.

@@ -20,7 +20,7 @@ This document builds directly upon foundational technical blueprints in [.bmad/0
 
 ## 1. Vision
 
-Modern PC audio is compromised by low-cost laptop DACs, suboptimal default headphone tunings, and flat, uninspired stereo soundstages. Commercial audio enhancement software like Boom 3D and SteelSeries Sonar introduced compelling spatial simulation and frequency shaping, but at a punishing price: proprietary kernel drivers prone to Blue Screen of Death (BSOD) crashes, high buffer latency (40–80ms) unsuitable for competitive gaming, aggressive monetization nag screens, mandatory account creation, and intrusive background telemetry. Conversely, existing open-source solutions (Equalizer APO with Peace) provide low latency but suffer from intimidating setup friction, fragile installation steps, and an outdated visual aesthetic.
+Modern PC audio is compromised by low-cost laptop DACs, suboptimal default headphone tunings, and flat, uninspired stereo soundstages. Proprietary audio enhancement software like Boom 3D and SteelSeries Sonar introduced compelling spatial simulation and frequency shaping, but with significant drawbacks: closed kernel drivers prone to Blue Screen of Death (BSOD) crashes, high buffer latency (40–80ms), aggressive upsell nag screens, mandatory account creation, and intrusive background telemetry. Conversely, existing open-source solutions (Equalizer APO with Peace) provide low latency but suffer from intimidating setup friction, fragile installation steps, and an outdated visual aesthetic.
 
 **OpenBoom** bridges this gap. It delivers the beloved, tactile visual experience of Boom 3D — centered around an interactive 3D surround dial, 31-band EQ, AutoEq calibration, and a 5-effect real-time DSP rack — engineered as an ultra-fast, driverless Windows application. By routing audio via user-mode WASAPI loopback streams with SIMD-accelerated 32-bit floating-point buffers, OpenBoom achieves sub-15ms round-trip latency, consumes under 40 MB of RAM, and respects complete user privacy.
 
@@ -29,10 +29,10 @@ Modern PC audio is compromised by low-cost laptop DACs, suboptimal default headp
 ## 2. Target User & Journeys
 
 ### 2.1 Jobs To Be Done (JTBD)
-- **Immersive Gamer:** *"When I play competitive or immersive games, I want accurate 360-degree positional audio cues (footsteps, reloads, distance) without perceptible audio delay, so that I can react instantly without gaming performance penalties."*
+- **Spatial Audio Enthusiast:** *"When listening to multi-channel content, I want accurate 360-degree positional audio cues without perceptible audio delay, so that I can experience authentic spatial immersion without performance penalties."*
 - **Headphone Audiophile & Music Enthusiast:** *"When listening to music on my specific headphones, I want automatic parametric frequency correction to the Harman target curve and rich harmonic excitation, so that my headphones sound like high-end planar magnetic studio monitors."*
 - **Media Consumer & Binge-Watcher:** *"When watching movies or late-night streams with loud explosions and quiet dialogue, I want dynamic range leveling and acoustic stage expansion, so that dialogue is crystal clear without blasting the neighborhood."*
-- **Multitasking Power User:** *"When running Discord, Spotify, and a game simultaneously, I want quick, independent volume sliders per application in one clean dashboard, so that I don't have to fiddle with Windows Sound settings."*
+- **Multitasking Power User:** *"When running Discord, Spotify, and a media player simultaneously, I want quick, independent volume sliders per application in one clean dashboard, so that I don't have to fiddle with Windows Sound settings."*
 
 ### 2.2 Non-Users (v1)
 - **Professional Music Producers / DAW Mastering Engineers:** OpenBoom is designed for consumer listening enhancement and real-time playback, not for recording studios requiring ASIO bit-perfect output with zero coloration.
@@ -48,12 +48,12 @@ Modern PC audio is compromised by low-cost laptop DACs, suboptimal default headp
 - **Resolution:** Alex toggles the A/B comparison switch once to verify the improvement, smiles, and minimizes the window back to the tray.
 - **Edge case:** If the exact headphone revision is missing, OpenBoom offers a fallback to general Over-Ear, On-Ear, or In-Ear compensation curves.
 
-#### UJ-2: Marcus Configures 3D Positional Surround for Gaming
-- **Persona + Context:** Marcus is playing a tactical first-person shooter. Standard stereo makes it hard to distinguish rear sounds from front sounds.
-- **Entry state:** OpenBoom is active on the default gaming headset endpoint.
+#### UJ-2: Marcus Configures 3D Positional Surround for Spatial Audio
+- **Persona + Context:** Marcus is listening to multichannel surround content. Standard stereo makes it hard to distinguish rear sound from front sound.
+- **Entry state:** OpenBoom is active on the default headset endpoint.
 - **Path:** Marcus opens OpenBoom and clicks the central **3D Surround Dial**. An interactive circular soundstage appears displaying 8 virtual speakers (FL, FR, Center, LFE, Surround L/R, Rear L/R). Marcus rotates the intensity knob to 85% and clicks the Rear Left and Rear Right speakers to boost their relative gain by +3 dB.
-- **Climax:** In-game enemy footsteps approaching from behind are instantly distinguishable in distance and elevation with zero perceptible delay (<15ms).
-- **Resolution:** Marcus saves this setup as a preset named "Tactical Shooter" and assigns a global hotkey to toggle it.
+- **Climax:** Directional audio cues approaching from behind are instantly distinguishable in distance and elevation with zero perceptible delay (<15ms).
+- **Resolution:** Marcus saves this setup as a preset named "Spatial Surround" and assigns a global hotkey to toggle it.
 
 #### UJ-3: Elena Watches Late-Night Cinema Without Volume Jumps
 - **Persona + Context:** Elena is watching an action blockbuster at 1:00 AM while family members are asleep.

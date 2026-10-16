@@ -214,26 +214,36 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleCheckDriverStatus = async () => {
+    try {
+      const status = await invoke<{
+        has_virtual_driver: boolean;
+        device_name?: string;
+        device_id?: string;
+      }>("check_virtual_driver_status");
+      if (status && !status.has_virtual_driver) {
+        setIsDriverMissing(true);
+        setIsOnboardingModalOpen(true);
+      } else {
+        setIsDriverMissing(false);
+        setIsOnboardingModalOpen(false);
+        try {
+          const enumerated = await invoke<AudioDeviceInfo[]>("get_audio_devices");
+          if (enumerated && enumerated.length > 0) {
+            setDevices(enumerated);
+          }
+        } catch {
+          // Fallback
+        }
+      }
+    } catch {
+      // Fallback in browser preview
+    }
+  };
+
   // Check virtual driver presence on boot (Story 9-3, CAP-4)
   useEffect(() => {
-    const checkDriverStatus = async () => {
-      try {
-        const status = await invoke<{
-          has_virtual_driver: boolean;
-          device_name?: string;
-          device_id?: string;
-        }>("check_virtual_driver_status");
-        if (status && !status.has_virtual_driver) {
-          setIsDriverMissing(true);
-          setIsOnboardingModalOpen(true);
-        } else {
-          setIsDriverMissing(false);
-        }
-      } catch {
-        // Fallback in browser preview
-      }
-    };
-    checkDriverStatus();
+    handleCheckDriverStatus();
     fetchAudioSessions();
   }, []);
 
@@ -1629,6 +1639,7 @@ export const App: React.FC = () => {
         isInstalling={isInstallingDriver}
         installError={driverInstallError}
         onRetry={handleInstallVirtualDriver}
+        onCheckStatus={handleCheckDriverStatus}
       />
 
       {/* Fallback Notification Banner */}

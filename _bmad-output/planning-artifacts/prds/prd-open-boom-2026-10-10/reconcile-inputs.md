@@ -47,7 +47,7 @@ However, **4 critical reconciliation gaps / nuances** were identified across fea
 | **Interface Moderna & Fluida (Dark theme, dial circular, visualização tempo real)** | PRD FR-6, FR-10, FR-25, FR-26 | **Partial Alignment** | Dial and dark theme aligned. Live FFT audio spectrum visualizer deferred to Phase 2. |
 | **Zero Bloat / Zero Telemetria** | PRD Section 1, 5, 8 | **Aligned** | Zero network traffic, zero accounts, zero analytics. |
 | **Baixa Latência (<15ms, sem clipping)** | PRD FR-24, Section 7 (SM-1) | **Aligned** | Sub-15ms budget and lookahead peak limiter defined. |
-| **Acessibilidade (Sem driver pago no kernel, WASAPI/Loopback)** | PRD FR-2, Section 5, Addendum Sec 1 | **Aligned** | Driverless user-mode WASAPI Loopback pipeline adopted. |
+| **Acessibilidade (Sem driver proprietário no kernel, WASAPI/Loopback)** | PRD FR-2, Section 5, Addendum Sec 1 | **Aligned** | Driverless user-mode WASAPI Loopback pipeline adopted. |
 
 ---
 
@@ -83,7 +83,7 @@ However, **4 critical reconciliation gaps / nuances** were identified across fea
 | :--- | :--- | :--- | :--- |
 | **ADR-001: Separação em repositório próprio (`open-boom`)** | PRD Section 0 | **Aligned** | Documented and isolated. |
 | **ADR-002: Adoção do Memory Harness BMAD** | PRD Section 0 citations | **Aligned** | Cross-references `.bmad/` artifacts. |
-| **ADR-003: Evitar Driver de Kernel Pago (WASAPI / APO)** | PRD Section 5, Addendum Section 1 | **Aligned** | Options-Considered Matrix explicitly rules out `.sys` kernel driver and selects WASAPI Loopback with APO as future option. |
+| **ADR-003: Evitar Driver de Kernel Proprietário (WASAPI / APO)** | PRD Section 5, Addendum Section 1 | **Aligned** | Options-Considered Matrix explicitly rules out `.sys` kernel driver and selects WASAPI Loopback with APO as future option. |
 | **ADR-004: Vinculação Explícita ao Decompilator e REA MCP** | PRD Section 0, Addendum Section 2 | **Aligned** | Reference binaries analyzed; findings cited for DSP algorithms and channel geometry. |
 
 ---
@@ -101,7 +101,7 @@ However, **4 critical reconciliation gaps / nuances** were identified across fea
 * **Impact:** Night Mode (Dynamic Range Compression) is a marquee feature for media watching (UJ-3). While Pitch Shifting can reasonably be deferred due to phase vocoder DSP complexity, deferring Night Mode leaves UJ-3 partially unsatisfied in MVP.
 * **Remediation in PRD:**
   1. Move **Night Mode (DRC)** back into **MVP (Phase 1)** scope to align with Milestone 3.5 and UJ-3.
-  2. Keep **Pitch Shifter** in Phase 2 / Fast-Follow (due to phase-vocoder latency overhead in real-time gaming streams), with its UI card in the effects strip rendered in an inactive/preview state in Phase 1.
+  2. Keep **Pitch Shifter** in Phase 2 / Fast-Follow (due to phase-vocoder latency overhead in real-time audio streams), with its UI card in the effects strip rendered in an inactive/preview state in Phase 1.
 
 ### Finding 3: Reconcile User Journey UJ-2 on Global Hotkeys
 * **Source Context:** User Journey UJ-2 states: *"Marcus saves this setup as a preset named 'Tactical Shooter' and assigns a global hotkey to toggle it."* However, Section 6.2 lists *"Global configurable hotkeys"* as explicitly Out of Scope for MVP.

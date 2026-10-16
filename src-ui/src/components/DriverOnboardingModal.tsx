@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Volume2,
   X,
@@ -9,6 +9,8 @@ import {
   ExternalLink,
   RefreshCw,
   CheckCircle2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useI18n } from "../i18n";
 
@@ -19,6 +21,7 @@ export interface DriverOnboardingModalProps {
   isInstalling?: boolean;
   installError?: string | null;
   onRetry?: () => void;
+  onCheckStatus?: () => void;
 }
 
 export const DriverOnboardingModal: React.FC<DriverOnboardingModalProps> = ({
@@ -28,20 +31,37 @@ export const DriverOnboardingModal: React.FC<DriverOnboardingModalProps> = ({
   isInstalling = false,
   installError = null,
   onRetry,
+  onCheckStatus,
 }) => {
   const { t } = useI18n();
+  const [copiedBrew, setCopiedBrew] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleManualDownload = () => {
-    if (typeof window !== "undefined") {
-      const isMac =
-        /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent) ||
-        (navigator as any).userAgentData?.platform === "macOS";
-      const url = isMac
-        ? "https://existential.audio/blackhole/"
-        : "https://vb-audio.com/Cable/";
-      window.open(url, "_blank");
+  const isMac =
+    typeof navigator !== "undefined" &&
+    (/Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent) ||
+      (navigator as any).userAgentData?.platform === "macOS");
+
+  const handleCopyBrew = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText("brew install --cask blackhole-16ch");
+      setCopiedBrew(true);
+      setTimeout(() => setCopiedBrew(false), 2000);
+    }
+  };
+
+  const handleManualDownload = async () => {
+    const url = isMac
+      ? "https://existential.audio/blackhole/"
+      : "https://vb-audio.com/Cable/";
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_external_url", { url });
+    } catch {
+      if (typeof window !== "undefined") {
+        window.open(url, "_blank");
+      }
     }
   };
 
@@ -183,22 +203,62 @@ export const DriverOnboardingModal: React.FC<DriverOnboardingModalProps> = ({
           </button>
 
           {/* Manual Fallback Link */}
-          <div className="flex items-center justify-between pt-1 border-t border-border-subtle/30 text-xs">
-            <span className="text-text-muted">
-              {t.driverOnboarding.manualDownloadDesc}
-            </span>
-            <button
-              onClick={handleManualDownload}
-              className="text-accent-cyan hover:underline flex items-center gap-1 text-xs font-medium cursor-pointer"
-            >
-              <span>{t.driverOnboarding.manualDownloadLink}</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
+          <div className="flex flex-col gap-2.5 pt-2 border-t border-border-subtle/30 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-text-muted">
+                {t.driverOnboarding.manualDownloadDesc}
+              </span>
+              <button
+                onClick={handleManualDownload}
+                className="text-accent-cyan hover:underline flex items-center gap-1 text-xs font-medium cursor-pointer"
+              >
+                <span>{t.driverOnboarding.manualDownloadLink}</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+
+            {isMac && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-subtle/30 border border-border-subtle/40 text-[11px] text-text-muted">
+                <div className="flex items-center gap-2">
+                  <span className="text-text-secondary font-medium">Homebrew:</span>
+                  <code className="text-accent-cyan bg-black/40 px-1.5 py-0.5 rounded font-mono select-all">
+                    brew install --cask blackhole-16ch
+                  </code>
+                </div>
+                <button
+                  onClick={handleCopyBrew}
+                  className="text-accent-cyan hover:text-accent-cyan-hover flex items-center gap-1 font-medium cursor-pointer transition-colors"
+                >
+                  {copiedBrew ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400">Copiado</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copiar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-[#121316] border-t border-border-subtle/60 flex justify-end">
+        <div className="px-6 py-3 bg-[#121316] border-t border-border-subtle/60 flex items-center justify-between">
+          <div>
+            {onCheckStatus && (
+              <button
+                onClick={onCheckStatus}
+                className="text-xs text-text-muted hover:text-accent-cyan flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Verificar se já foi instalado</span>
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-xs font-medium text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors cursor-pointer"
