@@ -907,3 +907,31 @@
   8. **Glue mínimo `cfg(windows)` no `open-boom-wasapi`:** alias `VolumeContextGuid` e consumo de argumentos do pump permitem que o conjunto de crates compile fora do Windows sem alterar o comportamento Windows.
   9. **CI macOS:** novo job `macos-latest` compila a FFI CoreAudio e roda os testes de `open-boom-core`, `open-boom-coreaudio` e `open-boom-storage`.
 * **Consequência:** O adapter macOS passa a mover áudio real pelo CoreAudio HAL, é inteiramente testável sem hardware via `MockHal` (24 testes verdes no crate) e não reporta mais garantias de latência que a aritmética de configuração não sustenta.
+
+---
+
+## ADR-059: Isolamento de Plataforma #[cfg], Resolução de Armazenamento macOS e Tauri Backend Switch (Story 10-2)
+* **Data:** 15/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  - Após a entrega do crate `open-boom-coreaudio` (Story 10-1), a aplicação desktop Tauri (`src-tauri`) ainda mantinha importações e instanciações incondicionais de `open-boom-wasapi`, impossibilitando a compilação do binário desktop no macOS.
+  - Além disso, o crate `open-boom-storage` resolvia o diretório padrão de presets e configurações mirando exclusivamente o padrão Windows (`%APPDATA%\OpenBoom\`), sem conformidade com a convenção de diretórios do macOS (`~/Library/Application Support/OpenBoom/`).
+  - Era necessário chavear os backends sem quebrar a compilação no Windows nem no macOS, mantendo o `open-boom-core` rigorosamente agnóstico e fornecendo stubs interoperáveis para gerenciamento de sessões por processo e sincronização bidirecional de volume até a chegada das Stories 10-5 e 10-7.
+* **Decisões:**
+  1. **Gating de Dependências por Alvo no Cargo (`src-tauri/Cargo.toml`):**
+     - Dependência `open-boom-wasapi` isolada sob `[target.'cfg(target_os = "windows")'.dependencies]`.
+     - Dependência `open-boom-coreaudio` configurada sob `[target.'cfg(target_os = "macos")'.dependencies]`.
+  2. **Chaveamento de Backend no Runtime Tauri (`src-tauri/src/lib.rs`):**
+     - Criados aliases de tipo (`AudioEngineCoordinator`, `AudioDeviceManager`, `AudioStreamPump`, `SessionManager`, `EndpointVolumeSync`) selecionados em tempo de compilação por `#[cfg(target_os = "...")]`.
+     - Preservada 100% da assinatura do `AppState` e dos manipuladores de comandos IPC, garantindo zero overhead em runtime e total paridade entre plataformas.
+  3. **Resolução de Diretório Conforme Diretrizes Apple (`open-boom-storage`):**
+     - `PresetStore::default_dir()` no macOS resolve `Library/Application Support/OpenBoom` a partir de `$HOME`, com fallback seguro para `std::env::temp_dir().join("OpenBoom")` caso `$HOME` não esteja definido.
+  4. **Stubs Interoperáveis Não-Bloqueantes no `open-boom-coreaudio`:**
+     - Implementados `CoreAudioSessionManager` e `CoreAudioVolumeSync` no `open-boom-coreaudio`, com suporte a modos sintéticos para testes headless e respostas `Ok(vec![])` / `Ok(())` graciosas em produção no macOS, eliminando qualquer risco de panic ou falha na interface até as Stories 10-5 e 10-7.
+  5. **Desobstrução da Fila de Comandos SPSC no Coordinator:**
+     - Removida verificação restritiva em `CoreAudioCoordinator::drain_commands()` que impedia o processamento de comandos caso a thread do pump estivesse ativa, garantindo sincronização imediata de comandos mestre e telemetria.
+* **Consequência:**
+  - `cargo build -p open-boom` compila com zero erros no macOS.
+  - O executável desktop `open-boom` inicializa de forma estável e saudável no macOS (smoke launch test aprovado sem panics ou crashes).
+  - 100% dos testes unitários e de integração verdes no frontend (118 testes) e em todos os crates Rust do workspace (open-boom, open-boom-coreaudio, open-boom-storage, open-boom-core).
+

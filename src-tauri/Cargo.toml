@@ -15,8 +15,13 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 open-boom-core = { path = "../crates/open-boom-core" }
-open-boom-wasapi = { path = "../crates/open-boom-wasapi" }
 open-boom-storage = { path = "../crates/open-boom-storage" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+open-boom-wasapi = { path = "../crates/open-boom-wasapi" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+open-boom-coreaudio = { path = "../crates/open-boom-coreaudio" }

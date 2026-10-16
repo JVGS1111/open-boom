@@ -36,14 +36,26 @@ const STALL_THRESHOLD: Duration = Duration::from_millis(250);
 /// Configuration for the CoreAudio stream pump.
 #[derive(Debug, Clone)]
 pub struct StreamPumpConfig {
-    /// Frames processed per iteration.
-    pub block_frames: usize,
+    /// Target physical render device ID (e.g. Headphones/Speakers). None = system default.
+    pub target_device_id: Option<String>,
+    /// Capture device ID (e.g. BlackHole virtual endpoint). None = auto-detect virtual device.
+    pub capture_device_id: Option<String>,
+    /// Whether synthetic/mock streaming is allowed in headless test environments.
+    pub allow_synthetic: bool,
+    /// Whether buffer guard is enabled.
+    pub buffer_guard_enabled: bool,
+    /// Whether to force driverless loopback capture.
+    pub force_loopback: bool,
 }
 
 impl Default for StreamPumpConfig {
     fn default() -> Self {
         Self {
-            block_frames: crate::DEFAULT_BUFFER_FRAMES as usize,
+            target_device_id: None,
+            capture_device_id: None,
+            allow_synthetic: false,
+            buffer_guard_enabled: true,
+            force_loopback: false,
         }
     }
 }
@@ -56,26 +68,62 @@ pub struct CoreAudioStreamPump {
 }
 
 impl CoreAudioStreamPump {
-    /// Spawns the real-time pump worker thread.
+    /// Starts the real-time audio stream pump from an `AudioEngineCoordinator` instance and configuration.
     pub fn start(
+        coordinator: Arc<Mutex<crate::coordinator::CoreAudioCoordinator>>,
+        config: StreamPumpConfig,
+    ) -> EngineResult<Self> {
+        let (capture_ring, render_ring, command_queue, telemetry, sample_rate) = {
+            let mut coord = coordinator.lock().map_err(|e| {
+                EngineError::DeviceInitialization(format!("failed to lock coordinator: {e}"))
+            })?;
+            coord.set_buffer_guard(config.buffer_guard_enabled);
+            let _ = coord.start();
+            (
+                coord.capture().ring(),
+                coord.render().ring(),
+                coord.command_queue(),
+                coord.pump_telemetry_cell(),
+                coord.render().sample_rate(),
+            )
+        };
+
+        Self::start_with_rings(
+            capture_ring,
+            render_ring,
+            command_queue,
+            telemetry,
+            sample_rate,
+            config,
+        )
+    }
+
+    /// Spawns the real-time pump worker thread over explicit rings and channels.
+    pub fn start_with_rings(
         capture_ring: Arc<SampleRing>,
         render_ring: Arc<SampleRing>,
         command_queue: Option<Arc<SpscQueue<AudioCommand, DEFAULT_COMMAND_QUEUE_CAPACITY>>>,
         telemetry: Arc<Mutex<TelemetrySnapshot>>,
         sample_rate: u32,
-        config: StreamPumpConfig,
+        _config: StreamPumpConfig,
     ) -> EngineResult<Self> {
         let is_running = Arc::new(AtomicBool::new(true));
         let capture_stalled = Arc::new(AtomicBool::new(false));
         let running = is_running.clone();
         let stalled = capture_stalled.clone();
-        let block_frames = config.block_frames.max(1);
-        let sample_frames = block_frames * ENGINE_CHANNELS;
+        let sample_frames = crate::DEFAULT_BUFFER_FRAMES as usize * ENGINE_CHANNELS;
         let sample_rate = sample_rate.max(1);
 
         let handle = std::thread::Builder::new()
             .name("open-boom-coreaudio-pump".to_string())
             .spawn(move || {
+                if _config.allow_synthetic {
+                    while running.load(Ordering::Relaxed) {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    return;
+                }
+
                 // Real-time scheduling applies to this audio thread; macOS typically
                 // denies elevated priorities to unprivileged processes, in which case
                 // the guard simply reports active = false.
@@ -93,7 +141,7 @@ impl CoreAudioStreamPump {
                     let wait_start = Instant::now();
                     let mut spins = 0u32;
                     while running.load(Ordering::Relaxed)
-                        && capture_ring.available() < sample_frames
+                        && capture_ring.available() < ENGINE_CHANNELS
                     {
                         if spins < SPIN_BEFORE_YIELD {
                             std::hint::spin_loop();

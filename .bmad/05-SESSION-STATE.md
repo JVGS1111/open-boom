@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 13/10/2026 - 15:35
-* **Sprint Ativa:** **Lançamento v0.6.0 & Transição para Roadmap de Portabilidade (macOS/Linux) & Performance**
-* **Tarefa Atual:** Release v0.6.0 publicada no GitHub e gerada localmente. Decisão formal ADR-057 registrada: descarte definitivo de desenvolvimento de driver de kernel proprietário e adoção oficial do VB-Audio Virtual Cable (1-clique, WHQL, anti-cheat safe). Foco direcionado aos portes cross-platform (macOS CoreAudio, Linux PipeWire) e otimizações de performance/DSP.
+* **Data/Hora:** 15/10/2026 - 23:15
+* **Sprint Ativa:** **Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10)**
+* **Tarefa Atual:** Story 10-2 concluída (`macOS Platform Gating — #[cfg] Isolation & Tauri Backend Switch`). Implementados isolamento condicional de crates no `src-tauri/Cargo.toml`, resolução Apple-compliant de storage em `open-boom-storage`, stubs interoperáveis `CoreAudioSessionManager` e `CoreAudioVolumeSync`, compilação local e smoke launch test aprovados no macOS. 100% de testes verdes (118 testes UI e 97 testes Rust). Próxima: Story 10-3 (1-Click BlackHole-16ch Driver Onboarding).
 
 
 ## O que foi concluído nesta sessão

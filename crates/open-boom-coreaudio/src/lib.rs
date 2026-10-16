@@ -22,7 +22,9 @@ pub mod hal;
 pub mod realtime;
 pub mod render;
 pub mod ring_buffer;
+pub mod session_manager;
 pub mod stream_pump;
+pub mod volume_sync;
 
 pub use capture::{CaptureConfig, CoreAudioCapture};
 pub use coordinator::{CoreAudioCoordinator, DEFAULT_COMMAND_QUEUE_CAPACITY};
@@ -31,7 +33,22 @@ pub use hal::{AudioHal, HalStream, HalStreamConfig, MockHal};
 pub use realtime::{set_realtime_priority, RealtimeGuard, DEFAULT_AUDIO_PRIORITY};
 pub use render::{CoreAudioRender, RenderConfig};
 pub use ring_buffer::SampleRing;
+pub use session_manager::CoreAudioSessionManager;
 pub use stream_pump::{CoreAudioStreamPump, StreamPumpConfig};
+pub use volume_sync::{
+    CoreAudioVolumeSync, VolumeCallback, VolumeContextGuid, VolumeSyncEvent,
+    OPEN_BOOM_VOLUME_CONTEXT_GUID,
+};
+
+/// Operating mode of the audio bridge (Mode A: virtual driver default sink; Mode B: direct loopback).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeMode {
+    VirtualSinkModeA,
+    LoopbackFallbackModeB,
+}
+
+/// Compatibility alias matching WASAPI `LoopbackConfig` on the macOS host adapter.
+pub type LoopbackConfig = CaptureConfig;
 
 #[cfg(target_os = "macos")]
 pub use hal::CoreAudioHal;

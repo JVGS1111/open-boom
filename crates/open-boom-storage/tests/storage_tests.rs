@@ -273,9 +273,45 @@ fn test_startup_manager_mock_lifecycle() {
 fn test_preset_store_default_dir_resolution() {
     let dir = PresetStore::default_dir();
     assert!(dir.to_string_lossy().contains("OpenBoom"));
+    #[cfg(target_os = "macos")]
+    {
+        if std::env::var("HOME").is_ok() {
+            assert!(
+                dir.ends_with("Library/Application Support/OpenBoom"),
+                "On macOS with HOME set, default_dir must resolve to Library/Application Support/OpenBoom: {:?}",
+                dir
+            );
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var("APPDATA").is_ok() || std::env::var("USERPROFILE").is_ok() {
+            assert!(
+                dir.ends_with("AppData\\Roaming\\OpenBoom") || dir.ends_with("OpenBoom"),
+                "On Windows, default_dir must resolve to AppData/Roaming/OpenBoom: {:?}",
+                dir
+            );
+        }
+    }
     let store = PresetStore::default();
     assert_eq!(store.base_dir(), dir);
     assert_eq!(store.presets_dir(), dir.join("presets"));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_preset_store_default_dir_macos_home_resolution() {
+    let dir = PresetStore::default_dir();
+    if let Ok(home) = std::env::var("HOME") {
+        let expected = std::path::PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("OpenBoom");
+        assert_eq!(dir, expected);
+    } else {
+        let expected = std::env::temp_dir().join("OpenBoom");
+        assert_eq!(dir, expected);
+    }
 }
 
 #[test]

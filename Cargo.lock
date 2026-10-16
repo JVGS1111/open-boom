@@ -2177,6 +2177,7 @@ name = "open-boom"
 version = "0.6.0"
 dependencies = [
  "open-boom-core",
+ "open-boom-coreaudio",
  "open-boom-storage",
  "open-boom-wasapi",
  "serde",

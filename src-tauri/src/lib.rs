@@ -8,9 +8,19 @@ use open_boom_storage::{
     sanitize_audio_bridge_mode, AppConfig, AppVolumeProfile, AutoEqDatabase, AutoEqProfile,
     AutoEqProfileSummary, AutoEqStats, EqPreset, PresetStore, StartupManager,
 };
+
+#[cfg(target_os = "windows")]
 use open_boom_wasapi::{
     AudioDeviceManager, AudioEngineCoordinator, AudioStreamPump, BridgeMode, EndpointVolumeSync,
     LoopbackConfig, RenderConfig, SessionManager, StreamPumpConfig,
+};
+
+#[cfg(target_os = "macos")]
+use open_boom_coreaudio::{
+    BridgeMode, CoreAudioCoordinator as AudioEngineCoordinator,
+    CoreAudioDeviceManager as AudioDeviceManager, CoreAudioSessionManager as SessionManager,
+    CoreAudioStreamPump as AudioStreamPump, CoreAudioVolumeSync as EndpointVolumeSync,
+    LoopbackConfig, RenderConfig, StreamPumpConfig,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -1705,6 +1715,9 @@ mod tests {
     #[test]
     fn test_telemetry_snapshot() {
         let state = AppState::new();
+        if state.pump.lock().unwrap().is_none() {
+            let _ = state.apply_audio_bridge_mode("loopback");
+        }
         let t = state.get_telemetry_snapshot();
         assert_eq!(t.limiter_gain_reduction_db, 0.0);
         assert!(t.round_trip_latency_ms < 15.0);

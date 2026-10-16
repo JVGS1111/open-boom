@@ -98,6 +98,13 @@
 
 ### Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10)
 - [X] **T12.1**: Crate `open-boom-coreaudio` — Adaptador CoreAudio HAL de Captura & Render (Story 10-1 / ADR-058). Trait hexagonal `AudioHostBackend` em `open-boom-core`, fronteira `AudioHal` com FFI CoreAudio real + `MockHal` determinístico headless, anéis SPSC Float32 entre os IOProcs e o pump, prioridade de tempo real `pthread_setschedparam(SCHED_RR)`, vetorização NEON (64 taps HRTF) em Apple Silicon com equivalência escalar testada, enumeração/troca do endpoint padrão (CFString + `CFRelease`) e job CI `macos-latest`.
+- [X] **T12.2**: Gating de Plataforma macOS — Isolamento `#[cfg]` & Switch de Backend Tauri (Story 10-2 / ADR-059). Isolamento condicional `[target.'cfg(target_os = "windows")'.dependencies]` vs `[target.'cfg(target_os = "macos")'.dependencies]`, resolução de diretório `PresetStore::default_dir()` para `~/Library/Application Support/OpenBoom/` no macOS, stubs interoperáveis `CoreAudioSessionManager` e `CoreAudioVolumeSync`, compilação local e smoke launch aprovados no macOS.
+- [ ] **T12.3**: Onboarding de Driver BlackHole-16ch em 1 Clique no macOS (Story 10-3). Detecção de status de driver virtual, download via Homebrew cask API, instalação elevada via osascript, restart de coreaudiod e layout 7.1 surround.
+- [ ] **T12.4**: Roteamento de Áudio Virtual no macOS (Modo A — BlackHole Default Sink) (Story 10-4). BlackHole-16ch como sink padrão do sistema via CoreAudio HAL, captura 8 canais discretos, renderização binaural estéreo e restauração do endpoint em shutdown.
+- [ ] **T12.5**: Mixer de Sessões por Aplicação no macOS Gated por OS (Story 10-5). Implementação via AudioHardwareCreateProcessTap no macOS 14.2+ e degradação suave com aviso em versões anteriores.
+- [ ] **T12.6**: Autostart no macOS via launchd LaunchAgent (Story 10-6). Gerenciamento atômico de ~/Library/LaunchAgents/com.openboom.launcher.plist com launchctl load/unload.
+- [ ] **T12.7**: Sincronização Bidirecional de Volume de Sistema no macOS (Story 10-7). Property listeners em kAudioHardwareServiceDeviceProperty_VirtualMasterVolume sem loops de feedback.
+- [ ] **T12.8**: Empacotamento macOS .app / .dmg & CI/CD GitHub Actions + Auto-Update (Story 10-8). Bundles universais macOS, create-dmg, CI runner macos-latest e tauri-plugin-updater v2.x.
 
 
 

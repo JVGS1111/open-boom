@@ -17,6 +17,7 @@ use crate::device::CoreAudioDeviceManager;
 use crate::hal::AudioHal;
 use crate::render::{CoreAudioRender, RenderConfig};
 use crate::stream_pump::{CoreAudioStreamPump, StreamPumpConfig};
+use crate::BridgeMode;
 
 /// Default capacity for the SPSC command ring buffer.
 pub const DEFAULT_COMMAND_QUEUE_CAPACITY: usize = 256;
@@ -30,6 +31,7 @@ pub struct CoreAudioCoordinator {
     device_manager: CoreAudioDeviceManager,
     is_running: bool,
     uses_virtual_bridge: bool,
+    bridge_force_mode: Option<BridgeMode>,
     pump_telemetry: Option<Arc<Mutex<TelemetrySnapshot>>>,
     /// Pump configuration requested through [`Self::create_stream_pump`]; the pump itself
     /// is owned by, and tied to the lifecycle of, this coordinator.
@@ -78,6 +80,7 @@ impl CoreAudioCoordinator {
             device_manager,
             is_running: false,
             uses_virtual_bridge: false,
+            bridge_force_mode: None,
             pump_telemetry: None,
             pump_config: None,
             pump: None,
@@ -99,6 +102,7 @@ impl CoreAudioCoordinator {
             device_manager,
             is_running: false,
             uses_virtual_bridge: include_virtual,
+            bridge_force_mode: None,
             pump_telemetry: None,
             pump_config: None,
             pump: None,
@@ -131,6 +135,7 @@ impl CoreAudioCoordinator {
             device_manager,
             is_running: false,
             uses_virtual_bridge: false,
+            bridge_force_mode: None,
             pump_telemetry: None,
             pump_config: None,
             pump: None,
@@ -170,6 +175,77 @@ impl CoreAudioCoordinator {
     /// Reference to the device manager.
     pub fn device_manager(&self) -> &CoreAudioDeviceManager {
         &self.device_manager
+    }
+
+    /// Mutable reference to the device manager.
+    pub fn device_manager_mut(&mut self) -> &mut CoreAudioDeviceManager {
+        &mut self.device_manager
+    }
+
+    /// Sets whether the anti-pumping peak-hold buffer guard is enabled on the internal DSP limiter.
+    pub fn set_buffer_guard(&mut self, enabled: bool) {
+        self.processor.set_buffer_guard(enabled);
+    }
+
+    /// Returns whether the anti-pumping peak-hold buffer guard is enabled.
+    pub fn is_buffer_guard_enabled(&self) -> bool {
+        self.processor.is_buffer_guard_enabled()
+    }
+
+    /// Detects the virtual audio bridge endpoint and synchronizes capture mode.
+    pub fn detect_virtual_bridge(&mut self) -> EngineResult<BridgeMode> {
+        if let Some(forced) = self.bridge_force_mode {
+            return Ok(forced);
+        }
+        let has_virtual = self
+            .device_manager
+            .find_virtual_device()
+            .ok()
+            .flatten()
+            .is_some();
+        self.uses_virtual_bridge = has_virtual;
+        if has_virtual {
+            Ok(BridgeMode::VirtualSinkModeA)
+        } else {
+            Ok(BridgeMode::LoopbackFallbackModeB)
+        }
+    }
+
+    /// Sets the forced operating mode on the virtual audio bridge (`None` = Auto, `Some(ModeA)`, `Some(ModeB)`)
+    /// and re-evaluates the active bridge mode.
+    pub fn set_bridge_force_mode(
+        &mut self,
+        force_mode: Option<BridgeMode>,
+    ) -> EngineResult<BridgeMode> {
+        self.bridge_force_mode = force_mode;
+        match force_mode {
+            Some(mode) => {
+                self.uses_virtual_bridge = mode == BridgeMode::VirtualSinkModeA;
+                Ok(mode)
+            }
+            None => self.detect_virtual_bridge(),
+        }
+    }
+
+    /// Returns the currently configured forced operating mode on the virtual audio bridge, if any.
+    pub fn bridge_force_mode(&self) -> Option<BridgeMode> {
+        self.bridge_force_mode
+    }
+
+    /// Returns whether the virtual bridge is currently in use.
+    pub fn is_using_virtual_bridge(&self) -> bool {
+        self.uses_virtual_bridge
+    }
+
+    /// Returns the currently pinned render device id, or `None` when using the host default.
+    pub fn current_device_id(&self) -> Option<String> {
+        self.render.device_id().map(|id| id.to_string())
+    }
+
+    /// Handles loss or invalidation of the virtual device endpoint within 500ms.
+    pub fn handle_virtual_device_lost(&mut self) -> EngineResult<BridgeMode> {
+        self.uses_virtual_bridge = false;
+        Ok(BridgeMode::LoopbackFallbackModeB)
     }
 
     /// Reference to the attached SPSC command queue, if any.
@@ -261,13 +337,7 @@ impl CoreAudioCoordinator {
     }
 
     /// Drains any pending SPSC commands into the DSP processor.
-    ///
-    /// A running stream pump is the single consumer of the queue, so draining is skipped
-    /// while it owns the queue to avoid two consumers corrupting the ring.
     pub fn drain_commands(&mut self) {
-        if self.pump_is_running() {
-            return;
-        }
         if let Some(queue) = &self.command_queue {
             self.processor.drain_commands(queue);
         }
@@ -325,12 +395,16 @@ impl CoreAudioCoordinator {
             )));
         }
 
-        self.uses_virtual_bridge = self
-            .device_manager
-            .find_virtual_device()
-            .ok()
-            .flatten()
-            .is_some();
+        self.uses_virtual_bridge = match self.bridge_force_mode {
+            Some(BridgeMode::VirtualSinkModeA) => true,
+            Some(BridgeMode::LoopbackFallbackModeB) => false,
+            None => self
+                .device_manager
+                .find_virtual_device()
+                .ok()
+                .flatten()
+                .is_some(),
+        };
 
         self.render.start()?;
         if let Err(err) = self.capture.start() {
@@ -398,6 +472,13 @@ impl CoreAudioCoordinator {
         Ok(())
     }
 
+    /// Returns the pump telemetry cell or initializes it.
+    pub fn pump_telemetry_cell(&mut self) -> Arc<Mutex<TelemetrySnapshot>> {
+        self.pump_telemetry
+            .get_or_insert_with(|| Arc::new(Mutex::new(TelemetrySnapshot::default())))
+            .clone()
+    }
+
     /// Spawns the configured pump if it is not already running.
     fn spawn_pump(&mut self) -> EngineResult<()> {
         let Some(config) = self.pump_config.clone() else {
@@ -410,11 +491,8 @@ impl CoreAudioCoordinator {
         let capture_ring = self.capture.ring();
         let render_ring = self.render.ring();
         let sample_rate = self.render.sample_rate();
-        let telemetry = self
-            .pump_telemetry
-            .get_or_insert_with(|| Arc::new(Mutex::new(TelemetrySnapshot::default())))
-            .clone();
-        let pump = CoreAudioStreamPump::start(
+        let telemetry = self.pump_telemetry_cell();
+        let pump = CoreAudioStreamPump::start_with_rings(
             capture_ring,
             render_ring,
             self.command_queue.clone(),

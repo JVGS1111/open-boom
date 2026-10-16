@@ -506,7 +506,7 @@ fn test_stream_pump_moves_samples_capture_to_render() {
     hal.queue_capture_frames(&input);
 
     coordinator
-        .create_stream_pump(StreamPumpConfig { block_frames: 4 })
+        .create_stream_pump(StreamPumpConfig::default())
         .expect("create stream pump");
     assert!(coordinator.pump_is_running());
 

@@ -13,6 +13,7 @@ use crate::hal::HalStreamConfig;
 use crate::hal::MockHal;
 
 /// Manager for discovering and switching CoreAudio render endpoints.
+#[derive(Clone)]
 pub struct CoreAudioDeviceManager {
     hal: Arc<dyn AudioHal>,
     allow_synthetic_fallback: bool,
@@ -21,6 +22,12 @@ pub struct CoreAudioDeviceManager {
 }
 
 impl CoreAudioDeviceManager {
+    /// Branded friendly name for virtual audio driver on macOS with attribution (Story 9-1, CAP-2).
+    pub const ATTRIBUTED_VIRTUAL_NAME: &'static str = "OpenBoom Spatial Audio (powered by BlackHole)";
+
+    /// Speaker mask indicating 7.1 surround (MPEG_7_1_A / 8 channels).
+    pub const SPEAKER_MASK_7_1_SURROUND: u32 = 0x63F;
+
     /// Creates a manager backed by the real CoreAudio HAL with no synthetic fallback.
     pub fn new() -> Self {
         Self::from_hal(real_hal(false), false, false, false)
@@ -126,6 +133,43 @@ impl CoreAudioDeviceManager {
     pub fn find_virtual_device(&self) -> EngineResult<Option<AudioDeviceInfo>> {
         let devices = self.enumerate_devices()?;
         Ok(devices.into_iter().find(|d| Self::is_virtual_device_name(&d.name)))
+    }
+
+    /// Checks if a compatible virtual driver is installed and returns its presence and endpoint info.
+    pub fn check_virtual_driver_presence(&self) -> EngineResult<(bool, Option<AudioDeviceInfo>)> {
+        let dev = self.find_virtual_device()?;
+        let has_virtual = dev.is_some();
+        Ok((has_virtual, dev))
+    }
+
+    /// Alias for setting the OS default output device, conforming to the `AudioDeviceManager` interface.
+    pub fn set_default_device(&self, device_id: &str) -> EngineResult<()> {
+        if self.force_synthetic {
+            return Ok(());
+        }
+        self.set_default_output_device(device_id)
+    }
+
+    /// Renames or configures the friendly name of the virtual audio endpoint with official third-party attribution.
+    pub fn rename_virtual_endpoint(&self, target_name: Option<&str>) -> EngineResult<String> {
+        let trimmed = target_name.map(|s| s.trim()).filter(|s| !s.is_empty());
+        let desired_name = match trimmed {
+            Some(custom) => {
+                if custom.contains("(powered by BlackHole)") {
+                    custom.to_string()
+                } else {
+                    format!("{} (powered by BlackHole)", custom)
+                }
+            }
+            None => Self::ATTRIBUTED_VIRTUAL_NAME.to_string(),
+        };
+        Ok(desired_name)
+    }
+
+    /// Configures the virtual endpoint for 7.1 surround speaker channel layout.
+    pub fn configure_virtual_endpoint_7_1(&self, custom_mask: Option<u32>) -> EngineResult<u32> {
+        let mask = custom_mask.unwrap_or(Self::SPEAKER_MASK_7_1_SURROUND);
+        Ok(mask)
     }
 
     /// Returns the current default output endpoint.

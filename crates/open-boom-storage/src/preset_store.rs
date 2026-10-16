@@ -206,17 +206,32 @@ impl Default for PresetStore {
 }
 
 impl PresetStore {
-    /// Resolves the default OpenBoom storage directory: `%APPDATA%\OpenBoom\`.
+    /// Resolves the default OpenBoom storage directory: `%APPDATA%\OpenBoom\` on Windows,
+    /// or `~/Library/Application Support/OpenBoom/` on macOS.
     pub fn default_dir() -> PathBuf {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            PathBuf::from(appdata).join("OpenBoom")
-        } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
-            PathBuf::from(userprofile)
-                .join("AppData")
-                .join("Roaming")
-                .join("OpenBoom")
-        } else {
-            std::env::temp_dir().join("OpenBoom")
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home)
+                    .join("Library")
+                    .join("Application Support")
+                    .join("OpenBoom")
+            } else {
+                std::env::temp_dir().join("OpenBoom")
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                PathBuf::from(appdata).join("OpenBoom")
+            } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                PathBuf::from(userprofile)
+                    .join("AppData")
+                    .join("Roaming")
+                    .join("OpenBoom")
+            } else {
+                std::env::temp_dir().join("OpenBoom")
+            }
         }
     }
 
