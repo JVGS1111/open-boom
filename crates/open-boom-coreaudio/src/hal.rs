@@ -716,6 +716,24 @@ mod real {
             for &mono in data {
                 context.ring.push_frames(&[mono, mono], ENGINE_CHANNELS);
             }
+        } else if input_channels >= 8 {
+            // 8-channel 7.1 surround discrete ingest (ITU-R BS.775 downfold with normalized headroom)
+            const INV_NORM: f32 = 0.585786;
+            const ATTEN: f32 = 0.70710678;
+            for frame in 0..frames {
+                let base = frame * input_channels;
+                let fl = data[base];
+                let fr = data[base + 1];
+                let c = data[base + 2];
+                let lfe = data[base + 3];
+                let rl = data[base + 4];
+                let rr = data[base + 5];
+                let sl = data[base + 6];
+                let sr = data[base + 7];
+                let l = (fl + ATTEN * (c + lfe + rl + sl)) * INV_NORM;
+                let r = (fr + ATTEN * (c + lfe + rr + sr)) * INV_NORM;
+                context.ring.push_frames(&[l, r], ENGINE_CHANNELS);
+            }
         } else {
             for frame in 0..frames {
                 let base = frame * input_channels;

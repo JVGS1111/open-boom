@@ -485,6 +485,7 @@ fn test_render_client_force_synthetic() {
     assert!(render.start().is_ok());
     assert!(render.is_rendering());
     assert_eq!(render.latency_ms(), 5.0);
+    #[cfg(windows)]
     assert!(render.mmcss_active());
     assert!(render.stop().is_ok());
     assert!(!render.is_rendering());

@@ -5,7 +5,7 @@
 //! real HAL data plane rather than a synthesized shortcut. A macOS-gated test also
 //! drives the production CoreAudio IOProcs over synthetic buffer lists.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use open_boom_core::ring_buffer::SpscQueue;
@@ -767,3 +767,125 @@ fn test_real_io_procs_move_frames_over_synthetic_buffer_lists() {
     );
     assert_eq!(multi_rendered, [0.7, -0.7, 0.0, 0.0]);
 }
+
+#[test]
+fn test_configure_virtual_endpoint_7_1_speaker_mask() {
+    let mgr = CoreAudioDeviceManager::with_forced_synthetic(true);
+    let mask_default = mgr.configure_virtual_endpoint_7_1(None).expect("configure 7.1");
+    assert_eq!(mask_default, CoreAudioDeviceManager::SPEAKER_MASK_7_1_SURROUND);
+    assert_eq!(mask_default, 0x63F);
+
+    let mask_custom = mgr.configure_virtual_endpoint_7_1(Some(0x3F)).expect("configure custom");
+    assert_eq!(mask_custom, 0x3F);
+}
+
+#[test]
+fn test_rename_virtual_endpoint_with_attribution() {
+    let mgr = CoreAudioDeviceManager::with_forced_synthetic(true);
+    let default_name = mgr.rename_virtual_endpoint(None).expect("default rename");
+    assert_eq!(default_name, CoreAudioDeviceManager::ATTRIBUTED_VIRTUAL_NAME);
+    assert!(default_name.contains("(powered by BlackHole)"));
+
+    let custom = mgr.rename_virtual_endpoint(Some("Studio Reference")).expect("custom rename");
+    assert_eq!(custom, "Studio Reference (powered by BlackHole)");
+
+    let already_attributed = mgr
+        .rename_virtual_endpoint(Some("OpenBoom Monitor (powered by BlackHole)"))
+        .expect("already attributed");
+    assert_eq!(already_attributed, "OpenBoom Monitor (powered by BlackHole)");
+}
+
+#[test]
+fn test_check_virtual_driver_presence_synthetic_and_hal() {
+    let mgr_forced = CoreAudioDeviceManager::with_forced_synthetic(true);
+    let (has_virtual, dev) = mgr_forced.check_virtual_driver_presence().expect("check presence");
+    assert!(!has_virtual);
+    assert!(dev.is_none());
+
+    let mgr_hal = CoreAudioDeviceManager::new();
+    let res = mgr_hal.check_virtual_driver_presence();
+    assert!(res.is_ok(), "Real HAL check_virtual_driver_presence must succeed without panic");
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_capture_8_channel_surround_discrete_downmix() {
+    use open_boom_coreaudio::hal::test_drive_capture_io_proc;
+    let ring = SampleRing::new(64);
+    // 1 frame of 8 channels: FL=1.0, FR=0.5, C=0.2, LFE=0.1, RL=0.3, RR=0.4, SL=0.5, SR=0.6
+    let frame_8ch = [1.0f32, 0.5, 0.2, 0.1, 0.3, 0.4, 0.5, 0.6];
+    let status = test_drive_capture_io_proc(8, &frame_8ch, ring.clone());
+    assert_eq!(status, 0);
+
+    let mut out = [0.0f32; 2];
+    assert_eq!(ring.pop_samples(&mut out), 2);
+    assert!(out[0] > 0.0 && out[0] <= 1.5, "L channel must be valid and bounded");
+    assert!(out[1] > 0.0 && out[1] <= 1.5, "R channel must be valid and bounded");
+    assert!(out[0] > out[1], "Left channel with larger FL input must be louder than Right");
+}
+
+#[test]
+fn test_coreaudio_volume_sync_lifecycle_and_boost() {
+    use open_boom_coreaudio::volume_sync::{CoreAudioVolumeSync, VolumeSyncEvent};
+    use std::sync::Mutex;
+
+    let sync = CoreAudioVolumeSync::with_forced_synthetic(true);
+
+    let received = Arc::new(Mutex::new(Vec::<VolumeSyncEvent>::new()));
+    let rec_clone = received.clone();
+    sync.add_on_volume_changed(move |event| {
+        rec_clone.lock().unwrap().push(event);
+    });
+
+    // 1. Initial defaults
+    assert_eq!(sync.get_master_volume().unwrap(), 0.8);
+    assert!(!sync.is_muted().unwrap());
+
+    // 2. Set master volume within normal range (0.65)
+    sync.set_master_volume(0.65).expect("set volume");
+    assert!((sync.get_master_volume().unwrap() - 0.65).abs() < 1e-4);
+
+    // 3. Set master volume with boost (1.35) -> OS endpoint clamped to 1.0
+    sync.set_master_volume(1.35).expect("set boosted volume");
+    assert!((sync.get_master_volume().unwrap() - 1.0).abs() < 1e-4);
+
+    // 4. Simulate OS volume change (e.g. from keyboard F11/F12 or macOS Control Center)
+    let processed = sync.simulate_os_volume_change(0.42, false, None);
+    assert!(processed);
+    assert!((sync.get_master_volume().unwrap() - 0.42).abs() < 1e-4);
+
+    let events = received.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert!((events[0].volume - 0.42).abs() < 1e-4);
+    assert!(!events[0].is_muted);
+}
+
+#[test]
+fn test_coreaudio_volume_sync_mute_and_rebind() {
+    use open_boom_coreaudio::volume_sync::{CoreAudioVolumeSync, VolumeSyncEvent};
+
+    let sync = CoreAudioVolumeSync::with_forced_synthetic(true);
+
+    let received = Arc::new(Mutex::new(Vec::<VolumeSyncEvent>::new()));
+    let rec_clone = received.clone();
+    sync.add_on_volume_changed(move |event| {
+        rec_clone.lock().unwrap().push(event);
+    });
+
+    // Set mute
+    sync.set_mute(true).expect("set mute");
+    assert!(sync.is_muted().unwrap());
+
+    // Simulate OS mute toggle
+    sync.simulate_os_volume_change(0.5, true, None);
+    assert!(sync.is_muted().unwrap());
+
+    sync.simulate_os_volume_change(0.5, false, None);
+    assert!(!sync.is_muted().unwrap());
+
+    // Rebind endpoint succeeds idempotently
+    assert!(sync.rebind_endpoint(None).is_ok());
+    assert!(sync.rebind_endpoint(Some("123".to_string())).is_ok());
+}
+
+

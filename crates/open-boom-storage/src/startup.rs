@@ -29,11 +29,11 @@ impl Default for StartupManager {
 }
 
 impl StartupManager {
-    /// Creates a new `StartupManager` operating on the real Windows registry (or mock on non-Windows).
+    /// Creates a new `StartupManager` operating on real platform persistence (Windows registry or macOS LaunchAgents).
     pub fn new() -> Self {
         Self {
             app_name: DEFAULT_APP_NAME.to_string(),
-            mock: !cfg!(windows),
+            mock: !cfg!(any(windows, target_os = "macos")),
             mock_store: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -120,13 +120,18 @@ impl StartupManager {
             }
         }
 
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            Ok(self.macos_launch_agent_plist_path().exists())
+        }
+
+        #[cfg(all(not(windows), not(target_os = "macos")))]
         {
             Ok(false)
         }
     }
 
-    /// Registers the given executable path in `HKCU\...\Run`.
+    /// Registers the given executable path in `HKCU\...\Run` on Windows or `~/Library/LaunchAgents/` on macOS.
     pub fn enable(&self, app_path: &str) -> io::Result<()> {
         if self.mock {
             let mut store = self.mock_store.lock().unwrap();
@@ -186,14 +191,53 @@ impl StartupManager {
             }
         }
 
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let plist_path = self.macos_launch_agent_plist_path();
+            if let Some(parent) = plist_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let plist_content = format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openboom.launcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
+"#,
+                app_path
+            );
+            let tmp_path = plist_path.with_extension(format!("tmp.{}", std::process::id()));
+            std::fs::write(&tmp_path, plist_content)?;
+            std::fs::rename(&tmp_path, &plist_path)?;
+
+            let _ = std::process::Command::new("launchctl")
+                .args(["load", plist_path.to_str().unwrap_or("")])
+                .output();
+
+            Ok(())
+        }
+
+        #[cfg(all(not(windows), not(target_os = "macos")))]
         {
             Ok(())
         }
     }
 
-    /// Removes the application entry from `HKCU\...\Run`.
-    /// Gracefully succeeds if the entry or key is already absent.
+    /// Removes the application startup entry.
+    /// Gracefully succeeds if the entry or file is already absent.
     pub fn disable(&self) -> io::Result<()> {
         if self.mock {
             let mut store = self.mock_store.lock().unwrap();
@@ -241,10 +285,32 @@ impl StartupManager {
             }
         }
 
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let plist_path = self.macos_launch_agent_plist_path();
+            let _ = std::process::Command::new("launchctl")
+                .args(["unload", plist_path.to_str().unwrap_or("")])
+                .output();
+            if plist_path.exists() {
+                let _ = std::fs::remove_file(&plist_path);
+            }
+            Ok(())
+        }
+
+        #[cfg(all(not(windows), not(target_os = "macos")))]
         {
             Ok(())
         }
+    }
+
+    /// Returns the absolute path to the macOS LaunchAgent plist file (`~/Library/LaunchAgents/com.openboom.launcher.plist`).
+    #[cfg(target_os = "macos")]
+    pub fn macos_launch_agent_plist_path(&self) -> std::path::PathBuf {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        std::path::PathBuf::from(home)
+            .join("Library")
+            .join("LaunchAgents")
+            .join("com.openboom.launcher.plist")
     }
 
     /// Enables startup launch using the current process executable path.
@@ -338,7 +404,27 @@ impl StartupManager {
             }
         }
 
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            let plist_path = self.macos_launch_agent_plist_path();
+            if !plist_path.exists() {
+                return Ok(None);
+            }
+            let content = std::fs::read_to_string(&plist_path)?;
+            if let Some(pos) = content.find("<key>ProgramArguments</key>") {
+                let rest = &content[pos..];
+                if let Some(s_start) = rest.find("<string>") {
+                    let s_start = s_start + "<string>".len();
+                    if let Some(s_end) = rest[s_start..].find("</string>") {
+                        let path = &rest[s_start..s_start + s_end];
+                        return Ok(Some(path.to_string()));
+                    }
+                }
+            }
+            Ok(Some(String::new()))
+        }
+
+        #[cfg(all(not(windows), not(target_os = "macos")))]
         {
             Ok(None)
         }

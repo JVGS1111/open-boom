@@ -719,3 +719,15 @@ fn test_app_volume_array_fallback_format() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
+#[test]
+fn test_macos_launch_agent_plist_path() {
+    let startup = StartupManager::new();
+    #[cfg(target_os = "macos")]
+    {
+        let path = startup.macos_launch_agent_plist_path();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.ends_with("Library/LaunchAgents/com.openboom.launcher.plist"));
+    }
+    let _ = startup;
+}
+

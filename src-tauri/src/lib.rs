@@ -844,13 +844,130 @@ exit 0
 
         Ok(res)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let state_clone_for_update = state.clone();
+        let res = tauri::async_runtime::spawn_blocking(move || {
+            let temp_dir = std::path::PathBuf::from("/tmp/OpenBoom_DriverSetup");
+            if !temp_dir.exists() {
+                let _ = std::fs::create_dir_all(&temp_dir);
+            }
+            let pkg_path = temp_dir.join("BlackHole16ch.pkg");
+
+            // 1. Resolve download URL (Homebrew Cask API with fallback to Existential Audio CDN)
+            let mut download_url = "https://existential.audio/downloads/BlackHole16ch.pkg".to_string();
+            let brew_api_output = std::process::Command::new("curl")
+                .args(["-s", "-L", "--max-time", "10", "https://formulae.brew.sh/api/cask/blackhole-16ch.json"])
+                .output();
+
+            if let Ok(output) = brew_api_output {
+                if output.status.success() {
+                    let json_str = String::from_utf8_lossy(&output.stdout);
+                    if let Ok(cask_json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                        if let Some(url_str) = cask_json.get("url").and_then(|u| u.as_str()) {
+                            if url_str.starts_with("https://") {
+                                download_url = url_str.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Download BlackHole installer package via curl
+            let curl_res = std::process::Command::new("curl")
+                .args([
+                    "-s",
+                    "-L",
+                    "-A",
+                    "Mozilla/5.0",
+                    &download_url,
+                    "-o",
+                    pkg_path.to_str().unwrap_or("/tmp/OpenBoom_DriverSetup/BlackHole16ch.pkg"),
+                    "--max-time",
+                    "90",
+                ])
+                .output();
+
+            let pkg_valid = match curl_res {
+                Ok(out) => out.status.success() && pkg_path.exists() && std::fs::metadata(&pkg_path).map(|m| m.len()).unwrap_or(0) > 10_000,
+                Err(_) => false,
+            };
+
+            if !pkg_valid {
+                return Err("NETWORK_ERROR: Could not download driver installer. Check internet connection.".to_string());
+            }
+
+            // 3. Elevated installation via osascript and instant coreaudiod restart
+            let script = format!(
+                "do shell script \"installer -pkg '{}' -target / && killall -9 coreaudiod\" with administrator privileges",
+                pkg_path.display()
+            );
+
+            let osa_res = std::process::Command::new("osascript")
+                .args(["-e", &script])
+                .output();
+
+            let output = match osa_res {
+                Ok(out) => out,
+                Err(e) => return Err(format!("Failed to execute osascript authorization: {}", e)),
+            };
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let err_trimmed = stderr.trim();
+                if err_trimmed.contains("User canceled") || err_trimmed.contains("-128") || err_trimmed.to_lowercase().contains("cancel") {
+                    return Err("UAC_DENIED: Administrator permission was cancelled or denied.".to_string());
+                } else {
+                    return Err(format!("Driver installation failed: {}", err_trimmed));
+                }
+            }
+
+            // 4. Clean up temporary pkg
+            let _ = std::fs::remove_file(&pkg_path);
+
+            // 5. Allow coreaudiod a moment to initialize and re-enumerate devices
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let mut virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            for _ in 0..10 {
+                if virtual_dev.is_some() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            }
+
+            let _ = dev_mgr.rename_virtual_endpoint(None);
+            let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
+            if virtual_dev.is_none() {
+                virtual_dev = dev_mgr.find_virtual_device().ok().flatten();
+            }
+
+            Ok(DriverInstallResult {
+                success: true,
+                message: "Driver installed and 7.1 surround configured successfully".to_string(),
+                endpoint_id: virtual_dev.map(|d| d.id),
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+
+        // Immediately update AppState virtual_device_id and activate Mode A
+        if let Some(ref dev_id) = res.endpoint_id {
+            if let Ok(mut v_guard) = state_clone_for_update.virtual_device_id.lock() {
+                *v_guard = Some(dev_id.clone());
+            }
+            let _ = state_clone_for_update.apply_audio_bridge_mode("auto");
+        }
+
+        Ok(res)
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     {
         let _ = dev_mgr.rename_virtual_endpoint(None);
         let _ = dev_mgr.configure_virtual_endpoint_7_1(None);
         Ok(DriverInstallResult {
             success: true,
-            message: "Driver installation simulated on non-Windows platform".to_string(),
+            message: "Driver installation simulated on unsupported platform".to_string(),
             endpoint_id: Some("synthetic_endpoint".to_string()),
         })
     }
@@ -1131,6 +1248,41 @@ pub struct UpdateCheckResult {
 /// and excludes standalone portable binaries (`*portable*.exe`) so the update routine
 /// never accidentally launches a portable binary from `%TEMP%` instead of running the setup installer.
 pub fn select_installer_asset_url(assets: &[serde_json::Value]) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x64" };
+        for asset in assets {
+            if let Some(name) = asset["name"].as_str() {
+                let lower = name.to_lowercase();
+                if lower.ends_with(".dmg") && lower.contains(arch) {
+                    if let Some(url) = asset["browser_download_url"].as_str() {
+                        return Some(url.to_string());
+                    }
+                }
+            }
+        }
+        for asset in assets {
+            if let Some(name) = asset["name"].as_str() {
+                let lower = name.to_lowercase();
+                if lower.ends_with(".dmg") {
+                    if let Some(url) = asset["browser_download_url"].as_str() {
+                        return Some(url.to_string());
+                    }
+                }
+            }
+        }
+        for asset in assets {
+            if let Some(name) = asset["name"].as_str() {
+                let lower = name.to_lowercase();
+                if lower.ends_with(".tar.gz") && (lower.contains("darwin") || lower.contains("mac")) {
+                    if let Some(url) = asset["browser_download_url"].as_str() {
+                        return Some(url.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     // Pass 1: Explicit setup/installer .exe (excluding portable)
     for asset in assets {
         if let Some(name) = asset["name"].as_str() {
@@ -1300,8 +1452,16 @@ async fn download_and_install_update(
     {
         return Err("Update URL must originate from GitHub".to_string());
     }
-    if !download_url.to_lowercase().ends_with(".exe") {
-        return Err("Update package does not contain an executable installer".to_string());
+
+    #[cfg(target_os = "macos")]
+    let is_valid_pkg = download_url.to_lowercase().ends_with(".dmg")
+        || download_url.to_lowercase().ends_with(".tar.gz")
+        || download_url.to_lowercase().ends_with(".exe");
+    #[cfg(not(target_os = "macos"))]
+    let is_valid_pkg = download_url.to_lowercase().ends_with(".exe");
+
+    if !is_valid_pkg {
+        return Err("Update package does not contain a supported installer".to_string());
     }
 
     if state
@@ -1323,65 +1483,119 @@ async fn download_and_install_update(
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = DownloadInFlightGuard { flag };
 
-        let dest_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe");
-        let part_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe.part");
-
-        let mut cmd = std::process::Command::new("powershell");
-        let ps_cmd = r#"
-            $ProgressPreference = 'SilentlyContinue'
-            $ErrorActionPreference = 'Stop'
-            $url = $env:OPENBOOM_UPDATE_URL
-            $dest = $env:OPENBOOM_UPDATE_DEST
-            $part = $env:OPENBOOM_UPDATE_PART
-            try {
-                if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
-                $usedCurl = $false
-                $curlExe = Join-Path $env:SystemRoot "System32\curl.exe"
-                if (Test-Path $curlExe) {
-                    & $curlExe -fL -sS --retry 2 --connect-timeout 15 --max-time 90 -o $part $url
-                    if ($LASTEXITCODE -eq 0 -and (Test-Path $part) -and ((Get-Item $part).Length -gt 32768)) {
-                        $usedCurl = $true
-                    }
-                }
-                if (-not $usedCurl) {
-                    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                    Invoke-WebRequest -Uri $url -OutFile $part -UseBasicParsing -TimeoutSec 90
-                }
-                if (-not (Test-Path $part) -or ((Get-Item $part).Length -le 32768)) {
-                    throw "Downloaded update package is incomplete or empty."
-                }
-                Move-Item -Path $part -Destination $dest -Force
-            } catch {
-                [Console]::Error.WriteLine($_.Exception.Message)
-                exit 1
-            }
-        "#;
-
-        cmd.env("OPENBOOM_UPDATE_URL", &download_url)
-            .env("OPENBOOM_UPDATE_DEST", &dest_path)
-            .env("OPENBOOM_UPDATE_PART", &part_path)
-            .args(["-NoProfile", "-NonInteractive", "-Command", ps_cmd]);
-
-        #[cfg(windows)]
+        #[cfg(target_os = "macos")]
         {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            let dest_name = if download_url.to_lowercase().ends_with(".tar.gz") {
+                "OpenBoom_Update.tar.gz"
+            } else if download_url.to_lowercase().ends_with(".dmg") {
+                "OpenBoom_Update.dmg"
+            } else {
+                "OpenBoom_Setup_Update.exe"
+            };
+            let dest_path = std::env::temp_dir().join(dest_name);
+            let part_path = std::env::temp_dir().join(format!("{}.part", dest_name));
+
+            let _ = std::fs::remove_file(&part_path);
+
+            let status = std::process::Command::new("curl")
+                .args([
+                    "-fL",
+                    "-sS",
+                    "--retry",
+                    "2",
+                    "--connect-timeout",
+                    "15",
+                    "--max-time",
+                    "90",
+                    "-o",
+                    part_path.to_str().unwrap_or(""),
+                    &download_url,
+                ])
+                .status()
+                .map_err(|e| format!("Failed to run curl: {}", e))?;
+
+            if !status.success() {
+                return Err("Failed to download macOS update package via curl".to_string());
+            }
+
+            let meta = std::fs::metadata(&part_path)
+                .map_err(|e| format!("Cannot verify downloaded file: {}", e))?;
+            if meta.len() <= 32768 {
+                return Err("Downloaded update package is incomplete or empty".to_string());
+            }
+
+            std::fs::rename(&part_path, &dest_path)
+                .map_err(|e| format!("Failed to move update package into place: {}", e))?;
+
+            if let Ok(mut guard) = staged_slot.lock() {
+                *guard = Some(dest_path);
+            }
+
+            return Ok(());
         }
 
-        let output = cmd
-            .output()
-            .map_err(|e| format!("Failed to initiate update download: {}", e))?;
+        #[cfg(not(target_os = "macos"))]
+        {
+            let dest_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe");
+            let part_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe.part");
 
-        if !output.status.success() {
-            let err = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Update download error: {}", err.trim()));
+            let mut cmd = std::process::Command::new("powershell");
+            let ps_cmd = r#"
+                $ProgressPreference = 'SilentlyContinue'
+                $ErrorActionPreference = 'Stop'
+                $url = $env:OPENBOOM_UPDATE_URL
+                $dest = $env:OPENBOOM_UPDATE_DEST
+                $part = $env:OPENBOOM_UPDATE_PART
+                try {
+                    if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
+                    $usedCurl = $false
+                    $curlExe = Join-Path $env:SystemRoot "System32\curl.exe"
+                    if (Test-Path $curlExe) {
+                        & $curlExe -fL -sS --retry 2 --connect-timeout 15 --max-time 90 -o $part $url
+                        if ($LASTEXITCODE -eq 0 -and (Test-Path $part) -and ((Get-Item $part).Length -gt 32768)) {
+                            $usedCurl = $true
+                        }
+                    }
+                    if (-not $usedCurl) {
+                        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                        Invoke-WebRequest -Uri $url -OutFile $part -UseBasicParsing -TimeoutSec 90
+                    }
+                    if (-not (Test-Path $part) -or ((Get-Item $part).Length -le 32768)) {
+                        throw "Downloaded update package is incomplete or empty."
+                    }
+                    Move-Item -Path $part -Destination $dest -Force
+                } catch {
+                    [Console]::Error.WriteLine($_.Exception.Message)
+                    exit 1
+                }
+            "#;
+
+            cmd.env("OPENBOOM_UPDATE_URL", &download_url)
+                .env("OPENBOOM_UPDATE_DEST", &dest_path)
+                .env("OPENBOOM_UPDATE_PART", &part_path)
+                .args(["-NoProfile", "-NonInteractive", "-Command", ps_cmd]);
+
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
+
+            let output = cmd
+                .output()
+                .map_err(|e| format!("Failed to initiate update download: {}", e))?;
+
+            if !output.status.success() {
+                let err = String::from_utf8_lossy(&output.stderr);
+                return Err(format!("Update download error: {}", err.trim()));
+            }
+
+            if let Ok(mut guard) = staged_slot.lock() {
+                *guard = Some(dest_path);
+            }
+
+            Ok(())
         }
-
-        if let Ok(mut guard) = staged_slot.lock() {
-            *guard = Some(dest_path);
-        }
-
-        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1403,6 +1617,13 @@ fn restart_application(app: tauri::AppHandle, state: State<'_, AppState>) -> Res
         .ok()
         .and_then(|mut g| g.take())
         .or_else(|| {
+            #[cfg(target_os = "macos")]
+            {
+                let dmg_path = std::env::temp_dir().join("OpenBoom_Update.dmg");
+                if dmg_path.exists() {
+                    return Some(dmg_path);
+                }
+            }
             let default_path = std::env::temp_dir().join("OpenBoom_Setup_Update.exe");
             if default_path.exists() {
                 Some(default_path)
@@ -1413,62 +1634,89 @@ fn restart_application(app: tauri::AppHandle, state: State<'_, AppState>) -> Res
 
     if let Some(installer_path) = staged_installer {
         if installer_path.exists() {
-            let current_pid = std::process::id().to_string();
-            let current_exe = std::env::current_exe()
-                .ok()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-
-            let ps_apply = r#"
-                $ProgressPreference = 'SilentlyContinue'
-                $ErrorActionPreference = 'SilentlyContinue'
-                $oldPid = [int]$env:OPENBOOM_OLD_PID
-                $installer = $env:OPENBOOM_INSTALLER_PATH
-                $currentExe = $env:OPENBOOM_CURRENT_EXE
-
-                if ($oldPid -gt 0) {
-                    $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
-                    if ($proc) {
-                        $proc.WaitForExit(5000) | Out-Null
-                    }
+            #[cfg(target_os = "macos")]
+            {
+                if installer_path.to_string_lossy().ends_with(".dmg") {
+                    let script = format!(
+                        r#"
+                        sleep 0.5
+                        MOUNT_DIR=$(hdiutil attach "{}" -nobrowse -readonly | grep '/Volumes/' | awk '{{print $NF}}')
+                        if [ -n "$MOUNT_DIR" ]; then
+                            if [ -d "$MOUNT_DIR/OpenBoom.app" ]; then
+                                rm -rf /Applications/OpenBoom.app
+                                cp -R "$MOUNT_DIR/OpenBoom.app" /Applications/OpenBoom.app
+                            fi
+                            hdiutil detach "$MOUNT_DIR" -force
+                        fi
+                        open /Applications/OpenBoom.app
+                        "#,
+                        installer_path.to_string_lossy()
+                    );
+                    let _ = std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(&script)
+                        .spawn();
+                    app.exit(0);
+                    return Ok(());
                 }
-
-                Get-Process -Name "open-boom" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-                Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "OpenBoom_Setup_Update*" -and $_.Id -ne $PID } | Stop-Process -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Milliseconds 300
-
-                $installedExe = Join-Path $env:LOCALAPPDATA "OpenBoom\open-boom.exe"
-                if (Test-Path $installer) {
-                    Start-Process -FilePath $installer -ArgumentList "/S", "/UPDATE" -Wait
-                    if ((Test-Path $installedExe) -and $currentExe -and ($currentExe -ne $installedExe) -and (-not $currentExe.StartsWith($env:TEMP, [System.StringComparison]::OrdinalIgnoreCase))) {
-                        Copy-Item -Path $installedExe -Destination $currentExe -Force -ErrorAction SilentlyContinue
-                    }
-                }
-
-                Remove-Item -Path (Join-Path $env:TEMP "OpenBoom_Setup_Update*.exe") -Force -ErrorAction SilentlyContinue
-
-                if (Test-Path $installedExe) {
-                    Start-Process -FilePath $installedExe
-                } elseif ($currentExe -and (Test-Path $currentExe)) {
-                    Start-Process -FilePath $currentExe
-                }
-            "#;
-
-            let mut cmd = std::process::Command::new("powershell");
-            cmd.env("OPENBOOM_OLD_PID", &current_pid)
-                .env("OPENBOOM_INSTALLER_PATH", &installer_path)
-                .env("OPENBOOM_CURRENT_EXE", &current_exe)
-                .args(["-NoProfile", "-NonInteractive", "-Command", ps_apply]);
+            }
 
             #[cfg(windows)]
             {
+                let current_pid = std::process::id().to_string();
+                let current_exe = std::env::current_exe()
+                    .ok()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                let ps_apply = r#"
+                    $ProgressPreference = 'SilentlyContinue'
+                    $ErrorActionPreference = 'SilentlyContinue'
+                    $oldPid = [int]$env:OPENBOOM_OLD_PID
+                    $installer = $env:OPENBOOM_INSTALLER_PATH
+                    $currentExe = $env:OPENBOOM_CURRENT_EXE
+
+                    if ($oldPid -gt 0) {
+                        $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
+                        if ($proc) {
+                            $proc.WaitForExit(5000) | Out-Null
+                        }
+                    }
+
+                    Get-Process -Name "open-boom" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "OpenBoom_Setup_Update*" -and $_.Id -ne $PID } | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Milliseconds 300
+
+                    $installedExe = Join-Path $env:LOCALAPPDATA "OpenBoom\open-boom.exe"
+                    if (Test-Path $installer) {
+                        Start-Process -FilePath $installer -ArgumentList "/S", "/UPDATE" -Wait
+                        if ((Test-Path $installedExe) -and $currentExe -and ($currentExe -ne $installedExe) -and (-not $currentExe.StartsWith($env:TEMP, [System.StringComparison]::OrdinalIgnoreCase))) {
+                            Copy-Item -Path $installedExe -Destination $currentExe -Force -ErrorAction SilentlyContinue
+                        }
+                    }
+
+                    Remove-Item -Path (Join-Path $env:TEMP "OpenBoom_Setup_Update*.exe") -Force -ErrorAction SilentlyContinue
+
+                    if (Test-Path $installedExe) {
+                        Start-Process -FilePath $installedExe
+                    } elseif ($currentExe -and (Test-Path $currentExe)) {
+                        Start-Process -FilePath $currentExe
+                    }
+                "#;
+
+                let mut cmd = std::process::Command::new("powershell");
+                cmd.env("OPENBOOM_OLD_PID", &current_pid)
+                    .env("OPENBOOM_INSTALLER_PATH", &installer_path)
+                    .env("OPENBOOM_CURRENT_EXE", &current_exe)
+                    .args(["-NoProfile", "-NonInteractive", "-Command", ps_apply]);
+
                 use std::os::windows::process::CommandExt;
                 cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-            }
 
-            if cmd.spawn().is_ok() {
-                app.exit(0);
-                return Ok(());
+                if cmd.spawn().is_ok() {
+                    app.exit(0);
+                    return Ok(());
+                }
             }
         }
     }
@@ -2335,6 +2583,45 @@ mod tests {
             assert!(flag.load(std::sync::atomic::Ordering::SeqCst));
         }
         assert!(!flag.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_select_installer_asset_url_macos_dmg() {
+        let assets_json: serde_json::Value = serde_json::from_str(
+            r#"[
+                {
+                    "name": "OpenBoom-v0.6.0-portable-x64.exe",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.6.0/OpenBoom-v0.6.0-portable-x64.exe"
+                },
+                {
+                    "name": "OpenBoom_0.6.0_x64-setup.exe",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.6.0/OpenBoom_0.6.0_x64-setup.exe"
+                },
+                {
+                    "name": "OpenBoom_0.6.0_aarch64.dmg",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.6.0/OpenBoom_0.6.0_aarch64.dmg"
+                },
+                {
+                    "name": "SHA256SUMS.txt",
+                    "browser_download_url": "https://github.com/JVGS1111/open-boom/releases/download/v0.6.0/SHA256SUMS.txt"
+                }
+            ]"#,
+        )
+        .expect("parse assets json");
+
+        let selected = select_installer_asset_url(assets_json.as_array().unwrap());
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            selected.as_deref(),
+            Some("https://github.com/JVGS1111/open-boom/releases/download/v0.6.0/OpenBoom_0.6.0_aarch64.dmg"),
+            "On macOS, select_installer_asset_url must prioritize the DMG package"
+        );
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(
+            selected.as_deref(),
+            Some("https://github.com/JVGS1111/open-boom/releases/download/v0.6.0/OpenBoom_0.6.0_x64-setup.exe"),
+            "On Windows, select_installer_asset_url must select the setup installer"
+        );
     }
 
     #[test]

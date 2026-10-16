@@ -89,3 +89,4 @@ jobs:
           cargo test --locked --target aarch64-apple-darwin -p open-boom-core
           cargo test --locked --target aarch64-apple-darwin -p open-boom-coreaudio
           cargo test --locked --target aarch64-apple-darwin -p open-boom-storage
+          cargo test --locked --target aarch64-apple-darwin -p open-boom

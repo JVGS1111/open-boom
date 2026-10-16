@@ -935,3 +935,25 @@
   - O executável desktop `open-boom` inicializa de forma estável e saudável no macOS (smoke launch test aprovado sem panics ou crashes).
   - 100% dos testes unitários e de integração verdes no frontend (118 testes) e em todos os crates Rust do workspace (open-boom, open-boom-coreaudio, open-boom-storage, open-boom-core).
 
+---
+
+## ADR-060: Conclusão do Épico 10 — Portabilidade Integral macOS CoreAudio (Stories 10-3 a 10-8)
+* **Data:** 16/10/2026
+* **Status:** Aceito
+* **Contexto:**
+  - O Épico 10 tinha por meta estender o OpenBoom para macOS, cobrindo ingestão/render CoreAudio HAL (10-1), isolamento de compilação #[cfg] (10-2), onboarding 1-click do driver BlackHole-16ch (10-3), roteamento virtual Modo A 7.1 surround downfold (10-4), mixer de sessões por app com detecção de versão do macOS (10-5), autostart via launchd LaunchAgent (10-6), sincronização bidirecional de volume CoreAudio com supressão de feedback (10-7), e empacotamento .app/.dmg, CI/CD GitHub Actions e auto-update in-app (10-8).
+* **Decisões:**
+  1. **Story 10-3 (Onboarding BlackHole-16ch):** Rota automatizada de instalação via Homebrew Cask API com fallback CDN, elevação de privilégios via `osascript` com prompt nativo de Touch ID/senha, restart de `coreaudiod`, re-enumeração e configuração do layout 7.1 surround (`kAudioChannelLayoutTag_MPEG_7_1_A`). Fallback na UI direcionando para o site oficial `https://existential.audio/blackhole/`.
+  2. **Story 10-4 (Roteamento Virtual Modo A 7.1):** Downfold 7.1 discreto de 8 canais para estéreo com coeficientes ITU-R BS.775 normalizados em `capture_io_proc`, comutação para BlackHole como sink padrão do SO (`kAudioHardwarePropertyDefaultOutputDevice`) e restauração do endpoint físico em sub-500ms no desligamento ou shutdown.
+  3. **Story 10-5 (Mixer de Sessões Gated por OS):** Detecção de versão em runtime via sysctl do kernel `kern.osproductversion` sem spawn de subprocessos. Gating de `AudioHardwareCreateProcessTap` no macOS 14.2+ (Sonoma) e degradação suave com aviso amigável no macOS 12–14.1 com zero crashes.
+  4. **Story 10-6 (Autostart via launchd LaunchAgent):** `StartupManager` mira `~/Library/LaunchAgents/com.openboom.launcher.plist` com escrita atômica via staging `.tmp.<pid>` e `launchctl load/unload`, eliminando permissões de root.
+  5. **Story 10-7 (Sincronização de Volume do Sistema):** `CoreAudioVolumeSync` escuta `kAudioHardwareServiceDeviceProperty_VirtualMasterVolume` e `kAudioDevicePropertyMute` com remoção RAII via `MacListenerGuard`. Flag atômica `is_syncing_to_os` elimina loops de feedback e preserva boost de volume interno de até 150% mantendo o hardware cravado em 1.0.
+  6. **Story 10-8 (Empacotamento, CI/CD e Auto-Update):** Configuração de targets `["nsis", "dmg", "app"]` em `tauri.conf.json`, geração de `icon.icns` multi-resolução, seleção inteligente de assets DMG em `select_installer_asset_url`, staging e montagem de atualizações no macOS, e jobs de CI e Release no GitHub Actions para `macos-14` (Apple Silicon arm64).
+* **Consequência:**
+  - O Épico 10 está 100% implementado, especificado e verificado.
+  - 234 testes Cargo verdes (0 falhas) em todo o workspace.
+  - 118 testes UI verdes (0 falhas).
+  - Build de produção do frontend Vite e compilação do binário desktop `open-boom` concluídos com sucesso.
+  - Smoke launch local validado com sucesso no macOS (`PID=50626`, processo saudável e ativo).
+
+

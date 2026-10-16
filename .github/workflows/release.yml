@@ -104,3 +104,87 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
+  build-macos:
+    name: Build & Publish Release (macOS Apple Silicon)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/open-boom-core
+            crates/open-boom-coreaudio
+            crates/open-boom-storage
+            src-tauri
+
+      - name: Install npm dependencies
+        run: |
+          npm ci
+          npm --prefix src-ui ci
+
+      - name: Run CoreAudio & Workspace tests
+        run: |
+          cargo test --locked --target aarch64-apple-darwin -p open-boom-core
+          cargo test --locked --target aarch64-apple-darwin -p open-boom-coreaudio
+          cargo test --locked --target aarch64-apple-darwin -p open-boom-storage
+          cargo test --locked --target aarch64-apple-darwin -p open-boom
+
+      - name: Run UI frontend tests
+        run: npm run test
+
+      - name: Build Tauri Application & DMG Bundle
+        run: npx tauri build --bundles dmg,app
+
+      - name: Package macOS Release Assets & Compute Checksums
+        run: |
+          mkdir -p release-assets-macos
+          tag="${{ github.ref_name }}"
+          if [ -z "$tag" ] || [[ "$tag" != v* ]]; then
+            tag="${{ github.event.inputs.tag_name }}"
+          fi
+          if [ -z "$tag" ]; then
+            tag="v0.6.0"
+          fi
+
+          # Find DMG
+          dmg=$(find target/release/bundle/dmg -name "*.dmg" | head -n 1)
+          if [ -n "$dmg" ]; then
+            echo "Found DMG: $dmg"
+            cp "$dmg" release-assets-macos/
+          fi
+
+          # Tar app bundle
+          app_dir=$(find target/release/bundle/macos -name "*.app" | head -n 1)
+          if [ -n "$app_dir" ]; then
+            echo "Packaging App Bundle: $app_dir"
+            tar -czf "release-assets-macos/OpenBoom-$tag-darwin-aarch64.app.tar.gz" -C "$(dirname "$app_dir")" "$(basename "$app_dir")"
+          fi
+
+          cd release-assets-macos
+          shasum -a 256 * > SHA256SUMS-macos.txt || true
+          cd ..
+
+      - name: Upload macOS Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets-macos/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+

@@ -169,6 +169,42 @@ impl CoreAudioDeviceManager {
     /// Configures the virtual endpoint for 7.1 surround speaker channel layout.
     pub fn configure_virtual_endpoint_7_1(&self, custom_mask: Option<u32>) -> EngineResult<u32> {
         let mask = custom_mask.unwrap_or(Self::SPEAKER_MASK_7_1_SURROUND);
+        if !self.force_synthetic {
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(Some(dev)) = self.find_virtual_device() {
+                    if let Ok(dev_id) = dev.id.parse::<coreaudio_sys::AudioObjectID>() {
+                        #[repr(C)]
+                        struct ChannelLayout {
+                            tag: u32,
+                            bitmap: u32,
+                            num_descriptions: u32,
+                        }
+                        // kAudioChannelLayoutTag_MPEG_7_1_A = (115 << 16) | 8 = 7536648
+                        let layout = ChannelLayout {
+                            tag: (115 << 16) | 8,
+                            bitmap: 0,
+                            num_descriptions: 0,
+                        };
+                        let address = coreaudio_sys::AudioObjectPropertyAddress {
+                            mSelector: 0x7072636c, // kAudioDevicePropertyPreferredChannelLayout ('prcl')
+                            mScope: coreaudio_sys::kAudioDevicePropertyScopeOutput,
+                            mElement: coreaudio_sys::kAudioObjectPropertyElementMain,
+                        };
+                        unsafe {
+                            let _ = coreaudio_sys::AudioObjectSetPropertyData(
+                                dev_id,
+                                &address,
+                                0,
+                                std::ptr::null(),
+                                std::mem::size_of::<ChannelLayout>() as u32,
+                                &layout as *const _ as *const std::ffi::c_void,
+                            );
+                        }
+                    }
+                }
+            }
+        }
         Ok(mask)
     }
 

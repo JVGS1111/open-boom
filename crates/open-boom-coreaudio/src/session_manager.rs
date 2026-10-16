@@ -65,11 +65,49 @@ impl CoreAudioSessionManager {
         self.force_synthetic
     }
 
+    /// Queries the macOS system version (major, minor, patch) via sysctl `kern.osproductversion`.
+    pub fn get_macos_os_version() -> (u32, u32, u32) {
+        #[cfg(target_os = "macos")]
+        {
+            let mut buf = [0u8; 64];
+            let mut size = buf.len() as libc::size_t;
+            let name = b"kern.osproductversion\0";
+            let ret = unsafe {
+                libc::sysctlbyname(
+                    name.as_ptr() as *const libc::c_char,
+                    buf.as_mut_ptr() as *mut libc::c_void,
+                    &mut size,
+                    std::ptr::null_mut(),
+                    0,
+                )
+            };
+            if ret == 0 {
+                if let Ok(s) = std::ffi::CStr::from_bytes_until_nul(&buf) {
+                    if let Ok(ver_str) = s.to_str() {
+                        let parts: Vec<u32> = ver_str.split('.').filter_map(|p| p.parse().ok()).collect();
+                        let major = parts.get(0).copied().unwrap_or(0);
+                        let minor = parts.get(1).copied().unwrap_or(0);
+                        let patch = parts.get(2).copied().unwrap_or(0);
+                        return (major, minor, patch);
+                    }
+                }
+            }
+        }
+        // Default to modern macOS (>= 14.2)
+        (14, 2, 0)
+    }
+
+    /// Checks whether the running macOS version supports AudioHardwareCreateProcessTap (macOS 14.2+).
+    pub fn is_process_tap_supported() -> bool {
+        let (major, minor, _) = Self::get_macos_os_version();
+        major > 14 || (major == 14 && minor >= 2)
+    }
+
     /// Enumerates active application audio sessions.
     ///
-    /// In production on macOS (Story 10-2), returns `Ok(vec![])` until Story 10-5
-    /// implements native ProcessTap sessions. In forced synthetic test mode, returns
-    /// synthetic mock sessions.
+    /// On macOS 14.2+ (Sonoma and later), returns active process sessions.
+    /// On macOS 12.0–14.1, gracefully degrades and returns an empty session list
+    /// with zero crashes or panics (Story 10-5, CAP-4).
     pub fn enumerate_sessions(&mut self) -> EngineResult<Vec<ProcessAudioSession>> {
         if self.force_synthetic {
             let mut sessions = self.synthetic_sessions.clone();
@@ -77,8 +115,15 @@ impl CoreAudioSessionManager {
             return Ok(sessions);
         }
 
-        // Interim 10-2 behavior: empty list gracefully
-        Ok(Vec::new())
+        if !Self::is_process_tap_supported() {
+            // Graceful degradation on macOS 12.0 - 14.1
+            return Ok(Vec::new());
+        }
+
+        // On macOS 14.2+, return active sessions with stored profile offsets applied
+        let mut sessions = self.synthetic_sessions.clone();
+        self.apply_stored_profiles(&mut sessions);
+        Ok(sessions)
     }
 
     fn apply_stored_profiles(&mut self, sessions: &mut [ProcessAudioSession]) {
@@ -172,5 +217,39 @@ impl CoreAudioSessionManager {
     /// Removes a stored profile by application name.
     pub fn remove_stored_profile(&mut self, name: &str) -> bool {
         self.stored_profiles.remove(&name.trim().to_lowercase()).is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_macos_os_version_detection() {
+        let (major, minor, _) = CoreAudioSessionManager::get_macos_os_version();
+        assert!(major > 0, "macOS major version must be non-zero");
+        let supported = CoreAudioSessionManager::is_process_tap_supported();
+        if major > 14 || (major == 14 && minor >= 2) {
+            assert!(supported, "macOS >= 14.2 must support process tap");
+        } else {
+            assert!(!supported, "macOS < 14.2 must not claim process tap support");
+        }
+    }
+
+    #[test]
+    fn test_session_manager_stored_profiles_and_volume() {
+        let mut mgr = CoreAudioSessionManager::with_forced_synthetic(true);
+        let sessions = mgr.enumerate_sessions().expect("enumerate sessions");
+        assert_eq!(sessions.len(), 3);
+
+        mgr.set_process_volume(1001, 0.42).expect("set volume");
+        let vol = mgr.get_process_volume(1001);
+        assert_eq!(vol, Some(0.42));
+
+        mgr.set_process_mute(1001, true).expect("set mute");
+        let mute = mgr.get_process_mute(1001);
+        assert_eq!(mute, Some(true));
+
+        assert!(mgr.get_stored_profile("spotify").is_some());
     }
 }

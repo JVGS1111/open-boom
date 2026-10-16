@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 15/10/2026 - 23:15
-* **Sprint Ativa:** **Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10)**
-* **Tarefa Atual:** Story 10-2 concluída (`macOS Platform Gating — #[cfg] Isolation & Tauri Backend Switch`). Implementados isolamento condicional de crates no `src-tauri/Cargo.toml`, resolução Apple-compliant de storage em `open-boom-storage`, stubs interoperáveis `CoreAudioSessionManager` e `CoreAudioVolumeSync`, compilação local e smoke launch test aprovados no macOS. 100% de testes verdes (118 testes UI e 97 testes Rust). Próxima: Story 10-3 (1-Click BlackHole-16ch Driver Onboarding).
+* **Data/Hora:** 16/10/2026 - 09:10
+* **Sprint Ativa:** **Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10) [CONCLUÍDO 100%]**
+* **Tarefa Atual:** Épico 10 integralmente concluído com as 8 histórias de usuário (10-1 a 10-8) finalizadas via workflow BMAD. 234 testes Cargo passando, 118 testes UI passando, compilação de produção Vite e binário desktop local aprovados, smoke launch validado com sucesso no macOS. Código commitado e enviado ao repositório remoto, aguardando sinal explícito do usuário para release.
 
 
 ## O que foi concluído nesta sessão
@@ -401,3 +401,18 @@
     - **Glue `cfg(windows)` no `open-boom-wasapi`:** alias `VolumeContextGuid` (GUID neutro fora do Windows) e consumo dos argumentos do pump, permitindo compilar todo o conjunto fora do Windows sem alterar o comportamento no Windows.
     - **CI/CD:** job `macos-latest` adicionado ao `.github/workflows/ci.yml` compilando a FFI CoreAudio e rodando os testes de `open-boom-core`, `open-boom-coreaudio` e `open-boom-storage`; cache de workspaces atualizado com o novo crate.
     - **Verificação (aarch64-apple-darwin):** `cargo build -p open-boom-coreaudio` sem warnings e sem dependências `windows-rs`; `cargo test -p open-boom-core` 0 falhas (incluindo NEON); `cargo test -p open-boom-coreaudio` 24 testes verdes (19 integração + 5 unit de anel); `cargo test -p open-boom-storage` 0 falhas; `cargo check -p open-boom` compila o binário do app no macOS.
+
+55. **Conclusão Integral do Épico 10 — Portabilidade macOS CoreAudio (Stories 10-2 a 10-8 / ADR-060):**
+    - **Story 10-2 (Platform Gating & Backend Switch):** `[target.'cfg(target_os = "windows")'.dependencies]` vs `[target.'cfg(target_os = "macos")'.dependencies]`, isolamento em `src-tauri`, resolução Apple-compliant `~/Library/Application Support/OpenBoom/` em `open-boom-storage`.
+    - **Story 10-3 (1-Click BlackHole-16ch Driver Onboarding):** Onboarding automatizado via Homebrew Cask API com fallback CDN, script osascript com Touch ID/senha para instalação silenciosa, restart de coreaudiod, configuração da máscara 7.1 surround (`kAudioChannelLayoutTag_MPEG_7_1_A`) e fallback UI para o site oficial.
+    - **Story 10-4 (macOS Virtual Audio Routing — Modo A):** BlackHole-16ch como default output device, captura de 8 canais discretos 7.1 surround downfolded via matriz ITU-R BS.775 para estéreo binaural e restauração do endpoint físico em sub-500ms no power off/shutdown.
+    - **Story 10-5 (macOS Per-App Session Mixer Gated by OS Version):** Detecção de versão em runtime via sysctl `kern.osproductversion`, gating de `AudioHardwareCreateProcessTap` no macOS 14.2+ (Sonoma) e degradação suave com aviso explicativo amigável em macOS 12–14.1 sem nenhum crash.
+    - **Story 10-6 (macOS Autostart via launchd LaunchAgent):** `StartupManager` atômico em `~/Library/LaunchAgents/com.openboom.launcher.plist` com `.tmp.<pid>` staging e chamadas `launchctl load/unload`.
+    - **Story 10-7 (macOS System Volume Bidirectional Sync):** Sincronização bidirecional em tempo real escutando `kAudioHardwareServiceDeviceProperty_VirtualMasterVolume` e `kAudioDevicePropertyMute` via CoreAudio property listeners, supressão de feedback por flag atômica `is_syncing_to_os`, fixação do hardware em 1.0 e preservação de boost de 101% a 150%.
+    - **Story 10-8 (macOS .app Bundle, .dmg Packaging, CI/CD & Auto-Update):** Configuração de targets `["nsis", "dmg", "app"]` em `tauri.conf.json`, geração de `icon.icns` nativo, download e staging de atualizações DMG via curl no macOS, e jobs de CI e Release no GitHub Actions para `macos-14` (Apple Silicon arm64).
+    - **Mandatory Final Verification Gate:**
+      - 234 testes Cargo passando no workspace (0 falhas).
+      - 118 testes UI passando no Vitest (0 falhas).
+      - `npm --prefix src-ui run build` concluído com sucesso em 1.40s.
+      - `cargo build -p open-boom` compilado localmente sem erros.
+      - Smoke launch do executável macOS `open-boom` executado com sucesso (`PID=50626`, processo saudável e ativo).

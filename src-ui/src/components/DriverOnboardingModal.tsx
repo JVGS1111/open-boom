@@ -34,9 +34,14 @@ export const DriverOnboardingModal: React.FC<DriverOnboardingModalProps> = ({
   if (!isOpen) return null;
 
   const handleManualDownload = () => {
-    // Open official VB-Cable website
     if (typeof window !== "undefined") {
-      window.open("https://vb-audio.com/Cable/", "_blank");
+      const isMac =
+        /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent) ||
+        (navigator as any).userAgentData?.platform === "macOS";
+      const url = isMac
+        ? "https://existential.audio/blackhole/"
+        : "https://vb-audio.com/Cable/";
+      window.open(url, "_blank");
     }
   };
 
