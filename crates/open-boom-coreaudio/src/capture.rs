@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use open_boom_core::types::{EngineResult, INTERNAL_SAMPLE_RATE};
+use open_boom_core::types::{EngineError, EngineResult, INTERNAL_SAMPLE_RATE};
 
 use crate::hal::{AudioHal, HalStream, HalStreamConfig};
 use crate::ring_buffer::SampleRing;
@@ -134,6 +134,49 @@ impl CoreAudioCapture {
             return result;
         }
         self.is_capturing = false;
+        Ok(())
+    }
+
+    /// Returns the target capture device endpoint ID, if explicitly pinned.
+    pub fn device_id(&self) -> Option<&str> {
+        self.config.device_id.as_deref()
+    }
+
+    /// Sets the target capture device endpoint ID without restarting the stream.
+    pub fn set_device_id(&mut self, device_id: Option<String>) {
+        self.config.device_id = device_id;
+    }
+
+    /// Switches the capture endpoint, restarting the stream if capturing.
+    pub fn switch_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        let resolved: Option<String> = match device_id {
+            Some(ref id) => {
+                if self.hal.device_name(id)?.is_none() {
+                    return Err(EngineError::DeviceInitialization(format!(
+                        "cannot switch to unknown capture device: {id}"
+                    )));
+                }
+                Some(id.clone())
+            }
+            None => None,
+        };
+
+        let previous_device_id = self.config.device_id.clone();
+        let was_capturing = self.is_capturing;
+
+        self.config.device_id = resolved;
+
+        if was_capturing {
+            if let Err(err) = self.stop() {
+                self.config.device_id = previous_device_id;
+                return Err(err);
+            }
+            if let Err(err) = self.start() {
+                self.config.device_id = previous_device_id;
+                let _ = self.start();
+                return Err(err);
+            }
+        }
         Ok(())
     }
 

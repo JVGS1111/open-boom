@@ -161,12 +161,28 @@ impl CoreAudioRender {
         }
     }
 
+    /// Sets the target render device endpoint ID without restarting the stream.
+    pub fn set_device_id(&mut self, device_id: Option<String>) {
+        self.config.device_id = device_id;
+    }
+
     /// Switches the render endpoint, updating the OS default output device.
     ///
     /// `None` restores the system default endpoint. The target is validated and applied
     /// before the running stream is touched; if the rebind fails, the previous device id
     /// is restored and the client is left in a stopped (not "rendering") state.
     pub fn switch_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        self.switch_device_internal(device_id, true)
+    }
+
+    /// Switches the render endpoint without mutating the OS default output device
+    /// (crucial in Mode A / Virtual Sink mode where BlackHole must remain the OS default).
+    pub fn switch_device_endpoint_only(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        self.switch_device_internal(device_id, false)
+    }
+
+    /// Internal device switcher with configurable OS default update.
+    pub fn switch_device_internal(&mut self, device_id: Option<String>, update_os_default: bool) -> EngineResult<()> {
         // Resolve and validate the target before mutating any state.
         let resolved: Option<String> = match device_id {
             Some(ref id) => {
@@ -183,10 +199,12 @@ impl CoreAudioRender {
         let previous_device_id = self.config.device_id.clone();
         let was_rendering = self.is_rendering;
 
-        if let Some(ref id) = resolved {
-            self.hal.set_default_output_device(id)?;
+        if update_os_default {
+            if let Some(ref id) = resolved {
+                self.hal.set_default_output_device(id)?;
+            }
         }
-        self.config.device_id = device_id;
+        self.config.device_id = resolved;
 
         if was_rendering {
             if let Err(err) = self.stop() {

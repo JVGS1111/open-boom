@@ -294,12 +294,45 @@ impl CoreAudioCoordinator {
         self.device_manager.enumerate_devices()
     }
 
-    /// Switches the render endpoint, updating the OS default output device.
+    /// Sets whether the coordinator should operate using the virtual bridge.
+    pub fn set_virtual_bridge(&mut self, enabled: bool) {
+        self.uses_virtual_bridge = enabled;
+        self.bridge_force_mode = Some(if enabled {
+            BridgeMode::VirtualSinkModeA
+        } else {
+            BridgeMode::LoopbackFallbackModeB
+        });
+    }
+
+    /// Returns the currently bound capture device id, if any.
+    pub fn capture_device_id(&self) -> Option<&str> {
+        self.capture.device_id()
+    }
+
+    /// Returns the currently bound render device id, if any.
+    pub fn render_device_id(&self) -> Option<&str> {
+        self.render.device_id()
+    }
+
+    /// Sets or switches the capture device endpoint (e.g. BlackHole in Mode A).
+    pub fn set_capture_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        self.capture.switch_device(device_id)
+    }
+
+    /// Sets or switches the render device endpoint (e.g. Headphones/Speakers).
+    /// When using the virtual bridge, the OS default device is preserved on the virtual sink.
+    pub fn set_render_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
+        let update_os_default = !self.uses_virtual_bridge;
+        self.render.switch_device_internal(device_id, update_os_default)
+    }
+
+    /// Switches the render endpoint, updating the OS default output device only when not using a virtual bridge.
     ///
     /// If the rebind fails the render client is left stopped and the coordinator stops
     /// reporting itself as running.
     pub fn switch_device(&mut self, device_id: Option<String>) -> EngineResult<()> {
-        let result = self.render.switch_device(device_id);
+        let update_os_default = !self.uses_virtual_bridge;
+        let result = self.render.switch_device_internal(device_id, update_os_default);
         if self.is_running && !self.render.is_rendering() {
             self.is_running = false;
         }
@@ -405,6 +438,21 @@ impl CoreAudioCoordinator {
                 .flatten()
                 .is_some(),
         };
+
+        // When using virtual bridge, auto-bind capture to virtual sink (BlackHole)
+        // and render to physical default device (Headphones/Speakers) if not explicitly set.
+        if self.uses_virtual_bridge {
+            if self.capture.config().device_id.is_none() {
+                if let Ok(Some(v_dev)) = self.device_manager.find_virtual_device() {
+                    self.capture.set_device_id(Some(v_dev.id));
+                }
+            }
+            if self.render.config().device_id.is_none() {
+                if let Ok(Some(p_dev)) = self.device_manager.get_physical_default_device() {
+                    self.render.set_device_id(Some(p_dev.id));
+                }
+            }
+        }
 
         self.render.start()?;
         if let Err(err) = self.capture.start() {

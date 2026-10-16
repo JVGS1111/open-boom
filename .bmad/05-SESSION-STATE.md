@@ -1,9 +1,9 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 16/10/2026 - 09:10
+* **Data/Hora:** 16/10/2026 - 10:25
 * **Sprint Ativa:** **Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10) [CONCLUÍDO 100%]**
-* **Tarefa Atual:** Épico 10 integralmente concluído com as 8 histórias de usuário (10-1 a 10-8) finalizadas via workflow BMAD. 234 testes Cargo passando, 118 testes UI passando, compilação de produção Vite e binário desktop local aprovados, smoke launch validado com sucesso no macOS. Código commitado e enviado ao repositório remoto, aguardando sinal explícito do usuário para release.
+* **Tarefa Atual:** Resolução do bug de áudio mudo no macOS (T12.9 / ADR-061). Fluxo de áudio validado e corrigido: BlackHole 16ch vinculado para captura e saída física padrão (alto-falantes/fones) para render. 235 testes Cargo passando, 118 testes UI passando, pacote `.app` e instalador `.dmg` gerados com sucesso, smoke launch do binário aprovado no macOS. Código commitado e enviado ao repositório remoto, aguardando sinal explícito do usuário para release.
 
 
 ## O que foi concluído nesta sessão
@@ -416,3 +416,17 @@
       - `npm --prefix src-ui run build` concluído com sucesso em 1.40s.
       - `cargo build -p open-boom` compilado localmente sem erros.
       - Smoke launch do executável macOS `open-boom` executado com sucesso (`PID=50626`, processo saudável e ativo).
+
+56. **Correção de Áudio Mudo no macOS — Vinculação BlackHole para Captura e Saída Física para Render (T12.9 / ADR-061):**
+    - **Diagnóstico da Causa Raiz:** Inspeção das rotas de áudio do sistema (`system_profiler SPAudioDataType`) revelou que o BlackHole 16ch (ID 74) era a saída padrão do macOS e os Alto-falantes do MacBook Air (ID 106) eram a saída física. O `CoreAudioStreamPump::start` iniciava com dispositivos `None`, o que fazia a captura usar o microfone embutido e a renderização usar o próprio BlackHole, gerando um loop mudo onde os alto-falantes físicos nunca eram acionados.
+    - **Implementação do Auto-Binding:**
+      - `crates/open-boom-coreaudio/src/capture.rs`: Adicionados `switch_device` e `set_device_id`.
+      - `crates/open-boom-coreaudio/src/render.rs`: Adicionados `switch_device_internal` e `switch_device_endpoint_only` para permitir a troca do endpoint físico sem desconfigurar o BlackHole como saída padrão do SO.
+      - `crates/open-boom-coreaudio/src/coordinator.rs`: Adicionados `capture_device_id`, `render_device_id`, `set_capture_device`, `set_render_device` e auto-binding no `start()` (BlackHole para captura e alto-falantes/fones para render).
+      - `crates/open-boom-coreaudio/src/stream_pump.rs`: Configuração explícita das rotas de captura e renderização antes de disparar o loop de bombeamento de áudio.
+    - **Validação:**
+      - Testes com Mock HAL e teste de FFI real no hardware do Mac aprovados (`test_inspect_real_coreaudio_device_formats` e `test_stream_pump_device_binding_with_mock`).
+      - 235 testes Cargo passando no workspace.
+      - 118 testes UI passando no Vitest.
+      - Compilação Vite e empacotamento desktop Tauri (`OpenBoom.app` e `OpenBoom_0.6.0_aarch64.dmg`) concluídos com sucesso.
+      - Smoke launch local validado com sucesso no macOS (`PID=59901`).

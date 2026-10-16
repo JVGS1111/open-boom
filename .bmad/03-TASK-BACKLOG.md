@@ -105,6 +105,7 @@
 - [X] **T12.6**: Autostart no macOS via launchd LaunchAgent (Story 10-6). Gerenciamento atômico de ~/Library/LaunchAgents/com.openboom.launcher.plist com launchctl load/unload.
 - [X] **T12.7**: Sincronização Bidirecional de Volume de Sistema no macOS (Story 10-7). Property listeners em kAudioHardwareServiceDeviceProperty_VirtualMasterVolume sem loops de feedback.
 - [X] **T12.8**: Empacotamento macOS .app / .dmg & CI/CD GitHub Actions + Auto-Update (Story 10-8). Bundles universais macOS, create-dmg, CI runner macos-latest e tauri-plugin-updater v2.x.
+- [X] **T12.9**: Correção de Roteamento de Áudio no macOS (Fix de Reprodução Silenciosa no Modo A / CoreAudio) (ADR-061). Resolução da falha de áudio mudo em que o pump CoreAudio capturava do microfone e renderizava de volta no BlackHole. Agora vincula explicitamente a captura ao BlackHole e o render ao dispositivo físico padrão (alto-falantes/fones), mantendo o BlackHole como dispositivo de saída padrão do sistema operacional.
 
 
 

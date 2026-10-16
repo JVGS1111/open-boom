@@ -956,4 +956,30 @@
   - Build de produção do frontend Vite e compilação do binário desktop `open-boom` concluídos com sucesso.
   - Smoke launch local validado com sucesso no macOS (`PID=50626`, processo saudável e ativo).
 
+---
+
+## ADR-061: Roteamento de Dispositivos Virtuais e Físicos no CoreAudio HAL (Fix de Áudio Mudo no macOS)
+* **Data:** 16/10/2026
+* **Status:** Aceito / Implementado
+* **Contexto:**
+  - Após a instalação bem-sucedida do driver `BlackHole 16ch` no macOS, o sistema operacional definiu o BlackHole como o dispositivo de saída padrão (`Default Output Device: Yes`).
+  - No entanto, ao reproduzir mídias no Mac, o usuário relatou que nenhum som saía nos alto-falantes ou fones de ouvido.
+  - Diagnóstico com ferramentas nativas do CoreAudio revelou a causa raiz:
+    1. O `CoreAudioStreamPump::start` inicializava o `CoreAudioCoordinator` com `capture.config.device_id = None` e `render.config.device_id = None`.
+    2. No CoreAudio HAL, `open_capture` com `device_id: None` seleciona `kAudioHardwarePropertyDefaultInputDevice`, que no Mac correspondia ao Microfone Embutido (Built-in Mic), capturando ruído ambiente ou silêncio em vez do áudio do sistema.
+    3. `open_render` com `device_id: None` resolvia para `kAudioHardwarePropertyDefaultOutputDevice`, que era o próprio `BlackHole 16ch`. Dessa forma, o OpenBoom estava reproduzindo de volta no próprio driver virtual em loop silencioso, sem jamais enviar dados para o endpoint físico (alto-falantes internos / fones).
+    4. Adicionalmente, quando `render.switch_device` era chamado, ele alterava a saída padrão do macOS para o endpoint físico, desarmando o Modo A (Virtual Sink) e provocando que o áudio do sistema ignorasse o OpenBoom.
+* **Decisões:**
+  1. **Vinculação Explícita de Captura e Render:**
+     - `CoreAudioCapture`: implementado método `switch_device` e mutador `set_device_id`.
+     - `CoreAudioRender`: implementado `switch_device_internal(device_id, update_os_default)` e `switch_device_endpoint_only` para permitir a troca do endpoint de reprodução físico sem desconfigurar o driver virtual como padrão do sistema operacional.
+  2. **Auto-Binding no Coordenador e no Stream Pump:**
+     - No `CoreAudioCoordinator::start()` e `CoreAudioStreamPump::start()`: quando `uses_virtual_bridge` está ativo e os IDs de dispositivo não foram explicitados, vincula automaticamente a captura ao BlackHole (`find_virtual_device()`) e a renderização à saída física padrão do Mac (`get_physical_default_device()`).
+  3. **Preservação do Modo A:**
+     - Durante a operação do motor com driver virtual, o OpenBoom nunca muta a saída padrão do macOS para a saída física, mantendo o BlackHole interceptando todo o áudio do sistema operacional enquanto envia o áudio processado pelo DSP diretamente para o hardware de saída do usuário.
+* **Consequência:**
+  - O fluxo de áudio no macOS conecta perfeitamente: `Áudio do Sistema macOS` -> `BlackHole 16ch` -> `OpenBoom CoreAudio Capture (Downmix BS.775)` -> `DSP Pipeline (EQ/Spatializer/Limiter)` -> `OpenBoom CoreAudio Render` -> `Alto-falantes / Fones Físicos`.
+  - 235 testes Cargo passando no workspace.
+  - Teste em hardware real executado e verificado com sucesso no MacBook.
+
 

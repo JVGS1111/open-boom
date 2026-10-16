@@ -888,4 +888,112 @@ fn test_coreaudio_volume_sync_mute_and_rebind() {
     assert!(sync.rebind_endpoint(Some("123".to_string())).is_ok());
 }
 
+#[test]
+fn test_stream_pump_device_binding_with_mock() {
+    let hal = Arc::new(MockHal::with_virtual(true));
+    let mut coordinator = coordinator_with_mock(hal.clone());
+
+    // When virtual bridge is enabled, coordinator should bind capture to virtual device
+    // and render to physical default if not set explicitly.
+    coordinator.set_virtual_bridge(true);
+    assert!(coordinator.start().is_ok());
+    assert_eq!(coordinator.capture_device_id(), Some(MOCK_VIRTUAL_ID));
+    assert_eq!(coordinator.render_device_id(), Some(MOCK_DEFAULT_ID));
+    assert!(coordinator.stop().is_ok());
+
+    // Explicitly setting render device
+    assert!(coordinator.set_render_device(Some(MOCK_SPEAKERS_ID.to_string())).is_ok());
+    assert!(coordinator.start().is_ok());
+    assert_eq!(coordinator.render_device_id(), Some(MOCK_SPEAKERS_ID));
+    assert!(coordinator.stop().is_ok());
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_inspect_real_coreaudio_device_formats() {
+    let dm = open_boom_coreaudio::device::CoreAudioDeviceManager::new();
+    let virt = match dm.find_virtual_device() {
+        Ok(Some(v)) => v,
+        _ => {
+            println!("No virtual device installed; skipping real hardware format test.");
+            return;
+        }
+    };
+    let phys_default = match dm.get_physical_default_device() {
+        Ok(Some(p)) => p,
+        _ => {
+            println!("No physical default audio device found; skipping real hardware format test.");
+            return;
+        }
+    };
+
+    unsafe {
+        let dev_id: coreaudio_sys::AudioDeviceID = match virt.id.parse() {
+            Ok(id) => id,
+            Err(_) => return,
+        };
+        let property = coreaudio_sys::AudioObjectPropertyAddress {
+            mSelector: coreaudio_sys::kAudioDevicePropertyStreamFormat,
+            mScope: coreaudio_sys::kAudioObjectPropertyScopeInput,
+            mElement: coreaudio_sys::kAudioObjectPropertyElementMain,
+        };
+        let mut asbd: coreaudio_sys::AudioStreamBasicDescription = std::mem::zeroed();
+        let mut size = std::mem::size_of::<coreaudio_sys::AudioStreamBasicDescription>() as u32;
+        let status = coreaudio_sys::AudioObjectGetPropertyData(dev_id, &property, 0, std::ptr::null(), &mut size, &mut asbd as *mut _ as *mut _);
+        if status != 0 {
+            return;
+        }
+
+        let phys_id: coreaudio_sys::AudioDeviceID = match phys_default.id.parse() {
+            Ok(id) => id,
+            Err(_) => return,
+        };
+        let prop_out = coreaudio_sys::AudioObjectPropertyAddress {
+            mSelector: coreaudio_sys::kAudioDevicePropertyStreamFormat,
+            mScope: coreaudio_sys::kAudioObjectPropertyScopeOutput,
+            mElement: coreaudio_sys::kAudioObjectPropertyElementMain,
+        };
+        let mut asbd_out: coreaudio_sys::AudioStreamBasicDescription = std::mem::zeroed();
+        let mut size_out = std::mem::size_of::<coreaudio_sys::AudioStreamBasicDescription>() as u32;
+        let status_out = coreaudio_sys::AudioObjectGetPropertyData(phys_id, &prop_out, 0, std::ptr::null(), &mut size_out, &mut asbd_out as *mut _ as *mut _);
+        if status_out != 0 {
+            return;
+        }
+
+        use open_boom_coreaudio::hal::{AudioHal, HalStreamConfig, CoreAudioHal};
+        use open_boom_coreaudio::ring_buffer::SampleRing;
+        let hal = CoreAudioHal::new();
+        let cap_config = HalStreamConfig {
+            device_id: Some(virt.id.clone()),
+            sample_rate: 48_000,
+            channels: 2,
+            buffer_frames: 240,
+        };
+        let cap_ring = SampleRing::new(4096);
+        let cap_res = hal.open_capture(cap_config, cap_ring);
+        assert!(cap_res.is_ok(), "open_capture on BlackHole must succeed");
+        let mut cap_stream = cap_res.unwrap();
+        let start_cap_res = cap_stream.start();
+        assert!(start_cap_res.is_ok(), "start capture on BlackHole must succeed");
+
+        let rend_config = HalStreamConfig {
+            device_id: Some(phys_default.id.clone()),
+            sample_rate: 48_000,
+            channels: 2,
+            buffer_frames: 240,
+        };
+        let rend_ring = SampleRing::new(4096);
+        let rend_res = hal.open_render(rend_config, rend_ring);
+        assert!(rend_res.is_ok(), "open_render on Speakers must succeed");
+        let mut rend_stream = rend_res.unwrap();
+        let start_rend_res = rend_stream.start();
+        assert!(start_rend_res.is_ok(), "start render on Speakers must succeed");
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let _ = cap_stream.stop();
+        let _ = rend_stream.stop();
+    }
+}
+
+
 

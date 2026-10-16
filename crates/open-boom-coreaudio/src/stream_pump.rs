@@ -78,6 +78,28 @@ impl CoreAudioStreamPump {
                 EngineError::DeviceInitialization(format!("failed to lock coordinator: {e}"))
             })?;
             coord.set_buffer_guard(config.buffer_guard_enabled);
+
+            // 1. Resolve virtual capture device (BlackHole in Mode A)
+            let capture_id = if config.force_loopback {
+                None
+            } else {
+                config.capture_device_id.clone().or_else(|| {
+                    coord.device_manager().find_virtual_device().ok().flatten().map(|d| d.id)
+                })
+            };
+
+            // 2. Resolve physical render target device (Headphones/Speakers)
+            let render_id = config.target_device_id.clone().or_else(|| {
+                coord.device_manager().get_physical_default_device().ok().flatten().map(|d| d.id)
+            });
+
+            if let Some(ref cap_id) = capture_id {
+                let _ = coord.set_capture_device(Some(cap_id.clone()));
+            }
+            if let Some(ref rend_id) = render_id {
+                let _ = coord.set_render_device(Some(rend_id.clone()));
+            }
+
             let _ = coord.start();
             (
                 coord.capture().ring(),
