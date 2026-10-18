@@ -1,17 +1,15 @@
 # OpenBoom - Session State
 
 ## Última Atualização
-* **Data/Hora:** 16/10/2026 - 11:15
+* **Data/Hora:** 18/10/2026 - 13:35
 * **Sprint Ativa:** **Sprint 12: Portabilidade Cross-Platform — macOS CoreAudio (Epic 10) [CONCLUÍDO 100%]**
-* **Tarefa Atual:** Concluída resolução de áudio mudo e TCC no macOS:
-  1. Adicionado `NSMicrophoneUsageDescription` em `Info.plist` e configurado no `tauri.conf.json`, permitindo ao macOS TCC conceder leitura nos buffers do CoreAudio/BlackHole.
-  2. Implementada validação defensiva contra AudioDeviceIDs obsoletos/inválidos no `AppState::with_options`, `stream_pump.rs` e `App.tsx`, com fallback automático para o dispositivo de saída físico padrão do sistema (`Alto-falantes MacBook Air`).
-  3. Limpeza de logs de debug em `hal.rs`.
-  4. Executados com sucesso 235 testes Cargo e build do frontend Vite.
-  5. Gerados pacotes `.app` e instalador `.dmg` em `target/release/bundle/`.
-  6. Substituído e desquarentenado `/Applications/OpenBoom.app`.
-  7. Smoke test de inicialização executado e validado com o processo em execução saudável.
-  8. Código commitado e enviado ao repositório remoto, aguardando sinal explícito do usuário para release.
+* **Tarefa Atual:** Resolução definitiva do fluxo de áudio do driver BlackHole no macOS (ADR-062):
+  1. Corrigida a inversão de ordem em `CoreAudioStreamPump::start`, acionando `coord.set_virtual_bridge(using_virtual)` antes de `coord.set_render_device`, evitando que a comutação de hardware sobrescreva a saída padrão do macOS de volta aos alto-falantes e mantendo o BlackHole 16ch como sink exclusivo do sistema.
+  2. Implementado bridge nativo Objective-C (`permission.m`) e wrapper Rust (`permission.rs`) via `cc` com chamadas `[AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio]` e `requestAccessForMediaType:completionHandler:`.
+  3. Integrados comandos IPC Tauri (`get_microphone_permission_status`, `request_microphone_permission`, `open_microphone_privacy_settings`) com hot-restart do stream pump na concessão e solicitação nativa automática no `setup` do app desktop.
+  4. Implementado banner reativo no frontend (`App.tsx`) para avisos de permissão pendente/negada com auto-recuperação no evento `window.focus`, e 100% de paridade i18n (`pt-BR`, `en`, `es`).
+  5. Empacotado bundle `.app`, assinado com `codesign --force --deep -s -` selando `Info.plist` com `NSMicrophoneUsageDescription`.
+  6. 235 testes Cargo e 118 testes UI verdes no workspace. Smoke test validado no macOS com PID 86480 ativo e saudável.
 
 
 ## O que foi concluído nesta sessão

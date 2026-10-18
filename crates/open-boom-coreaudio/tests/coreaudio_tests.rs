@@ -970,7 +970,7 @@ fn test_inspect_real_coreaudio_device_formats() {
             buffer_frames: 240,
         };
         let cap_ring = SampleRing::new(4096);
-        let cap_res = hal.open_capture(cap_config, cap_ring);
+        let cap_res = hal.open_capture(cap_config, cap_ring.clone());
         assert!(cap_res.is_ok(), "open_capture on BlackHole must succeed");
         let mut cap_stream = cap_res.unwrap();
         let start_cap_res = cap_stream.start();
@@ -993,6 +993,20 @@ fn test_inspect_real_coreaudio_device_formats() {
         let _ = cap_stream.stop();
         let _ = rend_stream.stop();
     }
+}
+
+#[test]
+fn test_microphone_permission_query() {
+    let status = open_boom_coreaudio::get_microphone_auth_status();
+    // In headless test execution on macOS this will typically be Denied or NotDetermined, but must not crash
+    println!("Microphone authorization status: {:?}", status);
+    assert!(matches!(
+        status,
+        open_boom_coreaudio::MicrophoneAuthStatus::NotDetermined
+            | open_boom_coreaudio::MicrophoneAuthStatus::Restricted
+            | open_boom_coreaudio::MicrophoneAuthStatus::Denied
+            | open_boom_coreaudio::MicrophoneAuthStatus::Authorized
+    ));
 }
 
 

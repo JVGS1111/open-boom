@@ -13,3 +13,6 @@ thiserror = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 coreaudio-sys = { workspace = true }
 libc = { workspace = true }
+
+[build-dependencies]
+cc = "1.0"

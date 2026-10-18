@@ -231,4 +231,10 @@ export const es: TranslationDictionary = {
     privacyNoticeTitle: "Aviso de Privacidad y Permiso de Micrófono",
     privacyNoticeDesc: "Windows y antivirus pueden alertar que OpenBoom está accediendo al micrófono. Esto se debe únicamente a que Windows agrupa la captura de retorno digital (loopback) bajo el permiso general de micrófono. OpenBoom procesa únicamente la salida de audio del sistema para aplicar surround 3D y ecualizador — su voz nunca es grabada ni transmitida.",
   },
+  micPermission: {
+    bannerDenied: "Permiso de audio de macOS denegado: active el acceso al micrófono en Ajustes del Sistema para capturar el audio del controlador BlackHole.",
+    bannerPrompt: "Autorización de audio requerida: macOS requiere permiso para capturar el sonido del sistema a través de BlackHole.",
+    openSettingsButton: "Abrir Ajustes del Sistema",
+    grantPermissionButton: "Conceder Permiso",
+  },
 };

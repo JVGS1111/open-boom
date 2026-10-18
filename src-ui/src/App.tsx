@@ -25,7 +25,7 @@ import {
   toPresetSlug,
 } from "./components/PresetSelectorPopover";
 import { DriverOnboardingModal } from "./components/DriverOnboardingModal";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Mic } from "lucide-react";
 import { I18nProvider, LanguageOption, resolveEffectiveLocale, TRANSLATIONS } from "./i18n";
 
 /**
@@ -188,6 +188,7 @@ export const App: React.FC = () => {
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [isInstallingDriver, setIsInstallingDriver] = useState(false);
   const [driverInstallError, setDriverInstallError] = useState<string | null>(null);
+  const [micPermissionStatus, setMicPermissionStatus] = useState<string | null>(null);
 
   const effectiveLocale = resolveEffectiveLocale(language);
   const t = TRANSLATIONS[effectiveLocale] || TRANSLATIONS.en;
@@ -211,6 +212,42 @@ export const App: React.FC = () => {
       await invoke("dispatch_command", { cmd: commandObj });
     } catch {
       // Fallback for browser preview
+    }
+  };
+
+  const checkMicPermission = async () => {
+    try {
+      const status = await invoke<string>("get_microphone_permission_status");
+      setMicPermissionStatus(status);
+    } catch {
+      // Fallback in browser preview
+    }
+  };
+
+  const handleRequestMicPermission = async () => {
+    try {
+      const status = await invoke<string>("request_microphone_permission");
+      setMicPermissionStatus(status);
+      if (status === "authorized") {
+        try {
+          const enumerated = await invoke<AudioDeviceInfo[]>("get_audio_devices");
+          if (enumerated && enumerated.length > 0) {
+            setDevices(enumerated);
+          }
+        } catch {
+          // Fallback
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleOpenMicSettings = async () => {
+    try {
+      await invoke("open_microphone_privacy_settings");
+    } catch {
+      // Fallback
     }
   };
 
@@ -241,10 +278,17 @@ export const App: React.FC = () => {
     }
   };
 
-  // Check virtual driver presence on boot (Story 9-3, CAP-4)
+  // Check virtual driver presence and microphone permission on boot (Story 9-3, CAP-4)
   useEffect(() => {
     handleCheckDriverStatus();
+    checkMicPermission();
     fetchAudioSessions();
+
+    const handleWindowFocus = () => {
+      checkMicPermission();
+    };
+    window.addEventListener("focus", handleWindowFocus);
+    return () => window.removeEventListener("focus", handleWindowFocus);
   }, []);
 
   const handleInstallVirtualDriver = async () => {
@@ -1688,6 +1732,39 @@ export const App: React.FC = () => {
           >
             {t.driverOnboarding.openSetupButton}
           </button>
+        </div>
+      )}
+
+      {/* macOS Microphone / Audio Capture Permission Banner */}
+      {!isDriverMissing && micPermissionStatus && micPermissionStatus !== "authorized" && (
+        <div className="bg-sky-950/80 border-b border-cyan-500/40 px-4 py-2 flex items-center justify-between text-xs text-cyan-200 animate-fade-in shrink-0 z-20">
+          <div className="flex items-center gap-2">
+            <Mic className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span className="font-medium">
+              {micPermissionStatus === "denied"
+                ? t.micPermission.bannerDenied
+                : t.micPermission.bannerPrompt}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {micPermissionStatus === "denied" ? (
+              <button
+                type="button"
+                onClick={handleOpenMicSettings}
+                className="px-3 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/50 font-semibold text-[11px] transition-colors cursor-pointer"
+              >
+                {t.micPermission.openSettingsButton}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRequestMicPermission}
+                className="px-3 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/50 font-semibold text-[11px] transition-colors cursor-pointer"
+              >
+                {t.micPermission.grantPermissionButton}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

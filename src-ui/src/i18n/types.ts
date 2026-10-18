@@ -232,4 +232,10 @@ export interface TranslationDictionary {
     privacyNoticeTitle: string;
     privacyNoticeDesc: string;
   };
+  micPermission: {
+    bannerDenied: string;
+    bannerPrompt: string;
+    openSettingsButton: string;
+    grantPermissionButton: string;
+  };
 }

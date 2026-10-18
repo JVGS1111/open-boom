@@ -106,6 +106,7 @@
 - [X] **T12.7**: Sincronização Bidirecional de Volume de Sistema no macOS (Story 10-7). Property listeners em kAudioHardwareServiceDeviceProperty_VirtualMasterVolume sem loops de feedback.
 - [X] **T12.8**: Empacotamento macOS .app / .dmg & CI/CD GitHub Actions + Auto-Update (Story 10-8). Bundles universais macOS, create-dmg, CI runner macos-latest e tauri-plugin-updater v2.x.
 - [X] **T12.9**: Correção de Roteamento de Áudio no macOS (Fix de Reprodução Silenciosa no Modo A / CoreAudio) (ADR-061). Resolução da falha de áudio mudo em que o pump CoreAudio capturava do microfone e renderizava de volta no BlackHole. Agora vincula explicitamente a captura ao BlackHole e o render ao dispositivo físico padrão (alto-falantes/fones), mantendo o BlackHole como dispositivo de saída padrão do sistema operacional.
+- [X] **T12.10**: Resolução de Silêncio nos Buffers do BlackHole por TCC e Ordem de Inicialização do Stream Pump (ADR-062). Correção da ordem de ativação em stream_pump.rs garantindo que a saída do sistema permaneça fixada no BlackHole; integração nativa de autorização de microfone macOS AVFoundation (permission.m/permission.rs); comandos IPC Tauri e banner reativo com paridade i18n; empacotamento com assinatura codesign selando Info.plist com NSMicrophoneUsageDescription.
 
 
 

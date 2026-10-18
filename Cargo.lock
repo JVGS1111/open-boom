@@ -2198,6 +2198,7 @@ dependencies = [
 name = "open-boom-coreaudio"
 version = "0.6.0"
 dependencies = [
+ "cc",
  "coreaudio-sys",
  "libc",
  "open-boom-core",

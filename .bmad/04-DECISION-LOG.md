@@ -982,4 +982,34 @@
   - 235 testes Cargo passando no workspace.
   - Teste em hardware real executado e verificado com sucesso no MacBook.
 
+---
+
+## ADR-062: Correção de Ordem de Ativação do Virtual Bridge e Autorização de Microfone macOS TCC (AVFoundation)
+* **Data:** 18/10/2026
+* **Status:** Aceito / Implementado
+* **Contexto:**
+  - Usuário relatou que o áudio tocando no macOS através do driver BlackHole não saía nos alto-falantes do Mac, mesmo com o OpenBoom ligado e configurado.
+  - Investigação técnica aprofundada revelou duas causas raízes concorrentes:
+    1. **Inversão de Ordem em `CoreAudioStreamPump::start`:** `coord.set_render_device(Some(rend_id))` era chamado antes de `coord.set_virtual_bridge(using_virtual)`. Como `uses_virtual_bridge` ainda era `false` no momento da chamada, `switch_device_internal` executava `set_default_output_device`, sobrescrevendo o dispositivo de saída padrão do macOS de volta para os alto-falantes físicos (ID 105) e anulando a rota do BlackHole (ID 73).
+    2. **Silenciamento por TCC do macOS (Transparency, Consent, and Control):** A API C de baixo nível do CoreAudio HAL (`AudioDeviceCreateIOProcID`) não solicita permissão de microfone/áudio ao usuário; caso a permissão TCC esteja `NotDetermined` ou `Denied`, o subsistema CoreAudio do macOS preenche silenciosamente os buffers de captura com zeros (`0.0f`). Além disso, o bundle `/Applications/OpenBoom.app` não possuía o `Info.plist` selado no Mach-O codesign com o bundle identifier `com.openboom.audio`, impedindo o registro persistente de autorização no banco TCC.
+* **Decisões:**
+  1. **Ordem de Operações no `stream_pump.rs`:**
+     - Chamada `coord.set_virtual_bridge(using_virtual)` antecipada para antes de `coord.set_render_device`, garantindo que `update_os_default = !self.uses_virtual_bridge` seja estritamente `false` e que o BlackHole permaneça como saída padrão do sistema.
+  2. **Módulo de Permissão TCC Nativo (`permission.m` & `permission.rs`):**
+     - Criado módulo Objective-C bridge compilado via `cc` (`crates/open-boom-coreaudio/src/permission.m`), integrando `[AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio]` e `requestAccessForMediaType:completionHandler:`.
+     - Expostos helpers Rust `get_microphone_auth_status()`, `request_microphone_authorization_sync()`, `request_microphone_authorization()` e `open_microphone_privacy_settings()`.
+  3. **Comandos IPC Tauri & Prompt Automático no Setup:**
+     - Comandos `get_microphone_permission_status`, `request_microphone_permission` e `open_microphone_privacy_settings` registrados no Tauri `invoke_handler`.
+     - No `setup` da aplicação desktop, caso o status seja `NotDetermined`, `request_microphone_authorization` é invocado em background para exibir a caixa de diálogo nativa do macOS e reiniciar a stream pump a quente assim que a permissão for concedida.
+  4. **Banner Reativo no Frontend & Paridade i18n:**
+     - Adicionado banner reativo no topo do `App.tsx` para casos onde a permissão de áudio estiver pendente ou negada, com botões para conceder permissão ou abrir os Ajustes do Sistema.
+     - Dicionários `pt-BR`, `en` e `es` atualizados com 100% de paridade tipada em `types.ts`.
+  5. **Codesigning Ad-Hoc com Info.plist Selado:**
+     - Empacotamento via `npx tauri build --bundles app` e assinatura `codesign --force --deep -s - /Applications/OpenBoom.app` garantindo `Identifier=com.openboom.audio` e `Info.plist entries=15` incluindo `NSMicrophoneUsageDescription`.
+* **Consequência:**
+  - O driver virtual BlackHole permanece fixado como saída do macOS, sem conflitos ou sobrescritas de hardware.
+  - A autorização de áudio é requerida de forma legítima e limpa pelo sistema operacional, permitindo que os buffers de áudio do BlackHole sejam lidos com amplitude real pelo pipeline DSP e reproduzidos nos alto-falantes do Mac com latência ultrabaixa.
+  - 100% dos 235 testes Cargo e 118 testes UI verdes.
+
+
 

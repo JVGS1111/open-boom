@@ -19,6 +19,7 @@ pub mod capture;
 pub mod coordinator;
 pub mod device;
 pub mod hal;
+pub mod permission;
 pub mod realtime;
 pub mod render;
 pub mod ring_buffer;
@@ -30,6 +31,11 @@ pub use capture::{CaptureConfig, CoreAudioCapture};
 pub use coordinator::{CoreAudioCoordinator, DEFAULT_COMMAND_QUEUE_CAPACITY};
 pub use device::CoreAudioDeviceManager;
 pub use hal::{AudioHal, HalStream, HalStreamConfig, MockHal};
+pub use permission::{
+    get_status as get_microphone_auth_status, open_privacy_settings as open_microphone_privacy_settings,
+    request_access_async as request_microphone_authorization,
+    request_access_sync as request_microphone_authorization_sync, MicrophoneAuthStatus,
+};
 pub use realtime::{set_realtime_priority, RealtimeGuard, DEFAULT_AUDIO_PRIORITY};
 pub use render::{CoreAudioRender, RenderConfig};
 pub use ring_buffer::SampleRing;

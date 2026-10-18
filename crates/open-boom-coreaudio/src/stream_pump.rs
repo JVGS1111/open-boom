@@ -98,6 +98,9 @@ impl CoreAudioStreamPump {
                     coord.device_manager().get_physical_default_device().ok().flatten().map(|d| d.id)
                 });
 
+            let using_virtual = capture_id.is_some() && !config.force_loopback;
+            coord.set_virtual_bridge(using_virtual);
+
             if let Some(ref cap_id) = capture_id {
                 let _ = coord.set_capture_device(Some(cap_id.clone()));
             }

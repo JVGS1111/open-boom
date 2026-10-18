@@ -654,6 +654,85 @@ fn check_virtual_driver_status(state: State<'_, AppState>) -> Result<VirtualDriv
     })
 }
 
+#[tauri::command]
+fn get_microphone_permission_status() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        match open_boom_coreaudio::get_microphone_auth_status() {
+            open_boom_coreaudio::MicrophoneAuthStatus::Authorized => "authorized".to_string(),
+            open_boom_coreaudio::MicrophoneAuthStatus::Denied => "denied".to_string(),
+            open_boom_coreaudio::MicrophoneAuthStatus::Restricted => "restricted".to_string(),
+            open_boom_coreaudio::MicrophoneAuthStatus::NotDetermined => "not_determined".to_string(),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "authorized".to_string()
+    }
+}
+
+#[tauri::command]
+async fn request_microphone_permission(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let granted = tauri::async_runtime::spawn_blocking(move || {
+            open_boom_coreaudio::request_microphone_authorization_sync()
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if granted {
+            let physical_id = state.active_physical_device_id.lock().ok().and_then(|g| g.clone());
+            let virtual_id = state.virtual_device_id.lock().ok().and_then(|g| g.clone());
+            let force_loopback = state.is_loopback_forced();
+            let buffer_guard = state.store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
+            let should_start_pump = force_loopback || virtual_id.is_some();
+
+            if let Ok(mut pump_guard) = state.pump.lock() {
+                if let Some(mut existing) = pump_guard.take() {
+                    existing.stop();
+                }
+                *pump_guard = if should_start_pump {
+                    AudioStreamPump::start(
+                        state.coordinator.clone(),
+                        StreamPumpConfig {
+                            target_device_id: physical_id,
+                            capture_device_id: if force_loopback { None } else { virtual_id },
+                            allow_synthetic: !state.auto_route,
+                            buffer_guard_enabled: buffer_guard,
+                            force_loopback,
+                        },
+                    ).ok()
+                } else {
+                    None
+                };
+            }
+            Ok("authorized".to_string())
+        } else {
+            let status = open_boom_coreaudio::get_microphone_auth_status();
+            match status {
+                open_boom_coreaudio::MicrophoneAuthStatus::Denied => Ok("denied".to_string()),
+                open_boom_coreaudio::MicrophoneAuthStatus::Restricted => Ok("restricted".to_string()),
+                open_boom_coreaudio::MicrophoneAuthStatus::NotDetermined => Ok("not_determined".to_string()),
+                open_boom_coreaudio::MicrophoneAuthStatus::Authorized => Ok("authorized".to_string()),
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = state;
+        Ok("authorized".to_string())
+    }
+}
+
+#[tauri::command]
+fn open_microphone_privacy_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        open_boom_coreaudio::open_microphone_privacy_settings();
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DriverInstallResult {
     pub success: bool,
@@ -1798,6 +1877,39 @@ pub fn run() {
                 }
             }
 
+            #[cfg(target_os = "macos")]
+            {
+                if open_boom_coreaudio::get_microphone_auth_status() == open_boom_coreaudio::MicrophoneAuthStatus::NotDetermined {
+                    let coordinator = app.state::<AppState>().coordinator.clone();
+                    let pump = app.state::<AppState>().pump.clone();
+                    let physical_id = app.state::<AppState>().active_physical_device_id.lock().ok().and_then(|g| g.clone());
+                    let virtual_id = app.state::<AppState>().virtual_device_id.lock().ok().and_then(|g| g.clone());
+                    let force_loopback = app.state::<AppState>().is_loopback_forced();
+                    let buffer_guard = app.state::<AppState>().store.load_config().map(|c| c.buffer_guard_enabled).unwrap_or(true);
+                    let auto_route = app.state::<AppState>().auto_route;
+
+                    open_boom_coreaudio::request_microphone_authorization(move |granted| {
+                        if granted {
+                            if let Ok(mut pump_guard) = pump.lock() {
+                                if let Some(mut existing) = pump_guard.take() {
+                                    existing.stop();
+                                }
+                                *pump_guard = AudioStreamPump::start(
+                                    coordinator,
+                                    StreamPumpConfig {
+                                        target_device_id: physical_id,
+                                        capture_device_id: if force_loopback { None } else { virtual_id },
+                                        allow_synthetic: !auto_route,
+                                        buffer_guard_enabled: buffer_guard,
+                                        force_loopback,
+                                    },
+                                ).ok();
+                            }
+                        }
+                    });
+                }
+            }
+
             // Register Windows master endpoint volume change listener to emit Tauri events (FR-SYNC)
             let app_handle_vol = app.handle().clone();
             let state = app.state::<AppState>();
@@ -1996,6 +2108,9 @@ pub fn run() {
             check_virtual_driver_status,
             install_virtual_driver,
             open_external_url,
+            get_microphone_permission_status,
+            request_microphone_permission,
+            open_microphone_privacy_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenBoom desktop shell");
